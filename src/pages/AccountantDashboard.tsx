@@ -7,7 +7,7 @@ import { expenses, budgets, chartData } from '../mockData';
 
 const AccountantDashboard = () => {
   const [selectedPeriod, setSelectedPeriod] = useState('month');
-  const { filterMode, aggregatedMetrics, hasFilters } = useFilteredData();
+  const { filterMode, hasFilters } = useFilteredData();
 
   // Calculate monthly financials from budgets
   const monthlyFinancials = useMemo(() => 
