@@ -1,0 +1,209 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --background: 0 0% 98%;
+    --foreground: 0 0% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 3.9%;
+    --primary: 158 64% 52%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 158 30% 95%;
+    --secondary-foreground: 158 64% 35%;
+    --muted: 0 0% 96.1%;
+    --muted-foreground: 0 0% 45.1%;
+    --accent: 158 64% 52%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 89.8%;
+    --input: 0 0% 89.8%;
+    --ring: 158 64% 52%;
+    --radius: 0.75rem;
+  }
+
+  * {
+    border-color: hsl(var(--border));
+    transition-property: background-color, border-color, color, box-shadow, transform;
+    transition-duration: 0.25s;
+  }
+
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: 'Inter', system-ui, sans-serif;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::selection {
+    background-color: #10b981; /* Emerald Green */
+    color: white;
+  }
+
+  ::-moz-selection {
+    background-color: #10b981;
+    color: white;
+  }
+
+  *:focus-visible {
+    outline: 2px solid #10b981;
+    outline-offset: 2px;
+  }
+
+  *:focus:not(:focus-visible) {
+    outline: none;
+  }
+}
+
+@layer components {
+  /* Card style for bento and stats */
+  .stat-card {
+    background-color: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.05);
+    transition: box-shadow 0.2s;
+  }
+
+  .stat-card:hover {
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+  }
+
+  /* Emerald gradient background */
+  .emerald-gradient-bg {
+    background: linear-gradient(to bottom right, #059669, #10b981, #059669);
+  }
+
+  /* Soft translucent emerald card */
+  .emerald-card {
+    background: linear-gradient(to bottom right, #ecfdf5, #d1fae580);
+    border: 1px solid #a7f3d0;
+    backdrop-filter: blur(8px);
+    border-radius: var(--radius);
+  }
+
+  /* Emerald styled buttons */
+  .emerald-button {
+    background-color: #059669 !important;
+    color: white !important;
+    box-shadow: 0 10px 15px -3px rgb(5 150 105 / 0.25);
+    transition: all 0.2s;
+  }
+  
+  .emerald-button:hover {
+    background-color: #047857 !important;
+    box-shadow: 0 10px 15px -3px rgb(5 150 105 / 0.4);
+    transform: translateY(-2px);
+  }
+
+  .emerald-button:active {
+    background-color: #065f46 !important;
+    transform: translateY(0);
+  }
+
+  /* Red logout button */
+  .logout-button {
+    background-color: #ef4444 !important;
+    color: white !important;
+    box-shadow: 0 10px 15px -3px rgb(239 68 68 / 0.25);
+    transition: all 0.2s;
+  }
+  
+  .logout-button:hover {
+    background-color: #dc2626 !important;
+    box-shadow: 0 10px 15px -3px rgb(239 68 68 / 0.4);
+    transform: translateY(-2px) !important;
+  }
+
+  .logout-button:active {
+    background-color: #b91c1c !important;
+    transform: translateY(0) !important;
+  }
+
+  /* Bento card for modular UI blocks */
+  /* .bento-card {
+    background-color: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 1rem;
+    padding: 1.5rem;
+    transition: all 0.3s;
+    cursor: default;
+  } */
+
+  /* .bento-card:hover {
+    border-color: #6ee7b7;
+    box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1);
+  }
+} */
+
+.bento-card {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 1rem;
+  transition: all 0.3s;
+}
+.bento-card:hover {
+  border-color: #6ee7b7;
+  box-shadow: 0 12px 32px -8px rgb(16 185 129 / 0.1);
+}
+}
+
+
+@layer utilities {
+  /* Scrollbar hidden */
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  /* Remove tap highlight for mobile */
+  button, a, [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* Buttons base style */
+button {
+  cursor: pointer;
+  transition: border-color 0.25s, box-shadow 0.25s, transform 0.15s;
+  -webkit-tap-highlight-color: transparent;
+  border-radius: var(--radius);
+  font-weight: 600;
+}
+
+button:hover {
+  border-color: #10b981;
+  transform: scale(1.03);
+}
+
+button:focus,
+button:focus-visible {
+  outline: 2px solid #10b981;
+  outline-offset: 2px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color: #213547;
+    background-color: #ffffff;
+  }
+
+  a:hover {
+    color: #747bff;
+  }
+
+  button {
+    background-color: #f9f9f9;
+  }
+}
