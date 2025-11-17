@@ -296,8 +296,8 @@
 // }
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Crown, Briefcase, UserCircle, Users } from 'lucide-react';
-
+// import { Crown, Briefcase, UserCircle, Users } from 'lucide-react';
+import {  Briefcase, UserCircle } from 'lucide-react';
 // Define the props for login callback
 interface LoginPageProps {
   onLogin: (role: 'admin' | 'accountant' | 'project-manager' | 'team-member') => void;
