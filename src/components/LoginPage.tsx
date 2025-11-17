@@ -305,10 +305,10 @@ interface LoginPageProps {
 
 // Available roles
 const ROLES = [
-  { id: 'admin', title: 'Admin', icon: Crown },
+  // { id: 'admin', title: 'Admin', icon: Crown },
   { id: 'accountant', title: 'Accountant', icon: Briefcase },
   { id: 'project-manager', title: 'Project Manager', icon: UserCircle },
-  { id: 'team-member', title: 'Team Member', icon: Users }
+  // { id: 'team-member', title: 'Team Member', icon: Users }
 ];
 
 export default function LoginPage({ onLogin }: LoginPageProps) {
