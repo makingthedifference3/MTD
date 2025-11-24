@@ -1,72 +1,170 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Mail, Phone, MapPin, X, User } from 'lucide-react';
+import { Plus, Mail, Phone, MapPin, X, User, Loader } from 'lucide-react';
+import { teamMembersService } from '../services/teamMembersService';
+import type { TeamMemberWithManager } from '../services/teamMembersService';
 
-interface TeamMember {
+interface TeamMemberDisplay {
   id: string;
-  name: string;
+  full_name: string;
   role: string;
   team: string;
   department: string;
   email: string;
-  phone: string;
+  mobile_number: string;
   address: string;
-  manager: string;
+  manager_name?: string;
   status: 'active' | 'on-leave' | 'inactive';
   joinedDate: string;
+}
+
+interface ManagerOption {
+  id: string;
+  full_name: string;
 }
 
 const TeamMembers = () => {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [allMembers, setAllMembers] = useState<TeamMemberDisplay[]>([]);
+  const [availableManagers, setAvailableManagers] = useState<ManagerOption[]>([]);
+  const [allDepartments, setAllDepartments] = useState<string[]>([]);
+  const [allTeams, setAllTeams] = useState<string[]>([]);
+  const [statsData, setStatsData] = useState({
+    total: 0,
+    active: 0,
+    onLeave: 0,
+    teams: 0,
+  });
   const [newMember, setNewMember] = useState({
-    name: '',
+    full_name: '',
     email: '',
-    phone: '',
+    mobile_number: '',
     address: '',
-    manager: '',
+    manager_id: '',
     department: '',
     team: '',
-    role: 'Team Member'
+    role: 'team_member',
+    city: '',
+    state: '',
+    pincode: '',
   });
-  
-  const [members] = useState<TeamMember[]>([
-    { id: 'TM001', name: 'John Doe', role: 'Project Manager', team: 'Team A', department: 'Operations', email: 'john@mtd.com', phone: '+91 98765 43210', address: 'Mumbai, MH', manager: 'Admin', status: 'active', joinedDate: '2023-01-15' },
-    { id: 'TM002', name: 'Jane Smith', role: 'Accountant', team: 'Finance', department: 'Accounts', email: 'jane@mtd.com', phone: '+91 98765 43211', address: 'Delhi, DL', manager: 'Admin', status: 'active', joinedDate: '2023-02-20' },
-    { id: 'TM003', name: 'Mike Johnson', role: 'Team Member', team: 'Team B', department: 'Field Work', email: 'mike@mtd.com', phone: '+91 98765 43212', address: 'Bangalore, KA', manager: 'John Doe', status: 'on-leave', joinedDate: '2023-03-10' },
-    { id: 'TM004', name: 'Sarah Williams', role: 'Project Manager', team: 'Team C', department: 'Operations', email: 'sarah@mtd.com', phone: '+91 98765 43213', address: 'Chennai, TN', manager: 'Admin', status: 'active', joinedDate: '2023-04-05' },
-    { id: 'TM005', name: 'David Brown', role: 'Team Member', team: 'Team A', department: 'Field Work', email: 'david@mtd.com', phone: '+91 98765 43214', address: 'Pune, MH', manager: 'John Doe', status: 'active', joinedDate: '2023-05-12' },
-    { id: 'TM006', name: 'Lokesh Joshi', role: 'Team Member', team: 'Team B', department: 'Social Media', email: 'lokesh@mtd.com', phone: '+91 98765 43215', address: 'Mumbai, MH', manager: 'Sarah Williams', status: 'active', joinedDate: '2023-06-20' },
-    { id: 'TM007', name: 'Priya Sharma', role: 'Team Member', team: 'Team C', department: 'Documentation', email: 'priya@mtd.com', phone: '+91 98765 43216', address: 'Delhi, DL', manager: 'Jane Smith', status: 'active', joinedDate: '2023-07-10' },
-    { id: 'TM008', name: 'Rahul Verma', role: 'Team Member', team: 'Team A', department: 'Field Work', email: 'rahul@mtd.com', phone: '+91 98765 43217', address: 'Bangalore, KA', manager: 'John Doe', status: 'active', joinedDate: '2023-08-15' },
-    { id: 'TM009', name: 'Anjali Patel', role: 'Team Member', team: 'Team B', department: 'Operations', email: 'anjali@mtd.com', phone: '+91 98765 43218', address: 'Mumbai, MH', manager: 'Sarah Williams', status: 'active', joinedDate: '2023-09-05' }
-  ]);
 
-  const filteredMembers = members.filter(member => 
-    filterStatus === 'all' || member.status === filterStatus
+  // Load team members on component mount
+  useEffect(() => {
+    loadTeamMembers();
+  }, []);
+
+  const loadTeamMembers = async () => {
+    try {
+      setLoading(true);
+
+      // Load all team members
+      const members = await teamMembersService.getAllTeamMembers();
+      const formattedMembers: TeamMemberDisplay[] = (members as unknown[]).map((m: unknown) => {
+        const member = m as TeamMemberWithManager;
+        return {
+          id: member.id,
+          full_name: member.full_name,
+          role: member.role,
+          team: member.team || 'Unassigned',
+          department: member.department || 'Unassigned',
+          email: member.email,
+          mobile_number: member.mobile_number || '',
+          address: member.address || '',
+          manager_name: member.manager_name || 'Unassigned',
+          status: (member.is_active ? 'active' : 'inactive') as 'active' | 'on-leave' | 'inactive',
+          joinedDate: (member.created_at && typeof member.created_at === 'string') ? member.created_at.split('T')[0] : '',
+        };
+      });
+
+      setAllMembers(formattedMembers);
+
+      // Calculate stats
+      const activeCount = formattedMembers.filter((m) => m.status === 'active').length;
+      const teamsSet = new Set(formattedMembers.map((m) => m.team).filter((t) => t !== 'Unassigned'));
+
+      setStatsData({
+        total: formattedMembers.length,
+        active: activeCount,
+        onLeave: 0,
+        teams: teamsSet.size,
+      });
+
+      // Load managers for dropdown
+      const managers = await teamMembersService.getAvailableManagers();
+      setAvailableManagers(managers as ManagerOption[]);
+
+      // Load departments and teams for dropdowns
+      const departments = await teamMembersService.getAllDepartments();
+      const teams = await teamMembersService.getAllTeams();
+      setAllDepartments(departments);
+      setAllTeams(teams);
+    } catch (error) {
+      console.error('Error loading team members:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredMembers = allMembers.filter(
+    (member) => filterStatus === 'all' || member.status === filterStatus
   );
 
-  const stats = [
-    { label: 'Total Members', value: members.length },
-    { label: 'Active', value: members.filter(m => m.status === 'active').length },
-    { label: 'On Leave', value: members.filter(m => m.status === 'on-leave').length },
-    { label: 'Teams', value: new Set(members.map(m => m.team)).size },
-  ];
+  const handleAddMember = async () => {
+    if (!newMember.full_name || !newMember.email) {
+      alert('Please fill in all required fields');
+      return;
+    }
 
-  const handleAddMember = () => {
-    console.log('New member:', newMember);
-    setShowAddModal(false);
-    setNewMember({
-      name: '',
-      email: '',
-      phone: '',
-      address: '',
-      manager: '',
-      department: '',
-      team: '',
-      role: 'Team Member'
-    });
+    try {
+      const memberData = {
+        full_name: newMember.full_name,
+        email: newMember.email,
+        mobile_number: newMember.mobile_number,
+        address: newMember.address,
+        city: newMember.city,
+        state: newMember.state,
+        pincode: newMember.pincode,
+        manager_id: newMember.manager_id || null,
+        department: newMember.department,
+        team: newMember.team,
+        role: newMember.role,
+        is_active: true,
+      };
+
+      const createdMember = await teamMembersService.createTeamMember(memberData as Parameters<typeof teamMembersService.createTeamMember>[0]);
+
+      if (createdMember) {
+        await loadTeamMembers();
+        setShowAddModal(false);
+        setNewMember({
+          full_name: '',
+          email: '',
+          mobile_number: '',
+          address: '',
+          manager_id: '',
+          department: '',
+          team: '',
+          role: 'team_member',
+          city: '',
+          state: '',
+          pincode: '',
+        });
+      }
+    } catch (error) {
+      console.error('Error adding member:', error);
+      alert('Error adding team member');
+    }
   };
+
+  const statCards = [
+    { label: 'Total Members', value: statsData.total },
+    { label: 'Active', value: statsData.active },
+    { label: 'On Leave', value: statsData.onLeave },
+    { label: 'Teams', value: statsData.teams },
+  ];
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
@@ -77,7 +175,7 @@ const TeamMembers = () => {
             <h1 className="text-3xl font-bold text-gray-900">Team Members</h1>
             <p className="text-gray-600 mt-2">Manage your team and assignments</p>
           </div>
-          <button 
+          <button
             onClick={() => setShowAddModal(true)}
             className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-lg font-medium flex items-center space-x-2 transition-colors"
           >
@@ -87,99 +185,127 @@ const TeamMembers = () => {
         </div>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        {stats.map((stat, index) => (
+      {/* Loading Spinner */}
+      {loading && (
+        <div className="flex items-center justify-center min-h-[60vh]">
           <motion.div
-            key={stat.label}
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1, repeat: Infinity }}
+          >
+            <Loader className="w-10 h-10 text-emerald-500" />
+          </motion.div>
+        </div>
+      )}
+
+      {!loading && (
+        <>
+          {/* Stats Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            {statCards.map((stat, index) => (
+              <motion.div
+                key={stat.label}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.1 }}
+                className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
+              >
+                <p className="text-gray-600 text-sm font-medium mb-1">{stat.label}</p>
+                <h3 className="text-3xl font-bold text-gray-900">{stat.value}</h3>
+              </motion.div>
+            ))}
+          </div>
+
+          {/* Filter */}
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
-            className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
+            transition={{ delay: 0.4 }}
+            className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-6"
           >
-            <p className="text-gray-600 text-sm font-medium mb-1">{stat.label}</p>
-            <h3 className="text-3xl font-bold text-gray-900">{stat.value}</h3>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="w-full md:w-64 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            >
+              <option value="all">All Members</option>
+              <option value="active">Active</option>
+              <option value="on-leave">On Leave</option>
+              <option value="inactive">Inactive</option>
+            </select>
           </motion.div>
-        ))}
-      </div>
 
-      {/* Filter */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4 }}
-        className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-6"
-      >
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          className="w-full md:w-64 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-        >
-          <option value="all">All Members</option>
-          <option value="active">Active</option>
-          <option value="on-leave">On Leave</option>
-          <option value="inactive">Inactive</option>
-        </select>
-      </motion.div>
+          {/* Members Grid - 3 column layout */}
+          {filteredMembers.length === 0 ? (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-center py-12"
+            >
+              <p className="text-gray-500 text-lg">No team members found</p>
+            </motion.div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-8">
+              {filteredMembers.map((member: TeamMemberDisplay, index: number) => (
+                <motion.div
+                  key={member.id}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.5 + index * 0.05 }}
+                  className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow flex flex-col items-center"
+                >
+                  {/* Avatar */}
+                  <div className="w-24 h-24 bg-linear-to-r from-emerald-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-bold text-3xl mb-4 shadow-lg">
+                    <User className="w-12 h-12" />
+                  </div>
 
-      {/* Members Grid - 3x3 Avatar Grid Layout */}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-8">
-        {filteredMembers.map((member, index) => (
-          <motion.div
-            key={member.id}
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.5 + index * 0.05 }}
-            className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow flex flex-col items-center"
-          >
-            {/* Avatar */}
-            <div className="w-24 h-24 bg-linear-to-r from-emerald-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-bold text-3xl mb-4 shadow-lg">
-              <User className="w-12 h-12" />
+                  {/* Name */}
+                  <h3 className="font-bold text-gray-900 text-xl mb-1 text-center">{member.full_name}</h3>
+
+                  {/* Team - Department Label */}
+                  <p className="text-sm text-gray-600 mb-3 text-center">
+                    <span className="font-medium text-emerald-600">{member.team}</span>
+                    <span className="mx-2">-</span>
+                    <span className="font-medium text-gray-700">{member.department}</span>
+                  </p>
+
+                  {/* Status Badge */}
+                  <span className={`px-3 py-1 rounded-full text-xs font-medium mb-4 ${
+                    member.status === 'active'
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : member.status === 'on-leave'
+                      ? 'bg-amber-100 text-amber-700'
+                      : 'bg-gray-100 text-gray-700'
+                  }`}>
+                    {member.status.replace('-', ' ').toUpperCase()}
+                  </span>
+
+                  {/* Contact Info */}
+                  <div className="space-y-2 w-full mb-4">
+                    <div className="flex items-center text-sm text-gray-600">
+                      <Mail className="w-4 h-4 mr-2 text-emerald-600" />
+                      <span className="truncate">{member.email}</span>
+                    </div>
+                    <div className="flex items-center text-sm text-gray-600">
+                      <Phone className="w-4 h-4 mr-2 text-emerald-600" />
+                      {member.mobile_number || 'N/A'}
+                    </div>
+                    <div className="flex items-center text-sm text-gray-600">
+                      <MapPin className="w-4 h-4 mr-2 text-emerald-600" />
+                      {member.address || 'N/A'}
+                    </div>
+                  </div>
+
+                  {/* Manager Info */}
+                  <div className="border-t border-gray-100 pt-4 w-full text-center">
+                    <p className="text-xs text-gray-600 mb-1">Manager</p>
+                    <p className="text-sm font-semibold text-emerald-600">{member.manager_name || 'Unassigned'}</p>
+                  </div>
+                </motion.div>
+              ))}
             </div>
-            
-            {/* Name */}
-            <h3 className="font-bold text-gray-900 text-xl mb-1 text-center">{member.name}</h3>
-            
-            {/* Team - Department Label */}
-            <p className="text-sm text-gray-600 mb-3 text-center">
-              <span className="font-medium text-emerald-600">{member.team}</span>
-              <span className="mx-2">-</span>
-              <span className="font-medium text-gray-700">{member.department}</span>
-            </p>
-
-            {/* Status Badge */}
-            <span className={`px-3 py-1 rounded-full text-xs font-medium mb-4 ${
-              member.status === 'active' ? 'bg-emerald-100 text-emerald-700' :
-              member.status === 'on-leave' ? 'bg-amber-100 text-amber-700' :
-              'bg-gray-100 text-gray-700'
-            }`}>
-              {member.status.replace('-', ' ').toUpperCase()}
-            </span>
-
-            {/* Contact Info */}
-            <div className="space-y-2 w-full mb-4">
-              <div className="flex items-center text-sm text-gray-600">
-                <Mail className="w-4 h-4 mr-2 text-emerald-600" />
-                <span className="truncate">{member.email}</span>
-              </div>
-              <div className="flex items-center text-sm text-gray-600">
-                <Phone className="w-4 h-4 mr-2 text-emerald-600" />
-                {member.phone}
-              </div>
-              <div className="flex items-center text-sm text-gray-600">
-                <MapPin className="w-4 h-4 mr-2 text-emerald-600" />
-                {member.address}
-              </div>
-            </div>
-
-            {/* Manager Info */}
-            <div className="border-t border-gray-100 pt-4 w-full text-center">
-              <p className="text-xs text-gray-600 mb-1">Manager</p>
-              <p className="text-sm font-semibold text-emerald-600">{member.manager}</p>
-            </div>
-          </motion.div>
-        ))}
-      </div>
+          )}
+        </>
+      )}
 
       {/* Add Member Modal */}
       {showAddModal && (
@@ -200,18 +326,16 @@ const TeamMembers = () => {
               </button>
             </div>
 
-            {/* Modal Body - Personal Data Form */}
+            {/* Modal Body - Form */}
             <div className="p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Name */}
+                {/* Full Name */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Name *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Full Name *</label>
                   <input
                     type="text"
-                    value={newMember.name}
-                    onChange={(e) => setNewMember({ ...newMember, name: e.target.value })}
+                    value={newMember.full_name}
+                    onChange={(e) => setNewMember({ ...newMember, full_name: e.target.value })}
                     placeholder="Enter full name"
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
@@ -219,9 +343,7 @@ const TeamMembers = () => {
 
                 {/* Email */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Email *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Email *</label>
                   <input
                     type="email"
                     value={newMember.email}
@@ -233,100 +355,127 @@ const TeamMembers = () => {
 
                 {/* Mobile Number */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Mobile Number *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Mobile Number</label>
                   <input
                     type="tel"
-                    value={newMember.phone}
-                    onChange={(e) => setNewMember({ ...newMember, phone: e.target.value })}
+                    value={newMember.mobile_number}
+                    onChange={(e) => setNewMember({ ...newMember, mobile_number: e.target.value })}
                     placeholder="+91 98765 43210"
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
 
-                {/* Address */}
+                {/* City */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Address *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
                   <input
                     type="text"
+                    value={newMember.city}
+                    onChange={(e) => setNewMember({ ...newMember, city: e.target.value })}
+                    placeholder="City"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                {/* State */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">State</label>
+                  <input
+                    type="text"
+                    value={newMember.state}
+                    onChange={(e) => setNewMember({ ...newMember, state: e.target.value })}
+                    placeholder="State"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                {/* Pincode */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Pincode</label>
+                  <input
+                    type="text"
+                    value={newMember.pincode}
+                    onChange={(e) => setNewMember({ ...newMember, pincode: e.target.value })}
+                    placeholder="Pincode"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                {/* Address */}
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Address</label>
+                  <textarea
                     value={newMember.address}
                     onChange={(e) => setNewMember({ ...newMember, address: e.target.value })}
-                    placeholder="City, State"
+                    placeholder="Full address"
+                    rows={3}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
 
                 {/* Manager */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Manager *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Manager</label>
                   <select
-                    value={newMember.manager}
-                    onChange={(e) => setNewMember({ ...newMember, manager: e.target.value })}
+                    value={newMember.manager_id}
+                    onChange={(e) => setNewMember({ ...newMember, manager_id: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   >
                     <option value="">Select Manager</option>
-                    <option value="Admin">Admin</option>
-                    <option value="John Doe">John Doe</option>
-                    <option value="Sarah Williams">Sarah Williams</option>
-                    <option value="Jane Smith">Jane Smith</option>
+                    {availableManagers.map((manager) => (
+                      <option key={manager.id} value={manager.id}>
+                        {manager.full_name}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
                 {/* Department */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Department *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
                   <select
                     value={newMember.department}
                     onChange={(e) => setNewMember({ ...newMember, department: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   >
                     <option value="">Select Department</option>
-                    <option value="Operations">Operations</option>
-                    <option value="Field Work">Field Work</option>
-                    <option value="Social Media">Social Media</option>
-                    <option value="Documentation">Documentation</option>
-                    <option value="Accounts">Accounts</option>
+                    {allDepartments.map((dept) => (
+                      <option key={dept} value={dept}>
+                        {dept}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
                 {/* Team */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Team
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Team</label>
                   <select
                     value={newMember.team}
                     onChange={(e) => setNewMember({ ...newMember, team: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   >
                     <option value="">Select Team</option>
-                    <option value="Team A">Team A</option>
-                    <option value="Team B">Team B</option>
-                    <option value="Team C">Team C</option>
-                    <option value="Finance">Finance</option>
+                    {allTeams.map((team) => (
+                      <option key={team} value={team}>
+                        {team}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
                 {/* Role */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Role
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
                   <select
                     value={newMember.role}
                     onChange={(e) => setNewMember({ ...newMember, role: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   >
-                    <option value="Team Member">Team Member</option>
-                    <option value="Project Manager">Project Manager</option>
-                    <option value="Accountant">Accountant</option>
+                    <option value="team_member">Team Member</option>
+                    <option value="project_manager">Project Manager</option>
+                    <option value="accountant">Accountant</option>
+                    <option value="admin">Admin</option>
                   </select>
                 </div>
               </div>

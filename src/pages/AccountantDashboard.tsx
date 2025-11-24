@@ -1,47 +1,109 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { TrendingUp, ArrowUpRight, ArrowDownRight, Wallet, Activity, CreditCard, Receipt } from 'lucide-react';
 import { PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { useFilteredData } from '../hooks/useFilteredData';
-import { expenses, budgets, chartData } from '../mockData';
+import { expenseService } from '../services/expenseService';
+import { budgetService } from '../services/budgetService';
+import type { Expense } from '../services/expenseService';
+import type { BudgetAllocation } from '../services/budgetService';
 
 const AccountantDashboard = () => {
   const [selectedPeriod, setSelectedPeriod] = useState('month');
-  const { filterMode, hasFilters } = useFilteredData();
+  const { filterMode, hasFilters, selectedProjectData } = useFilteredData();
+  const [budgets, setBudgets] = useState<BudgetAllocation[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+
+  // Fetch data from database
+  useEffect(() => {
+    const loadFinancialData = async () => {
+      try {
+        let budgetData: BudgetAllocation[] = [];
+        let expenseData: Expense[] = [];
+
+        if (selectedProjectData?.id) {
+          // Fetch data for selected project
+          budgetData = await budgetService.getBudgetAllocationsByProject(selectedProjectData.id);
+          expenseData = await expenseService.getExpensesByProject(selectedProjectData.id);
+        } else {
+          // Fetch all data
+          budgetData = await budgetService.getAllBudgetAllocations();
+          expenseData = await expenseService.getAllExpenses();
+        }
+
+        setBudgets(budgetData);
+        setExpenses(expenseData);
+      } catch (error) {
+        console.error('Failed to load financial data:', error);
+      }
+    };
+
+    loadFinancialData();
+  }, [selectedProjectData?.id]);
 
   // Calculate monthly financials from budgets
-  const monthlyFinancials = useMemo(() => 
-    chartData.monthlyProgress.slice(0, 6).map((item, index) => ({
-      month: item.month,
-      revenue: budgets.slice(index * 3, (index + 1) * 3).reduce((sum, b) => sum + b.allocatedAmount, 0) / 1000,
-      expenses: budgets.slice(index * 3, (index + 1) * 3).reduce((sum, b) => sum + b.utilizedAmount, 0) / 1000,
-      profit: (budgets.slice(index * 3, (index + 1) * 3).reduce((sum, b) => sum + b.allocatedAmount, 0) - 
-               budgets.slice(index * 3, (index + 1) * 3).reduce((sum, b) => sum + b.utilizedAmount, 0)) / 1000
-    }))
-  , []);
+  const monthlyFinancials = useMemo(() => {
+    // Group budgets by month (use created_at date)
+    const monthlyData: Record<string, { revenue: number; expenses: number; profit: number }> = {};
 
-  // Use expense distribution from chartData
-  const expenseBreakdown = chartData.expenseDistribution.map((item, index) => ({
-    name: item.name,
-    value: Math.round((item.value / chartData.expenseDistribution.reduce((sum, e) => sum + e.value, 0)) * 100),
-    color: ['#10b981', '#059669', '#047857', '#065f46', '#064e3b', '#14b8a6', '#0d9488', '#0f766e'][index] || '#10b981'
-  }));
+    budgets.forEach((budget) => {
+      const date = new Date(budget.created_at);
+      const monthKey = date.toLocaleString('default', { month: 'short', year: 'numeric' });
+
+      if (!monthlyData[monthKey]) {
+        monthlyData[monthKey] = { revenue: 0, expenses: 0, profit: 0 };
+      }
+
+      monthlyData[monthKey].revenue += (budget.allocated_amount || 0) / 1000;
+      monthlyData[monthKey].expenses += (budget.utilized_amount || 0) / 1000;
+      monthlyData[monthKey].profit = monthlyData[monthKey].revenue - monthlyData[monthKey].expenses;
+    });
+
+    // Return last 6 months
+    return Object.entries(monthlyData)
+      .slice(-6)
+      .map(([month, data]) => ({
+        month,
+        ...data,
+      }));
+  }, [budgets]);
+
+  // Calculate expense breakdown by category
+  const expenseBreakdown = useMemo(() => {
+    const categoryMap: Record<string, number> = {};
+
+    expenses.forEach((expense) => {
+      const categoryName = expense.category_id || 'Other';
+      categoryMap[categoryName] = (categoryMap[categoryName] || 0) + expense.total_amount;
+    });
+
+    const total = Object.values(categoryMap).reduce((sum, val) => sum + val, 0);
+    const colors = ['#10b981', '#059669', '#047857', '#065f46', '#064e3b', '#14b8a6', '#0d9488', '#0f766e'];
+
+    return Object.entries(categoryMap).map(([name, value], index) => ({
+      name,
+      value: Math.round((value / total) * 100),
+      color: colors[index] || '#10b981',
+    }));
+  }, [expenses]);
 
   // Get recent transactions from expenses
-  const recentTransactions = expenses.slice(0, 5).map((expense, index) => ({
-    id: index + 1,
-    type: 'Expense',
-    description: `${expense.category} - ${expense.merchantName}`,
-    amount: -expense.totalAmount,
-    date: expense.date,
-    status: expense.status === 'Approved' ? 'completed' : 'pending',
-    category: expense.category
-  }));
+  const recentTransactions = useMemo(() => {
+    return expenses.slice(0, 5).map((expense, index) => ({
+      id: index + 1,
+      type: 'Expense',
+      description: `${expense.category_id || 'Other'} - ${expense.description}`,
+      amount: -expense.total_amount,
+      date: expense.date,
+      status: expense.status === 'approved' ? 'completed' : 'pending',
+      category: expense.category_id || 'Other',
+    }));
+  }, [expenses]);
 
   const totalRevenue = monthlyFinancials.reduce((sum, item) => sum + item.revenue, 0);
   const totalExpenses = monthlyFinancials.reduce((sum, item) => sum + item.expenses, 0);
   const netProfit = totalRevenue - totalExpenses;
-  const profitMargin = ((netProfit / totalRevenue) * 100).toFixed(1);
+  const profitMargin = totalRevenue > 0 ? ((netProfit / totalRevenue) * 100).toFixed(1) : '0.0';
 
   return (
     <div className="min-h-screen bg-[#fafafa] p-4 md:p-8">
@@ -73,7 +135,7 @@ const AccountantDashboard = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="col-span-12 md:col-span-6 lg:col-span-4 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-3xl p-8 text-white shadow-xl shadow-emerald-500/20 relative overflow-hidden group hover:shadow-2xl hover:shadow-emerald-500/30 transition-all duration-500"
+          className="col-span-12 md:col-span-6 lg:col-span-4 bg-linear-to-br from-emerald-500 to-emerald-600 rounded-3xl p-8 text-white shadow-xl shadow-emerald-500/20 relative overflow-hidden group hover:shadow-2xl hover:shadow-emerald-500/30 transition-all duration-500"
         >
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 group-hover:scale-150 transition-transform duration-700"></div>
           <div className="absolute bottom-0 left-0 w-48 h-48 bg-black/10 rounded-full -ml-24 -mb-24 group-hover:scale-125 transition-transform duration-700"></div>
@@ -240,7 +302,7 @@ const AccountantDashboard = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
-          className="col-span-12 lg:col-span-4 bg-gradient-to-br from-gray-900 to-black rounded-3xl p-8 text-white shadow-xl relative overflow-hidden"
+          className="col-span-12 lg:col-span-4 bg-linear-to-br from-gray-900 to-black rounded-3xl p-8 text-white shadow-xl relative overflow-hidden"
         >
           <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 rounded-full -mr-32 -mt-32"></div>
           
@@ -295,7 +357,7 @@ const AccountantDashboard = () => {
           transition={{ delay: 0.6 }}
           className="col-span-12 bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden hover:shadow-xl transition-shadow duration-500"
         >
-          <div className="p-8 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
+          <div className="p-8 border-b border-gray-100 bg-linear-to-r from-gray-50 to-white">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-2xl font-bold text-black mb-1">Recent Transactions</h2>

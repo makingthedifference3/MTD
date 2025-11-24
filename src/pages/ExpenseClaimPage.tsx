@@ -1,48 +1,242 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Eye, CheckCircle, XCircle, Clock, X, Camera, Plus } from 'lucide-react';
-import { expenses, type Expense } from '../mockData';
+import { Eye, CheckCircle, XCircle, Clock, X, Camera, Plus, Loader } from 'lucide-react';
+import { useAuth } from '@/context/useAuth';
+import {
+  getAllExpenses,
+  getExpenseStats,
+  createExpenseClaim,
+  approveExpense,
+  rejectExpense,
+  type ProjectExpense,
+  type ExpenseDisplay,
+  type ExpenseStats,
+} from '@/services/expenseClaimService';
 
 const ExpenseClaimPage = () => {
-  const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
+  const { currentUser } = useAuth();
+  const currentUserId = currentUser?.id || '00000000-0000-0000-0000-000000000000';
+  const [expenses, setExpenses] = useState<ExpenseDisplay[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedExpense, setSelectedExpense] = useState<ExpenseDisplay | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [showExpenseForm, setShowExpenseForm] = useState(false);
+  const [stats, setStats] = useState<ExpenseStats>({
+    pendingCount: 0,
+    pendingAmount: 0,
+    approvedCount: 0,
+    approvedAmount: 0,
+    rejectedCount: 0,
+    rejectedAmount: 0,
+    totalExpenses: 0,
+    totalAmount: 0,
+  });
   const [newExpense, setNewExpense] = useState({
     merchantName: '',
     date: '',
     category: '',
     totalAmount: '',
-    description: ''
+    description: '',
+    receiptFile: null as File | null,
   });
 
-  // Calculate claim statistics
-  const pendingClaims = expenses.filter(e => e.status === 'Pending');
-  const approvedClaims = expenses.filter(e => e.status === 'Approved');
-  const rejectedClaims = expenses.filter(e => e.status === 'Rejected');
-  
-  const pendingAmount = pendingClaims.reduce((sum, e) => sum + e.totalAmount, 0);
-  const approvedAmount = approvedClaims.reduce((sum, e) => sum + e.totalAmount, 0);
-  const rejectedAmount = rejectedClaims.reduce((sum, e) => sum + e.totalAmount, 0);
+  // Fetch expenses on component mount
+  useEffect(() => {
+    const fetchExpenses = async () => {
+      try {
+        setLoading(true);
+        const [expensesData, statsData] = await Promise.all([
+          getAllExpenses(),
+          getExpenseStats(),
+        ]);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'Approved': return 'bg-green-100 text-green-700 border-green-300';
-      case 'Rejected': return 'bg-red-100 text-red-700 border-red-300';
-      case 'Pending': return 'bg-yellow-100 text-yellow-700 border-yellow-300';
-      default: return 'bg-gray-100 text-gray-700 border-gray-300';
+        // Transform to ExpenseDisplay format
+        const displayExpenses: ExpenseDisplay[] = expensesData.map((exp) => ({
+          id: exp.id,
+          merchantName: exp.merchant_name,
+          date: exp.date,
+          submittedBy: exp.submitted_by || 'Unknown',
+          category: exp.category,
+          totalAmount: exp.total_amount,
+          status: exp.status as 'draft' | 'submitted' | 'pending' | 'approved' | 'rejected' | 'reimbursed',
+          receiptLink: exp.receipt_drive_link,
+          description: exp.description,
+        }));
+
+        setExpenses(displayExpenses);
+        setStats(statsData);
+        setError(null);
+      } catch (err) {
+        console.error('Error fetching expenses:', err);
+        setError('Failed to load expenses. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchExpenses();
+  }, []);
+
+  // Handle adding new expense
+  const handleAddExpense = async () => {
+    try {
+      if (!newExpense.merchantName || !newExpense.totalAmount || !newExpense.category) {
+        alert('Please fill in all required fields');
+        return;
+      }
+
+      const expenseData: Omit<ProjectExpense, 'id' | 'created_at' | 'updated_at' | 'updated_by'> = {
+        expense_code: `EXP-${Date.now()}`,
+        project_id: '00000000-0000-0000-0000-000000000000', // TODO: Get from project context
+        category_id: '00000000-0000-0000-0000-000000000000', // TODO: Get from category selector
+        task_id: null,
+        merchant_name: newExpense.merchantName,
+        merchant_contact: '',
+        merchant_address: '',
+        merchant_gstin: '',
+        merchant_pan: '',
+        date: newExpense.date,
+        category: newExpense.category,
+        sub_category: '',
+        description: newExpense.description,
+        purpose: '',
+        base_amount: parseFloat(newExpense.totalAmount),
+        tax_amount: 0,
+        gst_percentage: 0,
+        cgst_amount: 0,
+        sgst_amount: 0,
+        igst_amount: 0,
+        other_charges: 0,
+        discount_amount: 0,
+        total_amount: parseFloat(newExpense.totalAmount),
+        payment_method: 'Online',
+        payment_reference: '',
+        payment_date: '',
+        paid_to: '',
+        bank_details: {},
+        bill_drive_link: '',
+        invoice_drive_link: '',
+        receipt_drive_link: '',
+        supporting_docs: {},
+        status: 'draft',
+        submitted_by: currentUserId,
+        submitted_date: new Date().toISOString().split('T')[0],
+        reviewed_by: null,
+        reviewed_date: null,
+        approved_by: null,
+        approved_date: null,
+        rejection_reason: null,
+        reimbursed_date: null,
+        account_code: '',
+        gl_code: '',
+        cost_center: '',
+        is_reimbursable: true,
+        reimbursed_to: '',
+        approval_chain: {},
+        current_approver: null,
+        priority: 'normal',
+        tags: [],
+        notes: '',
+        internal_notes: '',
+        metadata: {},
+        created_by: currentUserId,
+      };
+
+      const result = await createExpenseClaim(expenseData);
+
+      if (result) {
+        const newDisplayExpense: ExpenseDisplay = {
+          id: result.id,
+          merchantName: result.merchant_name,
+          date: result.date,
+          submittedBy: result.submitted_by || 'Unknown',
+          category: result.category,
+          totalAmount: result.total_amount,
+          status: result.status as 'draft' | 'submitted' | 'pending' | 'approved' | 'rejected' | 'reimbursed',
+          receiptLink: result.receipt_drive_link,
+          description: result.description,
+        };
+
+        setExpenses([newDisplayExpense, ...expenses]);
+        setShowExpenseForm(false);
+        setNewExpense({
+          merchantName: '',
+          date: '',
+          category: '',
+          totalAmount: '',
+          description: '',
+          receiptFile: null,
+        });
+
+        // Refresh stats
+        const updatedStats = await getExpenseStats();
+        setStats(updatedStats);
+      }
+    } catch (err) {
+      console.error('Error adding expense:', err);
+      alert('Failed to submit expense. Please try again.');
     }
   };
 
-  const handleAddExpense = () => {
-    console.log('New expense:', newExpense);
-    setShowExpenseForm(false);
-    setNewExpense({
-      merchantName: '',
-      date: '',
-      category: '',
-      totalAmount: '',
-      description: ''
-    });
+  // Handle approve expense
+  const handleApprove = async (expenseId: string) => {
+    try {
+      await approveExpense(expenseId, currentUserId);
+      
+      // Update local state
+      const updatedExpenses = expenses.map((exp) =>
+        exp.id === expenseId ? { ...exp, status: 'approved' as const } : exp
+      );
+      setExpenses(updatedExpenses);
+      setSelectedExpense(null);
+
+      // Refresh stats
+      const updatedStats = await getExpenseStats();
+      setStats(updatedStats);
+    } catch (err) {
+      console.error('Error approving expense:', err);
+      alert('Failed to approve expense. Please try again.');
+    }
+  };
+
+  // Handle reject expense
+  const handleReject = async (expenseId: string) => {
+    try {
+      if (!rejectReason) {
+        alert('Please provide a rejection reason');
+        return;
+      }
+
+      await rejectExpense(expenseId, rejectReason, currentUserId);
+
+      // Update local state
+      const updatedExpenses = expenses.map((exp) =>
+        exp.id === expenseId ? { ...exp, status: 'rejected' as const } : exp
+      );
+      setExpenses(updatedExpenses);
+      setSelectedExpense(null);
+      setRejectReason('');
+
+      // Refresh stats
+      const updatedStats = await getExpenseStats();
+      setStats(updatedStats);
+    } catch (err) {
+      console.error('Error rejecting expense:', err);
+      alert('Failed to reject expense. Please try again.');
+    }
+  };
+
+  // Helper function for status colors
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'approved': return 'bg-green-100 text-green-700 border-green-300';
+      case 'rejected': return 'bg-red-100 text-red-700 border-red-300';
+      case 'pending': return 'bg-yellow-100 text-yellow-700 border-yellow-300';
+      case 'submitted': return 'bg-blue-100 text-blue-700 border-blue-300';
+      case 'draft': return 'bg-gray-100 text-gray-700 border-gray-300';
+      default: return 'bg-gray-100 text-gray-700 border-gray-300';
+    }
   };
 
   return (
@@ -64,129 +258,154 @@ const ExpenseClaimPage = () => {
         </div>
       </div>
 
+      {/* Loading State */}
+      {loading && (
+        <div className="flex items-center justify-center py-12">
+          <Loader className="w-8 h-8 text-emerald-500 animate-spin" />
+          <span className="ml-3 text-gray-600">Loading expenses...</span>
+        </div>
+      )}
+
+      {/* Error State */}
+      {error && !loading && (
+        <div className="bg-red-100 border border-red-300 text-red-700 px-6 py-4 rounded-lg mb-8">
+          {error}
+        </div>
+      )}
+
       {/* Claims Counter */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-linear-to-r from-emerald-500 to-emerald-600 rounded-2xl p-6 mb-8 text-white shadow-lg"
-      >
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-4xl font-bold mb-2">{pendingClaims.length.toString().padStart(2, '0')}</h2>
-            <p className="text-emerald-100 text-lg">CLAIMS PENDING FOR APPROVAL</p>
-          </div>
-          <Clock className="w-16 h-16 text-emerald-200" />
-        </div>
-      </motion.div>
+      {!loading && (
+        <>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-linear-to-r from-emerald-500 to-emerald-600 rounded-2xl p-6 mb-8 text-white shadow-lg"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-4xl font-bold mb-2">{stats.pendingCount.toString().padStart(2, '0')}</h2>
+                <p className="text-emerald-100 text-lg">CLAIMS PENDING FOR APPROVAL</p>
+              </div>
+              <Clock className="w-16 h-16 text-emerald-200" />
+            </div>
+          </motion.div>
 
-      {/* Status Breakdown */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        {/* Pending */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
-        >
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <p className="text-gray-600 text-sm font-medium mb-1">PENDING</p>
-              <h3 className="text-3xl font-bold text-amber-600">{pendingClaims.length}</h3>
-            </div>
-            <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center">
-              <Clock className="w-6 h-6 text-amber-600" />
+          {/* Status Breakdown */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            {/* Pending */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <p className="text-gray-600 text-sm font-medium mb-1">PENDING</p>
+                  <h3 className="text-3xl font-bold text-amber-600">{stats.pendingCount}</h3>
+                </div>
+                <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center">
+                  <Clock className="w-6 h-6 text-amber-600" />
+                </div>
+              </div>
+              <p className="text-2xl font-semibold text-gray-900">₹{stats.pendingAmount.toLocaleString()}</p>
+            </motion.div>
+
+            {/* Approved */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <p className="text-gray-600 text-sm font-medium mb-1">APPROVED</p>
+                  <h3 className="text-3xl font-bold text-emerald-600">{stats.approvedCount}</h3>
+                </div>
+                <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center">
+                  <CheckCircle className="w-6 h-6 text-emerald-600" />
+                </div>
+              </div>
+              <p className="text-2xl font-semibold text-gray-900">₹{stats.approvedAmount.toLocaleString()}</p>
+            </motion.div>
+
+            {/* Rejected */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <p className="text-gray-600 text-sm font-medium mb-1">REJECTED</p>
+                  <h3 className="text-3xl font-bold text-red-600">{stats.rejectedCount}</h3>
+                </div>
+                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                  <XCircle className="w-6 h-6 text-red-600" />
+                </div>
+              </div>
+              <p className="text-2xl font-semibold text-gray-900">₹{stats.rejectedAmount.toLocaleString()}</p>
+            </motion.div>
+          </div>
+
+          {/* Expense Claims Table */}
+          <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+            <div className="overflow-x-auto">
+              {expenses.length > 0 ? (
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Bill Name</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Date</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Person</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Category</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Amount</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Status</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {expenses.map((expense, index) => (
+                      <motion.tr
+                        key={expense.id}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: index * 0.05 }}
+                        className="hover:bg-gray-50 transition-colors"
+                      >
+                        <td className="px-6 py-4 font-medium text-gray-900">{expense.merchantName}</td>
+                        <td className="px-6 py-4 text-sm text-gray-600">{new Date(expense.date).toLocaleDateString()}</td>
+                        <td className="px-6 py-4 text-sm text-gray-600">{expense.submittedBy}</td>
+                        <td className="px-6 py-4 text-sm text-gray-600">{expense.category}</td>
+                        <td className="px-6 py-4 font-semibold text-gray-900">₹{expense.totalAmount.toLocaleString()}</td>
+                        <td className="px-6 py-4">
+                          <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(expense.status)}`}>
+                            {expense.status.charAt(0).toUpperCase() + expense.status.slice(1)}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <button
+                            onClick={() => setSelectedExpense(expense)}
+                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                          >
+                            <Eye className="w-5 h-5 text-gray-600" />
+                          </button>
+                        </td>
+                      </motion.tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="p-8 text-center">
+                  <p className="text-gray-500">No expenses found. Create your first expense claim.</p>
+                </div>
+              )}
             </div>
           </div>
-          <p className="text-2xl font-semibold text-gray-900">₹{pendingAmount.toLocaleString()}</p>
-        </motion.div>
-
-        {/* Approved */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
-        >
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <p className="text-gray-600 text-sm font-medium mb-1">APPROVED</p>
-              <h3 className="text-3xl font-bold text-emerald-600">{approvedClaims.length}</h3>
-            </div>
-            <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center">
-              <CheckCircle className="w-6 h-6 text-emerald-600" />
-            </div>
-          </div>
-          <p className="text-2xl font-semibold text-gray-900">₹{approvedAmount.toLocaleString()}</p>
-        </motion.div>
-
-        {/* Rejected */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
-        >
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <p className="text-gray-600 text-sm font-medium mb-1">REJECTED</p>
-              <h3 className="text-3xl font-bold text-red-600">{rejectedClaims.length}</h3>
-            </div>
-            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-              <XCircle className="w-6 h-6 text-red-600" />
-            </div>
-          </div>
-          <p className="text-2xl font-semibold text-gray-900">₹{rejectedAmount.toLocaleString()}</p>
-        </motion.div>
-      </div>
-
-      {/* Expense Claims Table */}
-      <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Bill Name</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Date</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Person</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Category</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Amount</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Status</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {expenses.map((expense, index) => (
-                <motion.tr
-                  key={expense.id}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                  className="hover:bg-gray-50 transition-colors"
-                >
-                  <td className="px-6 py-4 font-medium text-gray-900">{expense.merchantName}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{new Date(expense.date).toLocaleDateString()}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{expense.submittedBy}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{expense.category}</td>
-                  <td className="px-6 py-4 font-semibold text-gray-900">₹{expense.totalAmount.toLocaleString()}</td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(expense.status)}`}>
-                      {expense.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <button
-                      onClick={() => setSelectedExpense(expense)}
-                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                    >
-                      <Eye className="w-5 h-5 text-gray-600" />
-                    </button>
-                  </td>
-                </motion.tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+        </>
+      )}
 
       {/* Add Expense Form Modal */}
       {showExpenseForm && (
@@ -289,11 +508,28 @@ const ExpenseClaimPage = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Receipt
                   </label>
-                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-emerald-500 transition-colors cursor-pointer">
+                  <input
+                    type="file"
+                    id="receipt-upload"
+                    accept="image/jpeg,image/png,image/jpg,application/pdf"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        setNewExpense({ ...newExpense, receiptFile: file });
+                      }
+                    }}
+                    className="hidden"
+                  />
+                  <label
+                    htmlFor="receipt-upload"
+                    className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-emerald-500 transition-colors cursor-pointer block"
+                  >
                     <Camera className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                    <p className="text-sm text-gray-600">Click to upload receipt</p>
-                    <p className="text-xs text-gray-500 mt-1">or drag and drop</p>
-                  </div>
+                    <p className="text-sm text-gray-600">
+                      {newExpense.receiptFile ? newExpense.receiptFile.name : 'Click to upload receipt'}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">or drag and drop (PDF, JPG, PNG)</p>
+                  </label>
                 </div>
               </div>
             </div>
@@ -343,12 +579,16 @@ const ExpenseClaimPage = () => {
               <div><p className="text-sm text-gray-500">Submitted By</p><p className="font-semibold text-gray-900">{selectedExpense.submittedBy}</p></div>
 
               <div><p className="text-sm text-gray-500">Attachment</p>
-                <a href={selectedExpense.receiptLink} target="_blank" rel="noopener noreferrer" className="text-emerald-600 hover:underline">
-                  View Receipt
-                </a>
+                {selectedExpense.receiptLink ? (
+                  <a href={selectedExpense.receiptLink} target="_blank" rel="noopener noreferrer" className="text-emerald-600 hover:underline">
+                    View Receipt
+                  </a>
+                ) : (
+                  <p className="text-gray-500">No attachment</p>
+                )}
               </div>
 
-              {selectedExpense.status === 'Pending' && (
+              {selectedExpense.status === 'pending' && (
                 <div className="space-y-3 pt-4 border-t">
                   <textarea
                     value={rejectReason}
@@ -359,11 +599,17 @@ const ExpenseClaimPage = () => {
                   ></textarea>
 
                   <div className="flex space-x-3">
-                    <button className="flex-1 flex items-center justify-center space-x-2 bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-xl transition-colors">
+                    <button 
+                      onClick={() => handleReject(selectedExpense.id)}
+                      className="flex-1 flex items-center justify-center space-x-2 bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-xl transition-colors"
+                    >
                       <XCircle className="w-5 h-5" />
                       <span>Reject</span>
                     </button>
-                    <button className="flex-1 flex items-center justify-center space-x-2 bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-xl transition-colors">
+                    <button 
+                      onClick={() => handleApprove(selectedExpense.id)}
+                      className="flex-1 flex items-center justify-center space-x-2 bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-xl transition-colors"
+                    >
                       <CheckCircle className="w-5 h-5" />
                       <span>Approve</span>
                     </button>

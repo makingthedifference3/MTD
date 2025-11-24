@@ -1,37 +1,59 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, FileText, Calendar, User } from 'lucide-react';
-
-interface Article {
-  id: string;
-  title: string;
-  author: string;
-  publishDate: string;
-  category: string;
-  status: 'published' | 'draft' | 'pending';
-  excerpt: string;
-  readTime: string;
-}
+import { getAllArticles, getArticleStats,type MediaArticle, type ArticleStats } from '@/services/mediaArticleService';
+import { useNavigate } from 'react-router-dom';
 
 const Article = () => {
+  const navigate = useNavigate();
   const [filterStatus, setFilterStatus] = useState<string>('all');
-  
-  const [articles] = useState<Article[]>([
-    { id: 'ART001', title: 'Community Center Project Success Story', author: 'John Doe', publishDate: '2024-06-15', category: 'Project Update', status: 'published', excerpt: 'A detailed look at how the community center project transformed local lives...', readTime: '5 min' },
-    { id: 'ART002', title: 'Education Drive: Reaching 10,000 Students', author: 'Jane Smith', publishDate: '2024-06-14', category: 'Impact Story', status: 'published', excerpt: 'Our education initiative has reached a major milestone with 10,000 students...', readTime: '4 min' },
-    { id: 'ART003', title: 'Health Camp Planning Guide', author: 'Mike Johnson', publishDate: '2024-06-13', category: 'Guide', status: 'draft', excerpt: 'Best practices and lessons learned from organizing successful health camps...', readTime: '7 min' },
-    { id: 'ART004', title: 'CSR Best Practices 2024', author: 'Sarah Williams', publishDate: '2024-06-12', category: 'Research', status: 'pending', excerpt: 'Latest trends and best practices in corporate social responsibility...', readTime: '8 min' },
-  ]);
+  const [articles, setArticles] = useState<MediaArticle[]>([]);
+  const [stats, setStats] = useState<ArticleStats>({
+    total: 0,
+    published: 0,
+    draft: 0,
+    pending: 0,
+  });
 
-  const filteredArticles = articles.filter(article => 
-    filterStatus === 'all' || article.status === filterStatus
-  );
+  // Fetch articles and statistics from database
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [articlesData, statsData] = await Promise.all([
+          getAllArticles(),
+          getArticleStats(),
+        ]);
 
-  const stats = [
-    { label: 'Total Articles', value: articles.length },
-    { label: 'Published', value: articles.filter(a => a.status === 'published').length },
-    { label: 'Drafts', value: articles.filter(a => a.status === 'draft').length },
-    { label: 'Pending', value: articles.filter(a => a.status === 'pending').length },
+        setArticles(articlesData);
+        setStats(statsData);
+      } catch (err) {
+        console.error('Error loading articles:', err);
+        // Fallback to empty arrays
+        setArticles([]);
+        setStats({ total: 0, published: 0, draft: 0, pending: 0 });
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  // Filter articles based on selected status
+  const getArticleStatus = (article: MediaArticle): 'published' | 'draft' | 'pending' => {
+    if (article.is_public && article.approved_by) return 'published';
+    if (!article.is_public && !article.approved_by) return 'draft';
+    return 'pending';
+  };
+
+  const filteredArticles = articles.filter(article => {
+    if (filterStatus === 'all') return true;
+    return getArticleStatus(article) === filterStatus;
+  });
+
+  const statsDisplay = [
+    { label: 'Total Articles', value: stats.total },
+    { label: 'Published', value: stats.published },
+    { label: 'Drafts', value: stats.draft },
+    { label: 'Pending', value: stats.pending },
   ];
 
   return (
@@ -43,7 +65,10 @@ const Article = () => {
             <h1 className="text-3xl font-bold text-gray-900">Articles</h1>
             <p className="text-gray-600 mt-2">Manage project articles and blog posts</p>
           </div>
-          <button className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-lg font-medium flex items-center space-x-2 transition-colors">
+          <button 
+            onClick={() => navigate('/article')}
+            className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-lg font-medium flex items-center space-x-2 transition-colors"
+          >
             <Plus className="w-5 h-5" />
             <span>New Article</span>
           </button>
@@ -52,7 +77,7 @@ const Article = () => {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        {stats.map((stat, index) => (
+        {statsDisplay.map((stat, index) => (
           <motion.div
             key={stat.label}
             initial={{ opacity: 0, y: 20 }}
@@ -87,52 +112,68 @@ const Article = () => {
 
       {/* Articles Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {filteredArticles.map((article, index) => (
-          <motion.div
-            key={article.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 + index * 0.05 }}
-            className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow"
-          >
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-center space-x-3">
-                <div className="p-3 bg-emerald-50 rounded-xl">
-                  <FileText className="w-6 h-6 text-emerald-600" />
+        {filteredArticles.length === 0 ? (
+          <div className="col-span-full text-center py-8">
+            <p className="text-gray-600">No articles found</p>
+          </div>
+        ) : (
+          filteredArticles.map((article, index) => {
+            const status = getArticleStatus(article);
+            const authorName = article.reporter_name || article.created_by || 'Unknown';
+            const publishDate = article.publication_date || article.created_at?.split('T')[0] || 'N/A';
+            const excerpt = article.description || 'No description available';
+            const category = article.category || 'Uncategorized';
+
+            return (
+              <motion.div
+                key={article.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5 + index * 0.05 }}
+                className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow"
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-3 bg-emerald-50 rounded-xl">
+                      <FileText className="w-6 h-6 text-emerald-600" />
+                    </div>
+                    <div>
+                      <span className="text-xs text-gray-600">{category}</span>
+                      <h3 className="font-bold text-gray-900 text-lg">{article.title}</h3>
+                    </div>
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
+                    status === 'published' ? 'bg-emerald-100 text-emerald-700' :
+                    status === 'draft' ? 'bg-gray-100 text-gray-700' :
+                    'bg-amber-100 text-amber-700'
+                  }`}>
+                    {status.toUpperCase()}
+                  </span>
                 </div>
-                <div>
-                  <span className="text-xs text-gray-600">{article.category}</span>
-                  <h3 className="font-bold text-gray-900 text-lg">{article.title}</h3>
+
+                <p className="text-gray-600 mb-4 line-clamp-2">{excerpt}</p>
+
+                <div className="flex items-center justify-between text-sm text-gray-600 mb-4">
+                  <div className="flex items-center space-x-2">
+                    <User className="w-4 h-4 text-emerald-600" />
+                    <span>{authorName}</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Calendar className="w-4 h-4 text-emerald-600" />
+                    <span>{publishDate}</span>
+                  </div>
+                  {article.views_count && (
+                    <span className="text-emerald-600 font-medium">{article.views_count} views</span>
+                  )}
                 </div>
-              </div>
-              <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                article.status === 'published' ? 'bg-emerald-100 text-emerald-700' :
-                article.status === 'draft' ? 'bg-gray-100 text-gray-700' :
-                'bg-amber-100 text-amber-700'
-              }`}>
-                {article.status.toUpperCase()}
-              </span>
-            </div>
 
-            <p className="text-gray-600 mb-4 line-clamp-2">{article.excerpt}</p>
-
-            <div className="flex items-center justify-between text-sm text-gray-600 mb-4">
-              <div className="flex items-center space-x-2">
-                <User className="w-4 h-4 text-emerald-600" />
-                <span>{article.author}</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Calendar className="w-4 h-4 text-emerald-600" />
-                <span>{article.publishDate}</span>
-              </div>
-              <span className="text-emerald-600 font-medium">{article.readTime} read</span>
-            </div>
-
-            <button className="w-full bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-medium py-2 rounded-lg transition-colors">
-              {article.status === 'published' ? 'View Article' : 'Edit Draft'}
-            </button>
-          </motion.div>
-        ))}
+                <button className="w-full bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-medium py-2 rounded-lg transition-colors">
+                  {status === 'published' ? 'View Article' : 'Edit Draft'}
+                </button>
+              </motion.div>
+            );
+          })
+        )}
       </div>
     </div>
   );

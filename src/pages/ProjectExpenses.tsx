@@ -1,36 +1,76 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-
-interface Expense {
-  id: string;
-  projectName: string;
-  category: string;
-  amount: number;
-  date: string;
-  submittedBy: string;
-  status: 'pending' | 'approved' | 'rejected';
-  description: string;
-}
+import { projectExpensesService } from '../services/projectExpensesService';
+import type { ProjectExpense, ExpenseStats } from '../services/projectExpensesService';
 
 const ProjectExpenses: React.FC = () => {
-  const [expenses] = useState<Expense[]>([
-    { id: 'EXP001', projectName: 'Community Center', category: 'Materials', amount: 5000, date: '2024-01-15', submittedBy: 'John Doe', status: 'approved', description: 'Building materials' },
-    { id: 'EXP002', projectName: 'Education Drive', category: 'Supplies', amount: 2500, date: '2024-01-18', submittedBy: 'Jane Smith', status: 'pending', description: 'School supplies' },
-    { id: 'EXP003', projectName: 'Health Camp', category: 'Medical', amount: 8000, date: '2024-01-20', submittedBy: 'Mike Johnson', status: 'approved', description: 'Medical equipment' },
-    { id: 'EXP004', projectName: 'Clean Water', category: 'Equipment', amount: 3200, date: '2024-01-22', submittedBy: 'Sarah Williams', status: 'rejected', description: 'Water filtration' },
-  ]);
-
+  const [expenses, setExpenses] = useState<ProjectExpense[]>([]);
   const [showModal, setShowModal] = useState(false);
-  const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
+  const [selectedExpense, setSelectedExpense] = useState<ProjectExpense | null>(null);
+  const [stats, setStats] = useState<ExpenseStats>({
+    total: 0,
+    pending: 0,
+    approved: 0,
+    rejected: 0,
+    totalAmount: 0,
+    pendingAmount: 0,
+    approvedAmount: 0,
+    rejectedAmount: 0,
+  });
 
-  const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
-  const pendingExpenses = expenses.filter(exp => exp.status === 'pending').reduce((sum, exp) => sum + exp.amount, 0);
-  const approvedExpenses = expenses.filter(exp => exp.status === 'approved').reduce((sum, exp) => sum + exp.amount, 0);
-  const rejectedExpenses = expenses.filter(exp => exp.status === 'rejected').reduce((sum, exp) => sum + exp.amount, 0);
+  useEffect(() => {
+    loadExpenses();
+  }, []);
 
-  const handleViewDetails = (expense: Expense) => {
+  const loadExpenses = async () => {
+    try {
+      const allExpenses = await projectExpensesService.getAllExpenses();
+      setExpenses(allExpenses);
+      const expenseStats = await projectExpensesService.getExpenseStats(allExpenses);
+      setStats(expenseStats);
+    } catch (error) {
+      console.error('Error loading expenses:', error);
+    }
+  };
+
+  const totalExpenses = stats.totalAmount;
+  const pendingExpenses = stats.pendingAmount;
+  const approvedExpenses = stats.approvedAmount;
+  const rejectedExpenses = stats.rejectedAmount;
+
+  const handleViewDetails = (expense: ProjectExpense) => {
     setSelectedExpense(expense);
     setShowModal(true);
+  };
+
+  const handleApprove = async () => {
+    if (selectedExpense) {
+      try {
+        await projectExpensesService.approveExpense(
+          selectedExpense.id,
+          'current_user_id' // TODO: Replace with actual user ID from AuthContext
+        );
+        setShowModal(false);
+        await loadExpenses();
+      } catch (error) {
+        console.error('Error approving expense:', error);
+      }
+    }
+  };
+
+  const handleReject = async () => {
+    if (selectedExpense) {
+      const reason = prompt('Enter rejection reason:');
+      if (reason) {
+        try {
+          await projectExpensesService.rejectExpense(selectedExpense.id, reason);
+          setShowModal(false);
+          await loadExpenses();
+        } catch (error) {
+          console.error('Error rejecting expense:', error);
+        }
+      }
+    }
   };
 
   return (
@@ -154,14 +194,14 @@ const ProjectExpenses: React.FC = () => {
                   transition={{ delay: index * 0.05 }}
                   className="hover:bg-emerald-50/50 transition-colors"
                 >
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{expense.id}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{expense.projectName}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{expense.expense_code}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{expense.project_id}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{expense.category}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">₹{expense.amount.toLocaleString()}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">₹{expense.total_amount.toLocaleString()}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{expense.date}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{expense.submittedBy}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{expense.submitted_by}</td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium {
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                       expense.status === 'approved' 
                         ? 'bg-emerald-100 text-emerald-700' 
                         : expense.status === 'pending'
@@ -201,8 +241,8 @@ const ProjectExpenses: React.FC = () => {
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium text-gray-600">Project Name</label>
-                  <p className="text-gray-900 font-semibold mt-1">{selectedExpense.projectName}</p>
+                  <label className="text-sm font-medium text-gray-600">Expense Code</label>
+                  <p className="text-gray-900 font-semibold mt-1">{selectedExpense.expense_code}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-600">Category</label>
@@ -210,7 +250,7 @@ const ProjectExpenses: React.FC = () => {
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-600">Amount</label>
-                  <p className="text-gray-900 font-semibold mt-1 text-2xl">₹{selectedExpense.amount.toLocaleString()}</p>
+                  <p className="text-gray-900 font-semibold mt-1 text-2xl">₹{selectedExpense.total_amount.toLocaleString()}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-600">Date</label>
@@ -218,7 +258,7 @@ const ProjectExpenses: React.FC = () => {
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-600">Submitted By</label>
-                  <p className="text-gray-900 font-semibold mt-1">{selectedExpense.submittedBy}</p>
+                  <p className="text-gray-900 font-semibold mt-1">{selectedExpense.submitted_by}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-600">Status</label>
@@ -240,10 +280,16 @@ const ProjectExpenses: React.FC = () => {
                 <p className="text-gray-900 mt-1">{selectedExpense.description}</p>
               </div>
               <div className="flex gap-3 pt-4">
-                <button className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-medium py-3 px-4 rounded-lg transition-colors">
+                <button
+                  onClick={handleApprove}
+                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+                >
                   Approve
                 </button>
-                <button className="flex-1 bg-red-500 hover:bg-red-600 text-white font-medium py-3 px-4 rounded-lg transition-colors">
+                <button
+                  onClick={handleReject}
+                  className="flex-1 bg-red-500 hover:bg-red-600 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+                >
                   Reject
                 </button>
                 <button

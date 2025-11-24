@@ -1,22 +1,79 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Download, Calendar } from 'lucide-react';
-import { dailyReports } from '../mockData';
+import { Plus, Download, Calendar, Loader } from 'lucide-react';
+import { getDailyReportsWithTaskDetails, getDailyReportStats, type DailyReportDisplay, type DailyReportStats } from '@/services/dailyReportsService';
 
 const DailyReportPage = () => {
-  const [dateRange, setDateRange] = useState({ start: '25/10/26', end: '26/10/26' });
+  const [dateRange, setDateRange] = useState({ start: '2025-10-25', end: '2025-10-26' });
   const [showExportOptions, setShowExportOptions] = useState(false);
+  const [reports, setReports] = useState<DailyReportDisplay[]>([]);
+  const [stats, setStats] = useState<DailyReportStats>({
+    totalTasks: 0,
+    completedTasks: 0,
+    inProgressTasks: 0,
+    notStartedTasks: 0,
+    blockedTasks: 0,
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchReportData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const reportList = await getDailyReportsWithTaskDetails(dateRange);
+        const reportStats = await getDailyReportStats(dateRange);
+        setReports(reportList);
+        setStats(reportStats);
+      } catch (err) {
+        setError('Failed to load report data');
+        console.error('Error fetching report data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchReportData();
+  }, [dateRange]);
+
+  const handleApplyDateRange = () => {
+    // Date range state is already updated, re-fetch will trigger via useEffect
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'Completed': 
-      case 'COMPLETED': return 'bg-red-100 text-red-700 border-red-300';
-      case 'In Progress': 
-      case 'INPROGRESS': return 'bg-amber-100 text-amber-700 border-amber-300';
-      case 'Not Started': return 'bg-gray-100 text-gray-700 border-gray-300';
-      default: return 'bg-gray-100 text-gray-700 border-gray-300';
+      case 'completed':
+      case 'Completed':
+      case 'COMPLETED':
+        return 'bg-red-100 text-red-700 border-red-300';
+      case 'in_progress':
+      case 'In Progress':
+      case 'INPROGRESS':
+        return 'bg-amber-100 text-amber-700 border-amber-300';
+      case 'not_started':
+      case 'Not Started':
+        return 'bg-gray-100 text-gray-700 border-gray-300';
+      default:
+        return 'bg-gray-100 text-gray-700 border-gray-300';
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader className="w-8 h-8 animate-spin text-emerald-500" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
+        {error}
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
@@ -61,19 +118,17 @@ const DailyReportPage = () => {
             <div className="flex items-center gap-2 px-4 py-2 border-2 border-gray-300 rounded-lg">
               <Calendar className="w-5 h-5 text-gray-600" />
               <input
-                type="text"
+                type="date"
                 value={dateRange.start}
                 onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
                 className="w-32 focus:outline-none font-medium"
-                placeholder="Start Date"
               />
               <span className="text-gray-400">-</span>
               <input
-                type="text"
+                type="date"
                 value={dateRange.end}
                 onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
                 className="w-32 focus:outline-none font-medium"
-                placeholder="End Date"
               />
               <button className="ml-2 p-1 hover:bg-gray-100 rounded">
                 <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -81,7 +136,7 @@ const DailyReportPage = () => {
                 </svg>
               </button>
             </div>
-            <button className="px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors font-medium">
+            <button onClick={handleApplyDateRange} className="px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors font-medium">
               Apply
             </button>
           </div>
@@ -90,39 +145,45 @@ const DailyReportPage = () => {
 
       {/* Daily Reports List - Card Style */}
       <div className="space-y-4">
-        {dailyReports.map((report, index) => (
-          <motion.div
-            key={report.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.05 }}
-            className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex-1">
-                <h3 className="text-lg font-bold text-gray-900 mb-3">TASK NAME</h3>
-                <p className="text-gray-700">{report.taskName}</p>
-              </div>
-              <div className="flex items-center gap-3 ml-6">
-                <div className="text-center">
-                  <span className="px-6 py-3 bg-emerald-50 text-emerald-700 rounded-full text-sm font-bold inline-block">
-                    DUE DATE
-                  </span>
-                  <p className="text-xs text-gray-600 mt-1">{new Date(report.dueDate).toLocaleDateString()}</p>
+        {reports.length > 0 ? (
+          reports.map((report, index) => (
+            <motion.div
+              key={report.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.05 }}
+              className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <h3 className="text-lg font-bold text-gray-900 mb-3">TASK NAME</h3>
+                  <p className="text-gray-700">{report.taskName}</p>
                 </div>
-                <span className={`px-6 py-3 rounded-full text-sm font-bold ${getStatusColor(report.completionStatus)}`}>
-                  {report.completionStatus.toUpperCase()}
-                </span>
-                <div className="text-center">
-                  <span className="px-6 py-3 bg-white border-2 border-gray-900 rounded-full text-sm font-bold inline-block">
-                    ASSIGN BY
+                <div className="flex items-center gap-3 ml-6">
+                  <div className="text-center">
+                    <span className="px-6 py-3 bg-emerald-50 text-emerald-700 rounded-full text-sm font-bold inline-block">
+                      DUE DATE
+                    </span>
+                    <p className="text-xs text-gray-600 mt-1">{new Date(report.dueDate).toLocaleDateString()}</p>
+                  </div>
+                  <span className={`px-6 py-3 rounded-full text-sm font-bold ${getStatusColor(report.completionStatus)}`}>
+                    {report.completionStatus.replace(/_/g, ' ').toUpperCase()}
                   </span>
-                  <p className="text-xs text-gray-600 mt-1">{report.assignedBy}</p>
+                  <div className="text-center">
+                    <span className="px-6 py-3 bg-white border-2 border-gray-900 rounded-full text-sm font-bold inline-block">
+                      ASSIGN BY
+                    </span>
+                    <p className="text-xs text-gray-600 mt-1">{report.assignedBy}</p>
+                  </div>
                 </div>
               </div>
-            </div>
-          </motion.div>
-        ))}
+            </motion.div>
+          ))
+        ) : (
+          <div className="text-center py-8 text-gray-500">
+            No reports found for the selected date range
+          </div>
+        )}
       </div>
 
       {/* Stats Summary */}
@@ -133,7 +194,7 @@ const DailyReportPage = () => {
           className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
         >
           <p className="text-gray-600 text-sm font-medium mb-1">Total Tasks</p>
-          <h3 className="text-3xl font-bold text-gray-900">{dailyReports.length}</h3>
+          <h3 className="text-3xl font-bold text-gray-900">{stats.totalTasks}</h3>
         </motion.div>
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -142,9 +203,7 @@ const DailyReportPage = () => {
           className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
         >
           <p className="text-gray-600 text-sm font-medium mb-1">Completed</p>
-          <h3 className="text-3xl font-bold text-emerald-600">
-            {dailyReports.filter(r => r.completionStatus.toLowerCase().includes('complete')).length}
-          </h3>
+          <h3 className="text-3xl font-bold text-emerald-600">{stats.completedTasks}</h3>
         </motion.div>
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -153,9 +212,7 @@ const DailyReportPage = () => {
           className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
         >
           <p className="text-gray-600 text-sm font-medium mb-1">In Progress</p>
-          <h3 className="text-3xl font-bold text-amber-600">
-            {dailyReports.filter(r => r.completionStatus.toLowerCase().includes('progress')).length}
-          </h3>
+          <h3 className="text-3xl font-bold text-amber-600">{stats.inProgressTasks}</h3>
         </motion.div>
       </div>
     </div>

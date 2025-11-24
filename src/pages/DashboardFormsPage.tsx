@@ -1,21 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Minus, Camera, ChevronDown, Eye, Edit } from 'lucide-react';
-
-interface DocumentForm {
-  id: string;
-  documentHeading: string;
-  updateNumber: string;
-  date: string;
-  format: string;
-  schoolName: string;
-  address: string;
-  description: string;
-  documentNumber: string;
-  images: string[];
-  client: string;
-  admin: string;
-}
+import { Plus, Minus, Camera, ChevronDown, Eye, Edit, Loader } from 'lucide-react';
+import { getDataEntryFormsWithDetails, type DocumentForm } from '@/services/dataEntryFormsService';
 
 interface BeneficiaryCount {
   current: number;
@@ -30,39 +16,29 @@ const DashboardFormsPage = () => {
     location: 'Overall'
   });
 
-  const [documents] = useState<DocumentForm[]>([
-    {
-      id: 'DOC001',
-      documentHeading: 'Community Health Camp Report',
-      updateNumber: '001',
-      date: '2024-06-15',
-      format: 'PDF',
-      schoolName: 'ABC Primary School',
-      address: '123 Main St, Mumbai',
-      description: 'Monthly health checkup report for students',
-      documentNumber: 'MTD-2024-001',
-      images: ['image1.jpg', 'image2.jpg', 'image3.jpg'],
-      client: 'Health Foundation',
-      admin: 'John Doe'
-    },
-    {
-      id: 'DOC002',
-      documentHeading: 'Education Material Distribution',
-      updateNumber: '002',
-      date: '2024-06-18',
-      format: 'Excel',
-      schoolName: 'XYZ High School',
-      address: '456 Park Ave, Delhi',
-      description: 'Quarterly distribution of books and stationery',
-      documentNumber: 'MTD-2024-002',
-      images: ['image1.jpg', 'image2.jpg'],
-      client: 'Education Trust',
-      admin: 'Jane Smith'
-    }
-  ]);
-
+  const [documents, setDocuments] = useState<DocumentForm[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showTestFormat, setShowTestFormat] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchFormData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const forms = await getDataEntryFormsWithDetails();
+        setDocuments(forms);
+      } catch (err) {
+        setError('Failed to load form data');
+        console.error('Error fetching forms:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchFormData();
+  }, []);
 
   const incrementCount = () => {
     if (beneficiaryCount.current < beneficiaryCount.target) {
@@ -75,6 +51,22 @@ const DashboardFormsPage = () => {
       setBeneficiaryCount({ ...beneficiaryCount, current: beneficiaryCount.current - 1 });
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader className="w-8 h-8 animate-spin text-emerald-500" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
+        {error}
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
@@ -188,7 +180,8 @@ const DashboardFormsPage = () => {
         )}
 
         {/* Document Cards */}
-        {documents.map((doc, index) => (
+        {documents.length > 0 ? (
+          documents.map((doc, index) => (
           <motion.div
             key={doc.id}
             initial={{ opacity: 0, y: 20 }}
@@ -314,7 +307,13 @@ const DashboardFormsPage = () => {
               )}
             </div>
           </motion.div>
-        ))}
+          ))
+        ) : (
+          <div className="text-center py-12 text-gray-500">
+            <p className="text-lg font-semibold">No forms found</p>
+            <p className="text-sm mt-2">Start by creating a new form to get started</p>
+          </div>
+        )}
       </div>
     </div>
   );

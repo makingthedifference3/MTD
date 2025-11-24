@@ -1,39 +1,54 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Plus, FolderKanban, Calendar, DollarSign, Users, TrendingUp } from 'lucide-react';
-
-interface Project {
-  id: string;
-  name: string;
-  partner: string;
-  startDate: string;
-  endDate: string;
-  budget: number;
-  spent: number;
-  teamSize: number;
-  status: 'on-track' | 'at-risk' | 'delayed' | 'completed';
-  progress: number;
-}
+import { projectsService } from '../services/projectsService';
+import type { ProjectWithDetails } from '../services/projectsService';
 
 const ProjectsPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
-  
-  const [projects] = useState<Project[]>([
-    { id: 'PRJ001', name: 'Community Center Build', partner: 'Green Earth Foundation', startDate: '2024-01-15', endDate: '2024-12-31', budget: 500000, spent: 350000, teamSize: 12, status: 'on-track', progress: 70 },
-    { id: 'PRJ002', name: 'Education Drive', partner: 'Education First Trust', startDate: '2024-02-01', endDate: '2024-11-30', budget: 300000, spent: 180000, teamSize: 8, status: 'on-track', progress: 60 },
-    { id: 'PRJ003', name: 'Health Camp Setup', partner: 'Healthcare Alliance', startDate: '2024-03-10', endDate: '2024-09-30', budget: 250000, spent: 200000, teamSize: 10, status: 'at-risk', progress: 80 },
-    { id: 'PRJ004', name: 'Clean Water Initiative', partner: 'Clean Water Initiative', startDate: '2024-01-20', endDate: '2024-08-31', budget: 400000, spent: 320000, teamSize: 15, status: 'delayed', progress: 65 },
-  ]);
+  const [allProjects, setAllProjects] = useState<ProjectWithDetails[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const filteredProjects = projects.filter(project => {
+  useEffect(() => {
+    loadProjects();
+  }, []);
+
+  const loadProjects = async () => {
+    try {
+      setLoading(true);
+      const data = await projectsService.getAllProjects();
+      setAllProjects(data);
+    } catch (error) {
+      console.error('Error loading projects:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getProjectStatus = (project: ProjectWithDetails): 'on-track' | 'at-risk' | 'delayed' | 'completed' => {
+    // Map database status values to display status
+    if (project.status === 'completed') return 'completed';
+    if (project.status === 'on_hold' || project.status === 'cancelled') return 'delayed';
+    
+    // Check completion percentage to determine if on-track or at-risk
+    const completion = project.completion_percentage || 0;
+    if (completion < 50 && new Date(project.expected_end_date || new Date()) < new Date()) {
+      return 'at-risk';
+    }
+    return 'on-track';
+  };
+
+  const filteredProjects = allProjects.filter(project => {
+    const displayStatus = getProjectStatus(project);
     const matchesSearch = project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          project.partner.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesFilter = filterStatus === 'all' || project.status === filterStatus;
+                          (project.partner_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          (project.project_code || '').toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesFilter = filterStatus === 'all' || displayStatus === filterStatus;
     return matchesSearch && matchesFilter;
   });
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: 'on-track' | 'at-risk' | 'delayed' | 'completed') => {
     switch (status) {
       case 'on-track':
         return 'bg-emerald-100 text-emerald-700';
@@ -47,6 +62,17 @@ const ProjectsPage = () => {
         return 'bg-gray-100 text-gray-700';
     }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-8 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500 mx-auto mb-4"></div>
+          <p className="text-gray-600 font-semibold">Loading projects...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
@@ -112,11 +138,11 @@ const ProjectsPage = () => {
                 </div>
                 <div>
                   <h3 className="font-bold text-gray-900 text-lg">{project.name}</h3>
-                  <p className="text-sm text-gray-600">{project.id} • {project.partner}</p>
+                  <p className="text-sm text-gray-600">{project.project_code} • {project.partner_name}</p>
                 </div>
               </div>
-              <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(project.status)}`}>
-                {project.status.replace('-', ' ').toUpperCase()}
+              <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(getProjectStatus(project))}`}>
+                {getProjectStatus(project).replace('-', ' ').toUpperCase()}
               </span>
             </div>
 
@@ -125,28 +151,28 @@ const ProjectsPage = () => {
                 <Calendar className="w-4 h-4 text-emerald-600" />
                 <div>
                   <p className="text-xs text-gray-600">Start Date</p>
-                  <p className="text-sm font-semibold text-gray-900">{project.startDate}</p>
+                  <p className="text-sm font-semibold text-gray-900">{project.start_date ? new Date(project.start_date).toLocaleDateString() : 'N/A'}</p>
                 </div>
               </div>
               <div className="flex items-center space-x-2">
                 <DollarSign className="w-4 h-4 text-emerald-600" />
                 <div>
                   <p className="text-xs text-gray-600">Budget</p>
-                  <p className="text-sm font-semibold text-gray-900">₹{(project.budget / 1000).toFixed(0)}K</p>
+                  <p className="text-sm font-semibold text-gray-900">₹{((project.total_budget || 0) / 1000).toFixed(0)}K</p>
                 </div>
               </div>
               <div className="flex items-center space-x-2">
                 <TrendingUp className="w-4 h-4 text-emerald-600" />
                 <div>
-                  <p className="text-xs text-gray-600">Spent</p>
-                  <p className="text-sm font-semibold text-gray-900">₹{(project.spent / 1000).toFixed(0)}K</p>
+                  <p className="text-xs text-gray-600">Utilized</p>
+                  <p className="text-sm font-semibold text-gray-900">₹{((project.utilized_budget || 0) / 1000).toFixed(0)}K</p>
                 </div>
               </div>
               <div className="flex items-center space-x-2">
                 <Users className="w-4 h-4 text-emerald-600" />
                 <div>
                   <p className="text-xs text-gray-600">Team Size</p>
-                  <p className="text-sm font-semibold text-gray-900">{project.teamSize}</p>
+                  <p className="text-sm font-semibold text-gray-900">{project.team_member_count || 0}</p>
                 </div>
               </div>
             </div>
@@ -154,12 +180,12 @@ const ProjectsPage = () => {
             <div className="mb-2">
               <div className="flex items-center justify-between text-sm mb-1">
                 <span className="text-gray-600">Progress</span>
-                <span className="font-semibold text-gray-900">{project.progress}%</span>
+                <span className="font-semibold text-gray-900">{project.completion_percentage || 0}%</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div
                   className="bg-emerald-500 h-2 rounded-full transition-all"
-                  style={{ width: `${project.progress}%` }}
+                  style={{ width: `${project.completion_percentage || 0}%` }}
                 />
               </div>
             </div>

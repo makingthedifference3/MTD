@@ -1,34 +1,67 @@
-import { useFilter } from '../context/FilterContext';
-import { dashboardCards, projects, csrPartners } from '../mockData';
+import { useEffect, useState } from 'react';
+import { useFilter } from '../context/useFilter';
+import {
+  getAllDashboardMetrics,
+  getMetricsByProjectId,
+  getMetricsByPartner,
+  type DashboardMetric,
+} from '../services/dashboardMetricsService';
+import type { Project } from '../services/filterService';
 
 export const useFilteredData = () => {
-  const { selectedPartner, selectedProject } = useFilter();
+  const { selectedPartner, selectedProject, csrPartners, filteredProjects, isLoading: filterLoading } = useFilter();
+  const [selectedProjectData, setSelectedProjectData] = useState<Project | null>(null);
+  const [dashboardCards, setDashboardCards] = useState<DashboardMetric[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Filter dashboard cards based on selected filters
-  const getFilteredCards = () => {
-    let filtered = dashboardCards;
+  // Fetch dashboard metrics based on filters
+  useEffect(() => {
+    const loadMetrics = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        let metrics: DashboardMetric[] = [];
 
-    if (selectedProject) {
-      // Show only cards for selected project
-      filtered = dashboardCards.filter((card) => card.projectId === selectedProject);
-    } else if (selectedPartner) {
-      // Show cards for all projects under selected partner
-      const partnerProjects = projects.filter((p) => p.partnerId === selectedPartner);
-      const partnerProjectIds = partnerProjects.map((p) => p.id);
-      filtered = dashboardCards.filter((card) => partnerProjectIds.includes(card.projectId));
+        if (selectedProject) {
+          // Fetch metrics for selected project
+          metrics = await getMetricsByProjectId(selectedProject);
+        } else if (selectedPartner) {
+          // Fetch metrics for selected partner (all projects under partner)
+          metrics = await getMetricsByPartner(selectedPartner);
+        } else {
+          // Fetch all metrics
+          metrics = await getAllDashboardMetrics();
+        }
+
+        setDashboardCards(metrics);
+      } catch (err) {
+        console.error('Failed to load dashboard metrics:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load dashboard metrics');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadMetrics();
+  }, [selectedProject, selectedPartner]);
+
+  // Update selected project data when selectedProject changes
+  useEffect(() => {
+    if (selectedProject && filteredProjects.length > 0) {
+      const project = filteredProjects.find((p) => p.id === selectedProject);
+      setSelectedProjectData(project || null);
+    } else {
+      setSelectedProjectData(null);
     }
-    // else: show all cards (Overall view)
-
-    return filtered;
-  };
+  }, [selectedProject, filteredProjects]);
 
   // Get current filter mode
   const getFilterMode = () => {
-    if (selectedProject) {
-      const project = projects.find((p) => p.id === selectedProject);
+    if (selectedProject && selectedProjectData) {
       return {
         mode: 'project',
-        label: `Project: ${project?.name}`,
+        label: `Project: ${selectedProjectData.name}`,
       };
     } else if (selectedPartner) {
       const partner = csrPartners.find((cp) => cp.id === selectedPartner);
@@ -43,23 +76,21 @@ export const useFilteredData = () => {
     };
   };
 
-  // Aggregate metrics from filtered cards
+  // Aggregate metrics from dashboard cards
   const getAggregatedMetrics = () => {
-    const filtered = getFilteredCards();
-    
-    const beneficiaries = filtered
+    const beneficiaries = dashboardCards
       .filter((c) => c.type === 'beneficiaries')
       .reduce((sum, c) => ({ current: sum.current + c.current, target: sum.target + c.target }), { current: 0, target: 0 });
 
-    const events = filtered
+    const events = dashboardCards
       .filter((c) => c.type === 'events')
       .reduce((sum, c) => ({ current: sum.current + c.current, target: sum.target + c.target }), { current: 0, target: 0 });
 
-    const donations = filtered
+    const donations = dashboardCards
       .filter((c) => c.type === 'donations')
       .reduce((sum, c) => ({ current: sum.current + c.current, target: sum.target + c.target }), { current: 0, target: 0 });
 
-    const volunteers = filtered
+    const volunteers = dashboardCards
       .filter((c) => c.type === 'volunteers')
       .reduce((sum, c) => ({ current: sum.current + c.current, target: sum.target + c.target }), { current: 0, target: 0 });
 
@@ -68,14 +99,17 @@ export const useFilteredData = () => {
       events,
       donations,
       volunteers,
-      totalCards: filtered.length,
+      totalCards: dashboardCards.length,
     };
   };
 
   return {
-    filteredCards: getFilteredCards(),
+    filteredCards: dashboardCards,
     filterMode: getFilterMode(),
     aggregatedMetrics: getAggregatedMetrics(),
     hasFilters: !!(selectedPartner || selectedProject),
+    selectedProjectData,
+    isLoading: filterLoading || isLoading,
+    error,
   };
 };

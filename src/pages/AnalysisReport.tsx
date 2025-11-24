@@ -1,65 +1,63 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { BarChart3, ChevronDown } from 'lucide-react';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import {
+  getAllAnalyticsData,
+  type ProjectAnalytic,
+  type MonthlyTrend,
+  type CategoryDistribution,
+  type FunnelStage,
+  type ChartDataPoint,
+} from '../services/analyticsService';
 
 const AnalysisReport = () => {
   const [selectedPeriod, setSelectedPeriod] = useState('quarter');
   const [showFilterOptions, setShowFilterOptions] = useState(false);
 
-  // Exact data from wireframe
-  const barChartData = [
-    { name: 'Item 1', value: 5 },
-    { name: 'Item 2', value: 12 },
-    { name: 'Item 3', value: 17 },
-    { name: 'Item 4', value: 20 },
-  ];
+  // Database state
+  const [barChartData, setBarChartData] = useState<ChartDataPoint[]>([]);
+  const [pieChartData, setPieChartData] = useState<ChartDataPoint[]>([]);
+  const [funnelData, setFunnelData] = useState<FunnelStage[]>([]);
+  const [lineChartData, setLineChartData] = useState<ChartDataPoint[]>([]);
+  const [projectPerformance, setProjectPerformance] = useState<ProjectAnalytic[]>([]);
+  const [monthlyTrends, setMonthlyTrends] = useState<MonthlyTrend[]>([]);
+  const [categoryDistribution, setCategoryDistribution] = useState<CategoryDistribution[]>([]);
+  const [keyMetrics, setKeyMetrics] = useState({
+    totalProjects: 0,
+    totalBudget: 0,
+    avgCompletion: 0,
+  });
 
-  const pieChartData = [
-    { name: 'Item 1', value: 32.5, color: '#10b981' },
-    { name: 'Item 2', value: 25, color: '#60a5fa' },
-    { name: 'Item 3', value: 12.5, color: '#f59e0b' },
-  ];
+  // Fetch all analytics data on component mount
+  useEffect(() => {
+    const loadAnalyticsData = async () => {
+      try {
+        const data = await getAllAnalyticsData();
 
-  const funnelData = [
-    { stage: 'Stage 1', value: 100, color: '#10b981' },
-    { stage: 'Stage 2', value: 85, color: '#34d399' },
-    { stage: 'Stage 3', value: 47, color: '#60a5fa' },
-    { stage: 'Stage 4', value: 25, color: '#f59e0b' },
-    { stage: 'Stage 5', value: 15, color: '#ef4444' },
-    { stage: 'Stage 6', value: 8, color: '#dc2626' },
-  ];
+        setBarChartData(data.itemAnalysis);
+        setPieChartData(data.distributionData);
+        setFunnelData(data.funnelData);
+        setLineChartData(data.multiSeriesTrends);
+        setProjectPerformance(data.projectPerformance);
+        setMonthlyTrends(data.monthlyTrends);
+        setCategoryDistribution(data.categoryDistribution);
+        setKeyMetrics(data.keyMetrics);
+      } catch (error) {
+        console.error('Failed to load analytics data:', error);
+        // Fallback to empty data
+        setBarChartData([]);
+        setPieChartData([]);
+        setFunnelData([]);
+        setLineChartData([]);
+        setProjectPerformance([]);
+        setMonthlyTrends([]);
+        setCategoryDistribution([]);
+      }
+    };
 
-  const lineChartData = [
-    { item: 'Item 1', series1: 5, series2: 8, series3: 3 },
-    { item: 'Item 2', series1: 10, series2: 12, series3: 7 },
-    { item: 'Item 3', series1: 15, series2: 18, series3: 12 },
-    { item: 'Item 4', series1: 20, series2: 22, series3: 16 },
-    { item: 'Item 5', series1: 18, series2: 20, series3: 14 },
-  ];
-
-  const projectPerformance = [
-    { project: 'Community Center', budget: 500000, spent: 350000, completion: 70 },
-    { project: 'Education Drive', budget: 300000, spent: 180000, completion: 60 },
-    { project: 'Health Camp', budget: 250000, spent: 200000, completion: 80 },
-    { project: 'Clean Water', budget: 400000, spent: 320000, completion: 65 },
-  ];
-
-  const monthlyTrends = [
-    { month: 'Jan', projects: 12, budget: 450000, expenses: 320000 },
-    { month: 'Feb', projects: 15, budget: 520000, expenses: 360000 },
-    { month: 'Mar', projects: 18, budget: 480000, expenses: 340000 },
-    { month: 'Apr', projects: 14, budget: 550000, expenses: 380000 },
-    { month: 'May', projects: 20, budget: 600000, expenses: 400000 },
-    { month: 'Jun', projects: 22, budget: 620000, expenses: 420000 },
-  ];
-
-  const categoryDistribution = [
-    { name: 'Education', value: 35, color: '#10b981' },
-    { name: 'Health', value: 25, color: '#60a5fa' },
-    { name: 'Infrastructure', value: 20, color: '#f59e0b' },
-    { name: 'Environment', value: 20, color: '#8b5cf6' },
-  ];
+    loadAnalyticsData();
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
@@ -215,7 +213,7 @@ const AnalysisReport = () => {
         >
           <BarChart3 className="w-8 h-8 mb-2 opacity-80" />
           <p className="text-emerald-100 text-sm font-medium mb-1">Total Projects</p>
-          <h3 className="text-4xl font-bold">42</h3>
+          <h3 className="text-4xl font-bold">{keyMetrics.totalProjects}</h3>
         </motion.div>
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -224,7 +222,9 @@ const AnalysisReport = () => {
           className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
         >
           <p className="text-gray-600 text-sm font-medium mb-1">Total Budget</p>
-          <h3 className="text-4xl font-bold text-gray-900">5.2M</h3>
+          <h3 className="text-4xl font-bold text-gray-900">
+            {(keyMetrics.totalBudget / 1000000).toFixed(1)}M
+          </h3>
           <p className="text-emerald-600 text-sm mt-2">↑ 18% from last quarter</p>
         </motion.div>
         <motion.div
@@ -234,7 +234,7 @@ const AnalysisReport = () => {
           className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
         >
           <p className="text-gray-600 text-sm font-medium mb-1">Avg Completion</p>
-          <h3 className="text-4xl font-bold text-gray-900">68%</h3>
+          <h3 className="text-4xl font-bold text-gray-900">{keyMetrics.avgCompletion}%</h3>
           <p className="text-emerald-600 text-sm mt-2">↑ 5% from last quarter</p>
         </motion.div>
       </div>

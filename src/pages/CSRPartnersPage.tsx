@@ -1,39 +1,80 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Plus, Building2, MapPin, Phone, Mail } from 'lucide-react';
-
-interface CSRPartner {
-  id: string;
-  name: string;
-  location: string;
-  contactPerson: string;
-  phone: string;
-  email: string;
-  activeProjects: number;
-  totalBudget: number;
-  status: 'active' | 'inactive';
-}
+import { Search, Plus, Building2, MapPin, Phone, Mail, Loader } from 'lucide-react';
+import { getCSRPartnersWithStats, getPartnerStats, type CSRPartnerStats, type PartnerStats } from '@/services/csrPartnersService';
 
 const CSRPartnersPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [partners] = useState<CSRPartner[]>([
-    { id: 'P001', name: 'Green Earth Foundation', location: 'Mumbai', contactPerson: 'Raj Kumar', phone: '+91 98765 43210', email: 'raj@greenearth.org', activeProjects: 8, totalBudget: 850000, status: 'active' },
-    { id: 'P002', name: 'Education First Trust', location: 'Delhi', contactPerson: 'Priya Sharma', phone: '+91 98765 43211', email: 'priya@edufirst.org', activeProjects: 12, totalBudget: 1200000, status: 'active' },
-    { id: 'P003', name: 'Healthcare Alliance', location: 'Bangalore', contactPerson: 'Amit Patel', phone: '+91 98765 43212', email: 'amit@healthalliance.org', activeProjects: 5, totalBudget: 600000, status: 'active' },
-    { id: 'P004', name: 'Clean Water Initiative', location: 'Chennai', contactPerson: 'Sarah Williams', phone: '+91 98765 43213', email: 'sarah@cleanwater.org', activeProjects: 3, totalBudget: 450000, status: 'inactive' },
-  ]);
+  const [partners, setPartners] = useState<CSRPartnerStats[]>([]);
+  const [allPartners, setAllPartners] = useState<CSRPartnerStats[]>([]);
+  const [stats, setStats] = useState<PartnerStats>({
+    totalPartners: 0,
+    activePartners: 0,
+    totalProjects: 0,
+    totalBudget: 0,
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const filteredPartners = partners.filter(partner =>
-    partner.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    partner.location.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  useEffect(() => {
+    const fetchPartnerData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const partnerList = await getCSRPartnersWithStats();
+        const partnerStats = await getPartnerStats();
+        setAllPartners(partnerList);
+        setPartners(partnerList);
+        setStats(partnerStats);
+      } catch (err) {
+        setError('Failed to load partner data');
+        console.error('Error fetching partner data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const stats = [
-    { label: 'Total Partners', value: partners.length },
-    { label: 'Active Partners', value: partners.filter(p => p.status === 'active').length },
-    { label: 'Total Projects', value: partners.reduce((sum, p) => sum + p.activeProjects, 0) },
-    { label: 'Total Budget', value: `₹${(partners.reduce((sum, p) => sum + p.totalBudget, 0) / 1000000).toFixed(1)}M` },
+    fetchPartnerData();
+  }, []);
+
+  // Search functionality
+  useEffect(() => {
+    if (searchTerm.trim() === '') {
+      setPartners(allPartners);
+    } else {
+      const filtered = allPartners.filter(
+        (partner) =>
+          partner.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          partner.location.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      setPartners(filtered);
+    }
+  }, [searchTerm, allPartners]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader className="w-8 h-8 animate-spin text-emerald-500" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
+        {error}
+      </div>
+    );
+  }
+
+  const localStats = [
+    { label: 'Total Partners', value: stats.totalPartners },
+    { label: 'Active Partners', value: stats.activePartners },
+    { label: 'Total Projects', value: stats.totalProjects },
+    { label: 'Total Budget', value: `₹${(stats.totalBudget / 1000000).toFixed(1)}M` },
   ];
+
+  const filteredPartners = partners;
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
@@ -53,7 +94,7 @@ const CSRPartnersPage = () => {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        {stats.map((stat, index) => (
+        {localStats.map((stat, index) => (
           <motion.div
             key={stat.label}
             initial={{ opacity: 0, y: 20 }}
@@ -88,7 +129,8 @@ const CSRPartnersPage = () => {
 
       {/* Partners Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {filteredPartners.map((partner, index) => (
+        {filteredPartners.length > 0 ? (
+          filteredPartners.map((partner, index) => (
           <motion.div
             key={partner.id}
             initial={{ opacity: 0, y: 20 }}
@@ -145,7 +187,12 @@ const CSRPartnersPage = () => {
               View Details
             </button>
           </motion.div>
-        ))}
+          ))
+        ) : (
+          <div className="col-span-full text-center py-8 text-gray-500">
+            No partners found
+          </div>
+        )}
       </div>
     </div>
   );

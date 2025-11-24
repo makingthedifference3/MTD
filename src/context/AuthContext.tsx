@@ -1,69 +1,78 @@
-import { createContext, useContext, useState } from 'react';
-import type { ReactNode } from 'react';
-import type { User } from '../mockData';
+import { createContext, useState, useEffect, type ReactNode } from 'react';
+import type { AuthUser } from '../services/authService';
 
-interface AuthContextType {
-  currentUser: User | null;
-  currentRole: 'admin' | 'accountant' | 'project-manager' | 'team-member' | null;
-  login: (role: 'admin' | 'accountant' | 'project-manager' | 'team-member') => void;
+export interface AuthContextType {
+  currentUser: AuthUser | null;
+  currentRole: 'admin' | 'accountant' | 'project_manager' | 'team_member' | 'client' | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  login: (user: AuthUser) => void;
   logout: () => void;
+  setSelectedRole: (role: 'admin' | 'accountant' | 'project_manager' | 'team_member' | null) => void;
+  selectedRole: 'admin' | 'accountant' | 'project_manager' | 'team_member' | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within AuthProvider');
-  }
-  return context;
-}
+export { AuthContext };
 
 interface AuthProviderProps {
   children: ReactNode;
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
-  const [currentRole, setCurrentRole] = useState<
-    'admin' | 'accountant' | 'project-manager' | 'team-member' | null
+  const [currentUser, setCurrentUserState] = useState<AuthUser | null>(null);
+  const [selectedRole, setSelectedRole] = useState<
+    'admin' | 'accountant' | 'project_manager' | 'team_member' | null
   >(null);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
 
-  const login = (role: 'admin' | 'accountant' | 'project-manager' | 'team-member') => {
-    setCurrentRole(role);
-    const mockUser: User = {
-      id: `user-${role}`,
-      name:
-        role === 'admin'
-          ? 'Admin User'
-          : role === 'accountant'
-          ? 'Priya Sharma'
-          : role === 'project-manager'
-          ? 'Lokesh Joshi'
-          : 'Rahul Verma',
-      email: `${role}@mtd.com`,
-      mobile: '+91-9876543210',
-      address: 'Mumbai, Maharashtra',
-      role: role,
-      department:
-        role === 'admin'
-          ? 'IT'
-          : role === 'accountant'
-          ? 'Finance'
-          : role === 'project-manager'
-          ? 'Operations'
-          : 'Operations',
-    };
-    setCurrentUser(mockUser);
+  // Load user from localStorage on mount
+  useEffect(() => {
+    const storedUser = localStorage.getItem('currentUser');
+    if (storedUser) {
+      try {
+        setCurrentUserState(JSON.parse(storedUser));
+      } catch (error) {
+        console.error('Failed to load user from storage:', error);
+        localStorage.removeItem('currentUser');
+      }
+    }
+  }, []);
+
+  const login = (user: AuthUser) => {
+    setCurrentUserState(user);
+    setSelectedRole(null);
+    localStorage.setItem('currentUser', JSON.stringify(user));
   };
 
   const logout = () => {
-    setCurrentRole(null);
-    setCurrentUser(null);
+    setCurrentUserState(null);
+    setSelectedRole(null);
+    localStorage.removeItem('currentUser');
   };
 
+  const currentRole = (currentUser?.role as
+    | 'admin'
+    | 'accountant'
+    | 'project_manager'
+    | 'team_member'
+    | 'client') || null;
+
+  const isAuthenticated = !!currentUser;
+
   return (
-    <AuthContext.Provider value={{ currentUser, currentRole, login, logout }}>
+    <AuthContext.Provider
+      value={{
+        currentUser,
+        currentRole,
+        isAuthenticated,
+        isLoading: false,
+        login,
+        logout,
+        setSelectedRole,
+        selectedRole,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

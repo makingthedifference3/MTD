@@ -118,7 +118,8 @@ import {
   Menu, X, LogOut, LayoutDashboard, Briefcase, CheckSquare, Image, FileText, Users, Calendar,
   DollarSign, Receipt, CreditCard, BarChart3, FileSpreadsheet, RefreshCw, ClipboardList, Database, TrendingUp
 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
+import { useNavigate, useLocation } from 'react-router-dom';
 import FilterBar from './FilterBar';
 
 interface SidebarProps {
@@ -128,30 +129,73 @@ interface SidebarProps {
 }
 
 const menuItems = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'accountant', 'project-manager'] },
-  { id: 'csr-partners', label: 'CSR Partners', icon: Briefcase, roles: ['admin', 'accountant', 'project-manager'] },
-  { id: 'projects', label: 'Projects', icon: Briefcase, roles: ['admin', 'accountant', 'project-manager'] },
-  { id: 'todo', label: 'To-Do List Assignment', icon: CheckSquare, roles: ['admin', 'accountant', 'project-manager'] },
-  { id: 'real-time-update', label: 'Real Time Update', icon: RefreshCw, roles: ['admin', 'project-manager'] },
-  { id: 'media', label: 'Media', icon: Image, roles: ['admin', 'project-manager'] },
-  { id: 'article', label: 'Article', icon: FileText, roles: ['admin', 'project-manager'] },
-  { id: 'team-members', label: 'Team Members', icon: Users, roles: ['admin', 'project-manager'] },
-  { id: 'dashboard-forms', label: 'Dashboard Forms', icon: FileSpreadsheet, roles: ['admin', 'project-manager', 'team-member'] },
-  { id: 'calendar', label: 'Calendar', icon: Calendar, roles: ['admin', 'accountant', 'project-manager', 'team-member'] },
-  { id: 'project-expenses', label: 'Project Expenses', icon: DollarSign, roles: ['admin', 'accountant', 'project-manager', 'team-member'] },
-  { id: 'daily-report', label: 'Daily Report', icon: ClipboardList, roles: ['admin', 'project-manager', 'team-member'] },
-  { id: 'data-entry', label: 'Data Entry', icon: Database, roles: ['admin', 'project-manager', 'team-member'] },
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'accountant', 'project_manager'] },
+  { id: 'csr-partners', label: 'CSR Partners', icon: Briefcase, roles: ['admin', 'accountant', 'project_manager'] },
+  { id: 'projects', label: 'Projects', icon: Briefcase, roles: ['admin', 'accountant', 'project_manager'] },
+  { id: 'todo', label: 'To-Do List Assignment', icon: CheckSquare, roles: ['admin', 'accountant', 'project_manager'] },
+  { id: 'real-time-update', label: 'Real Time Update', icon: RefreshCw, roles: ['admin', 'project_manager'] },
+  { id: 'media', label: 'Media', icon: Image, roles: ['admin', 'project_manager'] },
+  { id: 'article', label: 'Article', icon: FileText, roles: ['admin', 'project_manager'] },
+  { id: 'team-members', label: 'Team Members', icon: Users, roles: ['admin', 'project_manager'] },
+  { id: 'dashboard-forms', label: 'Dashboard Forms', icon: FileSpreadsheet, roles: ['admin', 'project_manager', 'team_member'] },
+  { id: 'calendar', label: 'Calendar', icon: Calendar, roles: ['admin', 'accountant', 'project_manager', 'team_member'] },
+  { id: 'project-expenses', label: 'Project Expenses', icon: DollarSign, roles: ['admin', 'accountant', 'project_manager', 'team_member'] },
+  { id: 'daily-report', label: 'Daily Report', icon: ClipboardList, roles: ['admin', 'project_manager', 'team_member'] },
+  { id: 'data-entry', label: 'Data Entry', icon: Database, roles: ['admin', 'project_manager', 'team_member'] },
   { id: 'csr-budget', label: 'CSR Budget', icon: CreditCard, roles: ['admin', 'accountant'] },
-  { id: 'upcoming-expenses', label: 'Upcoming Expenses', icon: TrendingUp, roles: ['admin', 'accountant', 'project-manager'] },
-  { id: 'bills', label: 'Bills', icon: Receipt, roles: ['admin', 'project-manager', 'team-member'] },
-  { id: 'analysis-report', label: 'Analysis Report', icon: BarChart3, roles: ['admin', 'project-manager'] },
-  { id: 'tasks', label: 'My Tasks', icon: CheckSquare, roles: ['team-member'] },
+  { id: 'upcoming-expenses', label: 'Upcoming Expenses', icon: TrendingUp, roles: ['admin', 'accountant', 'project_manager'] },
+  { id: 'bills', label: 'Bills', icon: Receipt, roles: ['admin', 'project_manager', 'team_member'] },
+  { id: 'analysis-report', label: 'Analysis Report', icon: BarChart3, roles: ['admin', 'project_manager'] },
+  { id: 'tasks', label: 'My Tasks', icon: CheckSquare, roles: ['team_member'] },
+  // Admin Only
+  { id: 'user-management', label: 'User Management', icon: Users, roles: ['admin'] },
 ];
 
 const Sidebar = ({ children, currentPage, onNavigate }: SidebarProps) => {
   const [isOpen, setIsOpen] = useState(true);
   const { currentRole, currentUser, logout } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   const filteredMenuItems = menuItems.filter((item) => item.roles.includes(currentRole || ''));
+
+  // Map menu IDs to routes
+  const routeMap: Record<string, string> = {
+    'dashboard': currentRole === 'admin' ? '/admin-dashboard' : 
+                 currentRole === 'accountant' ? '/accountant-dashboard' :
+                 currentRole === 'project_manager' ? '/pm-dashboard' : '/team-member-dashboard',
+    'csr-partners': '/csr-partners',
+    'projects': '/projects',
+    'todo': '/todo',
+    'real-time-update': '/real-time-update',
+    'media': '/media',
+    'article': '/article',
+    'team-members': '/team-members',
+    'dashboard-forms': '/dashboard-forms',
+    'calendar': '/calendar',
+    'project-expenses': '/project-expenses',
+    'daily-report': '/daily-report',
+    'data-entry': '/data-entry',
+    'csr-budget': '/csr-budget',
+    'upcoming-expenses': '/upcoming-expenses',
+    'bills': '/bills',
+    'analysis-report': '/analysis-report',
+    'tasks': '/tasks',
+    'user-management': '/admin/users',
+  };
+
+  const handleNavigate = (itemId: string) => {
+    const route = routeMap[itemId];
+    if (route) {
+      navigate(route);
+    }
+    onNavigate(itemId);
+  };
+
+  // Determine current active page from URL
+  const isCurrentPage = (itemId: string) => {
+    const route = routeMap[itemId];
+    return route ? location.pathname === route : currentPage === itemId;
+  };
 
   return (
     <div className="flex h-screen bg-slate-100">
@@ -174,8 +218,9 @@ const Sidebar = ({ children, currentPage, onNavigate }: SidebarProps) => {
                   onError={(e) => { e.currentTarget.style.display = 'none'; }}
                 />
                 <div className="flex-1 min-w-0">
-                  <p className="font-bold text-emerald-900 truncate">{currentUser?.name}</p>
+                  <p className="font-bold text-emerald-900 truncate">{currentUser?.username}</p>
                   <p className="text-xs text-emerald-600 truncate">{currentUser?.email}</p>
+                  <p className="text-xs text-emerald-500 truncate font-medium">@{currentUser?.username}</p>
                 </div>
               </div>
               <button 
@@ -192,11 +237,11 @@ const Sidebar = ({ children, currentPage, onNavigate }: SidebarProps) => {
               <ul className="space-y-1.5">
                 {filteredMenuItems.map((item) => {
                   const Icon = item.icon;
-                  const isActive = currentPage === item.id;
+                  const isActive = isCurrentPage(item.id);
                   return (
                     <li key={item.id}>
                       <button
-                        onClick={() => onNavigate(item.id)}
+                        onClick={() => handleNavigate(item.id)}
                         className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200
                           ${isActive
                             ? 'bg-linear-to-r from-emerald-500 to-emerald-600 text-white shadow-lg shadow-emerald-500/30 scale-[1.02]'
@@ -227,7 +272,13 @@ const Sidebar = ({ children, currentPage, onNavigate }: SidebarProps) => {
 
             {/* Logout */}
             <div className="p-5 border-t border-gray-100">
-              <button onClick={logout} className="logout-button w-full flex items-center gap-3 px-5 py-3 rounded-xl font-semibold">
+              <button 
+                onClick={() => {
+                  logout();
+                  navigate('/login');
+                }} 
+                className="logout-button w-full flex items-center gap-3 px-5 py-3 rounded-xl font-semibold"
+              >
                 <LogOut className="w-5 h-5" />
                 <span className="text-sm font-medium">Logout</span>
               </button>

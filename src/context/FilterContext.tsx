@@ -1,8 +1,15 @@
-import { createContext, useContext, useState, type ReactNode } from 'react';
+import { createContext, useState, useEffect, type ReactNode } from 'react';
+import type { CSRPartner, Project } from '../services/filterService';
+import { fetchCSRPartners, fetchAllProjects } from '../services/filterService';
 
 interface FilterContextType {
   selectedPartner: string | null;
   selectedProject: string | null;
+  csrPartners: CSRPartner[];
+  projects: Project[];
+  filteredProjects: Project[];
+  isLoading: boolean;
+  error: string | null;
   setSelectedPartner: (partnerId: string | null) => void;
   setSelectedProject: (projectId: string | null) => void;
   resetFilters: () => void;
@@ -10,9 +17,59 @@ interface FilterContextType {
 
 const FilterContext = createContext<FilterContextType | undefined>(undefined);
 
+export { FilterContext, type FilterContextType };
+
 export const FilterProvider = ({ children }: { children: ReactNode }) => {
   const [selectedPartner, setSelectedPartner] = useState<string | null>(null);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
+  const [csrPartners, setCSRPartners] = useState<CSRPartner[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [filteredProjects, setFilteredProjects] = useState<Project[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch CSR Partners on mount
+  useEffect(() => {
+    const loadCSRPartners = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const partners = await fetchCSRPartners();
+        setCSRPartners(partners);
+      } catch (err) {
+        console.error('Failed to load CSR partners:', err);
+        setError('Failed to load CSR partners');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadCSRPartners();
+  }, []);
+
+  // Fetch all projects on mount
+  useEffect(() => {
+    const loadAllProjects = async () => {
+      try {
+        const allProjects = await fetchAllProjects();
+        setProjects(allProjects);
+      } catch (err) {
+        console.error('Failed to load projects:', err);
+      }
+    };
+
+    loadAllProjects();
+  }, []);
+
+  // Filter projects based on selected partner
+  useEffect(() => {
+    if (selectedPartner) {
+      const filtered = projects.filter((p) => p.csr_partner_id === selectedPartner);
+      setFilteredProjects(filtered);
+    } else {
+      setFilteredProjects(projects);
+    }
+  }, [selectedPartner, projects]);
 
   const resetFilters = () => {
     setSelectedPartner(null);
@@ -24,6 +81,11 @@ export const FilterProvider = ({ children }: { children: ReactNode }) => {
       value={{
         selectedPartner,
         selectedProject,
+        csrPartners,
+        projects,
+        filteredProjects,
+        isLoading,
+        error,
         setSelectedPartner,
         setSelectedProject,
         resetFilters,
@@ -34,10 +96,4 @@ export const FilterProvider = ({ children }: { children: ReactNode }) => {
   );
 };
 
-export const useFilter = () => {
-  const context = useContext(FilterContext);
-  if (!context) {
-    throw new Error('useFilter must be used within FilterProvider');
-  }
-  return context;
-};
+

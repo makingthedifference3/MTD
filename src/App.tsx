@@ -1,6 +1,7 @@
-﻿import { useState } from 'react';
-import { AuthProvider, useAuth } from './context/AuthContext';
+﻿import { AuthProvider } from './context/AuthContext';
+import { useAuth } from './context/useAuth';
 import { FilterProvider } from './context/FilterContext';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from './components/LoginPage';
 import Sidebar from './components/Sidebar';
 import PMDashboard from './pages/PMDashboard';
@@ -18,90 +19,285 @@ import TeamMembersPage from './pages/TeamMembersPage';
 import CalendarPage from './pages/CalendarPage';
 import DataEntryPage from './pages/DataEntryPage';
 import CSRBudgetPage from './pages/CSRBudgetPage';
-import ExpenseClaimPage from './pages/ExpenseClaimPage';
-import UtilizationCertificatePage from './pages/UtilizationCertificatePage';
 import DailyReportPage from './pages/DailyReportPage';
 import DashboardFormsPage from './pages/DashboardFormsPage';
 import UpcomingExpensesPage from './pages/UpcomingExpensesPage';
 import CSRPartnersPage from './pages/CSRPartnersPage';
 import ProjectsPage from './pages/ProjectsPage';
 import UserAssignmentPage from './pages/UserAssignmentPage';
-import SwitchUsersPage from './pages/SwitchUsersPage';
+import UserManagementPage from './pages/UserManagementPage';
 
-function AppContent() {
-  const { currentRole, login } = useAuth();
-  const [currentPage, setCurrentPage] = useState('dashboard');
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { currentUser } = useAuth();
+  
+  if (!currentUser) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  return children;
+}
 
-  if (!currentRole) {
-    return <LoginPage onLogin={login} />;
+function AppRoutes() {
+  const { currentUser } = useAuth();
+
+  // Show login page if not authenticated
+  if (!currentUser) {
+    return (
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    );
   }
 
-  const renderPage = () => {
-    switch (currentPage) {
-      case 'dashboard':
-        if (currentRole === 'accountant') return <AccountantDashboard />;
-        if (currentRole === 'admin') return <AdminDashboard />;
-        if (currentRole === 'team-member') return <TeamMemberDashboard />;
-        return <PMDashboard />;
-      case 'csr-partners':
-        return <CSRPartnersPage />;
-      case 'projects':
-        return <ProjectsPage />;
-      case 'real-time-update':
-        return <RealTimeUpdate />;
-      case 'media':
-        return <MediaPage />;
-      case 'article':
-        return <ArticlePage />;
-      case 'team-members':
-        return <TeamMembersPage />;
-      case 'dashboard-forms':
-        return <DashboardFormsPage />;
-      case 'calendar':
-        return <CalendarPage />;
-      case 'csr-budget':
-        return <CSRBudgetPage />;
-      case 'expense-claim':
-        return <ExpenseClaimPage />;
-      case 'utilization-certificate':
-        return <UtilizationCertificatePage />;
-      case 'daily-report':
-        return <DailyReportPage />;
-      case 'data-entry':
-        return <DataEntryPage />;
-      case 'upcoming-expenses':
-        return <UpcomingExpensesPage />;
-      case 'user-assignment':
-        return <UserAssignmentPage />;
-      case 'switch-users':
-        return <SwitchUsersPage />;
-      case 'todo':
-        return <ToDoList />;
-      case 'analysis-report':
-        return <AnalysisReport />;
-      case 'project-expenses':
-        return <ProjectExpenses />;
-      case 'bills':
-        return <Bills />;
-      default:
-        return <div className="p-6 bg-white rounded-2xl shadow">Page not implemented yet.</div>;
-    }
-  };
-
+  // Show app routes if authenticated
   return (
-    <Sidebar currentPage={currentPage} onNavigate={setCurrentPage}>
-      {renderPage()}
-    </Sidebar>
+    <Routes>
+      {/* Admin Routes */}
+      <Route
+        path="/admin-dashboard"
+        element={
+          <ProtectedRoute>
+            <Sidebar currentPage="dashboard" onNavigate={() => {}}>
+              <AdminDashboard />
+            </Sidebar>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/users"
+        element={
+          <ProtectedRoute>
+            <Sidebar currentPage="user-management" onNavigate={() => {}}>
+              <UserManagementPage />
+            </Sidebar>
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Accountant Routes */}
+      <Route
+        path="/accountant-dashboard"
+        element={
+          <ProtectedRoute>
+            <Sidebar currentPage="dashboard" onNavigate={() => {}}>
+              <AccountantDashboard />
+            </Sidebar>
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Project Manager Routes */}
+      <Route
+        path="/pm-dashboard"
+        element={
+          <ProtectedRoute>
+            <Sidebar currentPage="dashboard" onNavigate={() => {}}>
+              <PMDashboard />
+            </Sidebar>
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Team Member Routes */}
+      <Route
+        path="/team-member-dashboard"
+        element={
+          <ProtectedRoute>
+            <Sidebar currentPage="dashboard" onNavigate={() => {}}>
+              <TeamMemberDashboard />
+            </Sidebar>
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Common Routes */}
+      <Route
+        path="/csr-partners"
+        element={
+          <ProtectedRoute>
+            <Sidebar currentPage="csr-partners" onNavigate={() => {}}>
+              <CSRPartnersPage />
+            </Sidebar>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/projects"
+        element={
+          <ProtectedRoute>
+            <Sidebar currentPage="projects" onNavigate={() => {}}>
+              <ProjectsPage />
+            </Sidebar>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/todo"
+        element={
+          <ProtectedRoute>
+            <Sidebar currentPage="todo" onNavigate={() => {}}>
+              <ToDoList />
+            </Sidebar>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/real-time-update"
+        element={
+          <ProtectedRoute>
+            <Sidebar currentPage="real-time-update" onNavigate={() => {}}>
+              <RealTimeUpdate />
+            </Sidebar>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/media"
+        element={
+          <ProtectedRoute>
+            <Sidebar currentPage="media" onNavigate={() => {}}>
+              <MediaPage />
+            </Sidebar>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/article"
+        element={
+          <ProtectedRoute>
+            <Sidebar currentPage="article" onNavigate={() => {}}>
+              <ArticlePage />
+            </Sidebar>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/team-members"
+        element={
+          <ProtectedRoute>
+            <Sidebar currentPage="team-members" onNavigate={() => {}}>
+              <TeamMembersPage />
+            </Sidebar>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard-forms"
+        element={
+          <ProtectedRoute>
+            <Sidebar currentPage="dashboard-forms" onNavigate={() => {}}>
+              <DashboardFormsPage />
+            </Sidebar>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/calendar"
+        element={
+          <ProtectedRoute>
+            <Sidebar currentPage="calendar" onNavigate={() => {}}>
+              <CalendarPage />
+            </Sidebar>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/project-expenses"
+        element={
+          <ProtectedRoute>
+            <Sidebar currentPage="project-expenses" onNavigate={() => {}}>
+              <ProjectExpenses />
+            </Sidebar>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/daily-report"
+        element={
+          <ProtectedRoute>
+            <Sidebar currentPage="daily-report" onNavigate={() => {}}>
+              <DailyReportPage />
+            </Sidebar>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/data-entry"
+        element={
+          <ProtectedRoute>
+            <Sidebar currentPage="data-entry" onNavigate={() => {}}>
+              <DataEntryPage />
+            </Sidebar>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/csr-budget"
+        element={
+          <ProtectedRoute>
+            <Sidebar currentPage="csr-budget" onNavigate={() => {}}>
+              <CSRBudgetPage />
+            </Sidebar>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/upcoming-expenses"
+        element={
+          <ProtectedRoute>
+            <Sidebar currentPage="upcoming-expenses" onNavigate={() => {}}>
+              <UpcomingExpensesPage />
+            </Sidebar>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/bills"
+        element={
+          <ProtectedRoute>
+            <Sidebar currentPage="bills" onNavigate={() => {}}>
+              <Bills />
+            </Sidebar>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/analysis-report"
+        element={
+          <ProtectedRoute>
+            <Sidebar currentPage="analysis-report" onNavigate={() => {}}>
+              <AnalysisReport />
+            </Sidebar>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/tasks"
+        element={
+          <ProtectedRoute>
+            <Sidebar currentPage="tasks" onNavigate={() => {}}>
+              <UserAssignmentPage />
+            </Sidebar>
+          </ProtectedRoute>
+        }
+      />
+      
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/" element={<Navigate to="/admin-dashboard" replace />} />
+    </Routes>
   );
 }
 
 function App() {
   return (
-    <AuthProvider>
-      <FilterProvider>
-        <AppContent />
-      </FilterProvider>
-    </AuthProvider>
+    <Router>
+      <AuthProvider>
+        <FilterProvider>
+          <AppRoutes />
+        </FilterProvider>
+      </AuthProvider>
+    </Router>
   );
 }
 

@@ -1,65 +1,106 @@
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Activity, Bell, TrendingUp } from 'lucide-react';
-import { realTimeUpdates } from '../mockData';
-import { useFilter } from '../context/FilterContext';
-
-interface Update {
-  id: string;
-  type: 'project' | 'budget' | 'task' | 'system';
-  title: string;
-  description: string;
-  timestamp: string;
-  project?: string;
-  priority: 'high' | 'medium' | 'low';
-}
+import { realTimeUpdatesService } from '../services/realTimeUpdatesService';
+import type { RealTimeUpdateWithDetails, UpdateStats } from '../services/realTimeUpdatesService';
+import { useFilter } from '../context/useFilter';
 
 const RealTimeUpdate = () => {
   const { selectedProject } = useFilter();
-  
-  // Convert mockData realTimeUpdates to UI format and filter
-  const updates: Update[] = realTimeUpdates
-    .filter(update => {
-      if (selectedProject) {
-        return update.projectId === selectedProject;
-      }
-      return true;
-    })
-    .map((update, index) => ({
-      id: update.id,
-      type: 'project',
-      title: `${update.schoolName} - ${update.documentHeading}`,
-      description: update.description,
-      timestamp: index === 0 ? '2 minutes ago' : index === 1 ? '15 minutes ago' : index === 2 ? '1 hour ago' : `${index} hours ago`,
-      project: update.schoolName,
-      priority: index < 3 ? 'high' : index < 7 ? 'medium' : 'low'
-    }));
+  const [allUpdates, setAllUpdates] = useState<RealTimeUpdateWithDetails[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<UpdateStats>({
+    total: 0,
+    progress: 0,
+    issue: 0,
+    achievement: 0,
+    milestone: 0,
+    highPriority: 0,
+    mediumPriority: 0,
+    lowPriority: 0,
+  });
 
-  const stats = [
-    { label: 'Total Updates', value: updates.length },
-    { label: 'High Priority', value: updates.filter(u => u.priority === 'high').length },
-    { label: 'Medium Priority', value: updates.filter(u => u.priority === 'medium').length },
-    { label: 'Low Priority', value: updates.filter(u => u.priority === 'low').length },
-  ];
+  useEffect(() => {
+    loadUpdates();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProject]);
+
+  const loadUpdates = async () => {
+    try {
+      setLoading(true);
+      let data;
+
+      if (selectedProject) {
+        data = await realTimeUpdatesService.getUpdatesByProject(selectedProject);
+      } else {
+        data = await realTimeUpdatesService.getAllUpdates();
+      }
+
+      setAllUpdates(data);
+      const updateStats = await realTimeUpdatesService.getUpdateStats(data);
+      setStats(updateStats);
+    } catch (error) {
+      console.error('Error loading updates:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Convert updates to display format with priority
+  const updates = allUpdates.map((update, index) => ({
+    id: update.id,
+    type: (update.update_type?.toLowerCase() || 'project') as 'progress' | 'issue' | 'achievement' | 'milestone' | 'project',
+    title: update.title || `${update.school_name || update.institution_name || 'Update'} - ${update.update_code}`,
+    description: update.description || 'No description provided',
+    timestamp: update.days_ago || 'Recently',
+    project: update.project_name || 'Unknown Project',
+    priority: realTimeUpdatesService.getUpdatePriority(index, allUpdates.length),
+  }));
 
   const getTypeIcon = (type: string) => {
     switch (type) {
-      case 'project': return <TrendingUp className="w-5 h-5 text-emerald-600" />;
-      case 'budget': return <Activity className="w-5 h-5 text-blue-600" />;
-      case 'task': return <Bell className="w-5 h-5 text-amber-600" />;
-      case 'system': return <Activity className="w-5 h-5 text-gray-600" />;
-      default: return null;
+      case 'progress':
+        return <TrendingUp className="w-5 h-5 text-emerald-600" />;
+      case 'achievement':
+        return <Activity className="w-5 h-5 text-blue-600" />;
+      case 'milestone':
+        return <Bell className="w-5 h-5 text-amber-600" />;
+      case 'issue':
+        return <Activity className="w-5 h-5 text-red-600" />;
+      case 'project':
+        return <TrendingUp className="w-5 h-5 text-emerald-600" />;
+      default:
+        return null;
     }
   };
 
   const getTypeColor = (type: string) => {
     switch (type) {
-      case 'project': return 'bg-emerald-50 border-emerald-200';
-      case 'budget': return 'bg-blue-50 border-blue-200';
-      case 'task': return 'bg-amber-50 border-amber-200';
-      case 'system': return 'bg-gray-50 border-gray-200';
-      default: return 'bg-gray-50 border-gray-200';
+      case 'progress':
+        return 'bg-emerald-50 border-emerald-200';
+      case 'achievement':
+        return 'bg-blue-50 border-blue-200';
+      case 'milestone':
+        return 'bg-amber-50 border-amber-200';
+      case 'issue':
+        return 'bg-red-50 border-red-200';
+      case 'project':
+        return 'bg-emerald-50 border-emerald-200';
+      default:
+        return 'bg-gray-50 border-gray-200';
     }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-8 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500 mx-auto mb-4"></div>
+          <p className="text-gray-600 font-semibold">Loading updates...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
@@ -71,18 +112,45 @@ const RealTimeUpdate = () => {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        {stats.map((stat, index) => (
-          <motion.div
-            key={stat.label}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
-            className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
-          >
-            <p className="text-gray-600 text-sm font-medium mb-1">{stat.label}</p>
-            <h3 className="text-3xl font-bold text-gray-900">{stat.value}</h3>
-          </motion.div>
-        ))}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0 }}
+          className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
+        >
+          <p className="text-gray-600 text-sm font-medium mb-1">Total Updates</p>
+          <h3 className="text-3xl font-bold text-gray-900">{stats.total}</h3>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
+        >
+          <p className="text-gray-600 text-sm font-medium mb-1">High Priority</p>
+          <h3 className="text-3xl font-bold text-gray-900">{stats.highPriority}</h3>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
+        >
+          <p className="text-gray-600 text-sm font-medium mb-1">Medium Priority</p>
+          <h3 className="text-3xl font-bold text-gray-900">{stats.mediumPriority}</h3>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
+        >
+          <p className="text-gray-600 text-sm font-medium mb-1">Low Priority</p>
+          <h3 className="text-3xl font-bold text-gray-900">{stats.lowPriority}</h3>
+        </motion.div>
       </div>
 
       {/* Updates Feed */}
@@ -109,9 +177,10 @@ const RealTimeUpdate = () => {
                   </div>
                   <div className="flex items-center space-x-3">
                     <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      update.type === 'project' ? 'bg-emerald-100 text-emerald-700' :
-                      update.type === 'budget' ? 'bg-blue-100 text-blue-700' :
-                      update.type === 'task' ? 'bg-amber-100 text-amber-700' :
+                      update.type === 'progress' ? 'bg-emerald-100 text-emerald-700' :
+                      update.type === 'achievement' ? 'bg-blue-100 text-blue-700' :
+                      update.type === 'milestone' ? 'bg-amber-100 text-amber-700' :
+                      update.type === 'issue' ? 'bg-red-100 text-red-700' :
                       'bg-gray-100 text-gray-700'
                     }`}>
                       {update.type.toUpperCase()}

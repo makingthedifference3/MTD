@@ -1,134 +1,171 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, CheckCircle2, Clock, AlertCircle, Mail, Phone, ChevronDown } from 'lucide-react';
-import { useFilter } from '../context/FilterContext';
-
-interface Task {
-  id: string;
-  title: string;
-  description: string;
-  project: string;
-  csrPartner: string;
-  priority: 'high' | 'medium' | 'low';
-  status: 'completed' | 'in-progress' | 'not-started';
-  dueDate: string;
-  assignedTo: string;
-  department: string;
-  socialMedia?: string;
-  timeline?: string;
-}
-
-interface PreviousTask {
-  id: string;
-  assignedTo: string;
-  status: string;
-  dueDate: string;
-  priority: string;
-  description: string;
-}
+import { Plus, CheckCircle2, Clock, AlertCircle, Trash2, Loader } from 'lucide-react';
+import * as taskService from '../services/taskService';
+import { type Task, type TaskStats } from '../services/taskService';
 
 const ToDoList = () => {
-  const { selectedPartner, selectedProject } = useFilter();
+  const [loading, setLoading] = useState(true);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [stats, setStats] = useState<TaskStats | null>(null);
   const [filterPriority, setFilterPriority] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterDepartment, setFilterDepartment] = useState<string>('all');
-  const [selectedSocialMedia, setSelectedSocialMedia] = useState<string>('');
-  const [selectedPerson, setSelectedPerson] = useState<string>('');
-  const [showTaskDetails, setShowTaskDetails] = useState<string | null>(null);
-  
-  const [tasks] = useState<Task[]>([
-    { 
-      id: 'T001', 
-      title: 'Complete XYZ Task', 
-      description: 'Complete social media posting for community center project',
-      project: 'ACE Pipeline', 
-      csrPartner: 'Tech Foundation',
-      priority: 'high', 
-      status: 'in-progress', 
-      dueDate: '2024-06-20', 
-      assignedTo: 'Lokesh Joshi',
-      department: 'Marketing',
-      socialMedia: 'Instagram',
-      timeline: 'Connected from client timeline'
-    },
-    { 
-      id: 'T002', 
-      title: 'Review budget allocation', 
-      description: 'Review and approve budget for education drive',
-      project: 'LAJJA', 
-      csrPartner: 'Education Trust',
-      priority: 'high', 
-      status: 'not-started', 
-      dueDate: '2024-06-18', 
-      assignedTo: 'Lokesh Joshi',
-      department: 'Finance',
-      socialMedia: 'Facebook'
-    },
-    { 
-      id: 'T003', 
-      title: 'Prepare monthly report', 
-      description: 'Compile monthly progress report for health camp',
-      project: 'ACE Pipeline', 
-      csrPartner: 'Health Foundation',
-      priority: 'medium', 
-      status: 'completed', 
-      dueDate: '2024-06-15', 
-      assignedTo: 'Mike Johnson',
-      department: 'Operations'
-    },
-  ]);
-
-  const [previousTasks] = useState<PreviousTask[]>([
-    { 
-      id: 'PT001', 
-      assignedTo: 'Lokesh', 
-      status: 'not-started', 
-      dueDate: 'Jun 25, 2024', 
-      priority: 'ON PRIORITY',
-      description: 'Previous social media campaign task'
-    },
-    { 
-      id: 'PT002', 
-      assignedTo: 'Lokesh', 
-      status: 'not-started', 
-      dueDate: 'Jun 28, 2024', 
-      priority: 'ON PRIORITY',
-      description: 'Budget review for Q2'
-    },
-  ]);
-
-  const filteredTasks = tasks.filter(task => {
-    const matchesPriority = filterPriority === 'all' || task.priority === filterPriority;
-    const matchesStatus = filterStatus === 'all' || task.status === filterStatus;
-    const matchesPartner = !selectedPartner || task.csrPartner === selectedPartner;
-    const matchesProject = !selectedProject || task.project === selectedProject;
-    return matchesPriority && matchesStatus && matchesPartner && matchesProject;
+  const [departments, setDepartments] = useState<string[]>([]);
+  const [showModal, setShowModal] = useState(false);
+  const [newTask, setNewTask] = useState({
+    title: '',
+    description: '',
+    project_id: '',
+    assigned_to: '',
+    department: '',
+    priority: 'medium',
+    status: 'not_started',
+    due_date: '',
+    task_type: 'Development',
   });
 
-  const stats = [
-    { label: 'Total Tasks', value: tasks.length, icon: CheckCircle2 },
-    { label: 'Completed', value: tasks.filter(t => t.status === 'completed').length, icon: CheckCircle2 },
-    { label: 'In Progress', value: tasks.filter(t => t.status === 'in-progress').length, icon: Clock },
-    { label: 'Not Started', value: tasks.filter(t => t.status === 'not-started').length, icon: AlertCircle },
-  ];
+  useEffect(() => {
+    loadData();
+  }, []);
 
-  const getPriorityColor = (priority: string) => {
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const [allTasks, taskStats, allDepartments] = await Promise.all([
+        taskService.getAllTasks(),
+        taskService.getTaskStats(''),
+        taskService.getAllDepartments(),
+      ]);
+
+      setTasks(allTasks);
+      setStats(taskStats);
+      setDepartments(allDepartments);
+    } catch (error) {
+      console.error('Error loading data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredTasks = tasks.filter((task) => {
+    const matchesPriority = filterPriority === 'all' || task.priority === filterPriority;
+    const matchesStatus = filterStatus === 'all' || task.status === filterStatus;
+    const matchesDepartment = filterDepartment === 'all' || task.department === filterDepartment;
+    return matchesPriority && matchesStatus && matchesDepartment;
+  });
+
+  const handleCreateTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!newTask.title || !newTask.assigned_to) {
+      alert('Title and assignee are required');
+      return;
+    }
+
+    try {
+      const taskData: Omit<Task, 'id' | 'created_at' | 'updated_at'> = {
+        task_code: `TASK-${Date.now()}`,
+        project_id: newTask.project_id,
+        title: newTask.title,
+        description: newTask.description,
+        assigned_to: newTask.assigned_to,
+        status: newTask.status as Task['status'],
+        priority: newTask.priority,
+        due_date: newTask.due_date,
+        completion_percentage: 0,
+        department: newTask.department,
+      };
+
+      const created = await taskService.createTask(taskData);
+
+      if (created) {
+        setShowModal(false);
+        setNewTask({
+          title: '',
+          description: '',
+          project_id: '',
+          assigned_to: '',
+          department: '',
+          priority: 'medium',
+          status: 'not_started',
+          due_date: '',
+          task_type: 'Development',
+        });
+        await loadData();
+      }
+    } catch (error) {
+      console.error('Error creating task:', error);
+    }
+  };
+
+  const handleCompleteTask = async (taskId: string) => {
+    try {
+      await taskService.completeTask(taskId);
+      await loadData();
+    } catch (error) {
+      console.error('Error completing task:', error);
+    }
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    if (window.confirm('Are you sure you want to delete this task?')) {
+      try {
+        await taskService.deleteTask(taskId);
+        await loadData();
+      } catch (error) {
+        console.error('Error deleting task:', error);
+      }
+    }
+  };
+
+  const getPriorityColor = (priority?: string) => {
     switch (priority) {
-      case 'high': return 'bg-red-100 text-red-700';
-      case 'medium': return 'bg-amber-100 text-amber-700';
-      case 'low': return 'bg-emerald-100 text-emerald-700';
-      default: return 'bg-gray-100 text-gray-700';
+      case 'high':
+        return 'bg-red-100 text-red-700';
+      case 'medium':
+        return 'bg-amber-100 text-amber-700';
+      case 'low':
+        return 'bg-emerald-100 text-emerald-700';
+      default:
+        return 'bg-gray-100 text-gray-700';
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return 'bg-emerald-100 text-emerald-700';
+      case 'in_progress':
+        return 'bg-blue-100 text-blue-700';
+      case 'on_priority':
+        return 'bg-orange-100 text-orange-700';
+      case 'not_started':
+        return 'bg-gray-100 text-gray-700';
+      default:
+        return 'bg-gray-100 text-gray-700';
     }
   };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'completed': return <CheckCircle2 className="w-5 h-5 text-emerald-600" />;
-      case 'in-progress': return <Clock className="w-5 h-5 text-amber-600" />;
-      case 'not-started': return <AlertCircle className="w-5 h-5 text-red-600" />;
-      default: return null;
+      case 'completed':
+        return <CheckCircle2 className="w-5 h-5 text-emerald-600" />;
+      case 'in_progress':
+        return <Clock className="w-5 h-5 text-blue-600" />;
+      case 'not_started':
+        return <AlertCircle className="w-5 h-5 text-red-600" />;
+      default:
+        return null;
     }
   };
+
+  const statCards = [
+    { label: 'Total Tasks', value: stats?.totalTasks || stats?.total || 0, icon: CheckCircle2 },
+    { label: 'Completed', value: stats?.completed || 0, icon: CheckCircle2 },
+    { label: 'In Progress', value: stats?.inProgress || 0, icon: Clock },
+    { label: 'Not Started', value: stats?.pending || stats?.notStarted || 0, icon: AlertCircle },
+  ];
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
@@ -136,257 +173,349 @@ const ToDoList = () => {
       <div className="mb-8">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">To-Do List Assignment</h1>
-            <p className="text-gray-600 mt-2">Manage and assign tasks to team members</p>
+            <h1 className="text-3xl font-bold text-gray-900">To-Do List</h1>
+            <p className="text-gray-600 mt-2">Manage and track tasks from database</p>
           </div>
-          <button className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-lg font-medium flex items-center space-x-2 transition-colors shadow-lg hover:shadow-xl">
+          <motion.button
+            onClick={() => setShowModal(true)}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-lg font-medium flex items-center space-x-2 transition-colors shadow-lg"
+          >
             <Plus className="w-5 h-5" />
             <span>New Task</span>
-          </button>
+          </motion.button>
         </div>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        {stats.map((stat, index) => (
+      {/* Loading State */}
+      {loading && (
+        <div className="flex items-center justify-center min-h-96">
+          <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity }}>
+            <Loader className="w-10 h-10 text-emerald-500" />
+          </motion.div>
+        </div>
+      )}
+
+      {!loading && (
+        <>
+          {/* Stats Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            {statCards.map((stat, index) => (
+              <motion.div
+                key={stat.label}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.1 }}
+                className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div className="p-3 bg-emerald-50 rounded-xl">
+                    <stat.icon className="w-6 h-6 text-emerald-600" />
+                  </div>
+                </div>
+                <p className="text-gray-600 text-sm font-medium mb-1">{stat.label}</p>
+                <h3 className="text-3xl font-bold text-gray-900">{stat.value}</h3>
+              </motion.div>
+            ))}
+          </div>
+
+          {/* Filters */}
           <motion.div
-            key={stat.label}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
-            className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
+            transition={{ delay: 0.4 }}
+            className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-6"
           >
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-emerald-50 rounded-xl">
-                <stat.icon className="w-6 h-6 text-emerald-600" />
+            <h3 className="font-bold text-gray-900 mb-4">Filter Options</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Priority</label>
+                <select
+                  value={filterPriority}
+                  onChange={(e) => setFilterPriority(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="all">All Priorities</option>
+                  <option value="high">High</option>
+                  <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="all">All Status</option>
+                  <option value="not_started">Not Started</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="completed">Completed</option>
+                  <option value="on_priority">On Priority</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
+                <select
+                  value={filterDepartment}
+                  onChange={(e) => setFilterDepartment(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="all">All Departments</option>
+                  {departments.map((dept) => (
+                    <option key={dept} value={dept}>
+                      {dept}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
-            <p className="text-gray-600 text-sm font-medium mb-1">{stat.label}</p>
-            <h3 className="text-3xl font-bold text-gray-900">{stat.value}</h3>
           </motion.div>
-        ))}
-      </div>
 
-      {/* Filters - Enhanced with Social Media, Person, Timeline, Department */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4 }}
-        className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-6"
-      >
-        <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
-          <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-          Filter & Assignment Options
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Social Media</label>
-            <select
-              value={selectedSocialMedia}
-              onChange={(e) => setSelectedSocialMedia(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            >
-              <option value="">Select Platform</option>
-              <option value="Instagram">Instagram</option>
-              <option value="Facebook">Facebook</option>
-              <option value="Twitter">Twitter</option>
-              <option value="LinkedIn">LinkedIn</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Assign To</label>
-            <select
-              value={selectedPerson}
-              onChange={(e) => setSelectedPerson(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            >
-              <option value="">Select Person</option>
-              <option value="Lokesh Joshi">Lokesh Joshi</option>
-              <option value="Mike Johnson">Mike Johnson</option>
-              <option value="Sarah Williams">Sarah Williams</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Department / Name</label>
-            <select
-              value={filterDepartment}
-              onChange={(e) => setFilterDepartment(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            >
-              <option value="all">All Departments</option>
-              <option value="Marketing">Marketing</option>
-              <option value="Finance">Finance</option>
-              <option value="Operations">Operations</option>
-            </select>
-          </div>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <select
-            value={filterPriority}
-            onChange={(e) => setFilterPriority(e.target.value)}
-            className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          >
-            <option value="all">All Priorities</option>
-            <option value="high">High Priority</option>
-            <option value="medium">Medium Priority</option>
-            <option value="low">Low Priority</option>
-          </select>
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          >
-            <option value="all">All Status</option>
-            <option value="completed">Completed</option>
-            <option value="in-progress">In Progress</option>
-            <option value="not-started">Not Started</option>
-          </select>
-        </div>
-      </motion.div>
-
-      {/* Tasks List - Enhanced with Description, Timeline, Icons */}
-      <div className="space-y-4">
-        {filteredTasks.map((task, index) => (
-          <motion.div
-            key={task.id}
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.5 + index * 0.05 }}
-            className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow"
-          >
+          {/* Tasks List */}
+          {filteredTasks.length > 0 ? (
             <div className="space-y-4">
-              {/* Task Header */}
-              <div className="flex items-start justify-between">
-                <div className="flex items-start space-x-4 flex-1">
-                  <div className="p-3 bg-gray-50 rounded-xl">
-                    {getStatusIcon(task.status)}
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="font-bold text-gray-900 text-lg mb-2">{task.title}</h3>
-                    <div className="bg-gray-50 rounded-lg p-3 mb-3">
-                      <p className="text-sm text-gray-700 font-medium mb-1">Description:</p>
-                      <p className="text-sm text-gray-600">{task.description}</p>
-                    </div>
-                    <div className="flex flex-wrap gap-3 text-sm text-gray-600">
-                      <span className="flex items-center gap-1">
-                        <span className="font-semibold">Project:</span> {task.project}
-                      </span>
-                      <span>•</span>
-                      <span className="flex items-center gap-1">
-                        <span className="font-semibold">Assigned:</span> 
-                        <span className="px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full font-medium">
-                          {task.assignedTo}
-                        </span>
-                      </span>
-                      <span>•</span>
-                      <span className="flex items-center gap-1">
-                        <span className="font-semibold">Department:</span> {task.department}
-                      </span>
-                    </div>
-                    {task.timeline && (
-                      <div className="mt-3 px-3 py-2 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium inline-block">
-                        🔗 {task.timeline}
-                      </div>
-                    )}
-                    {task.socialMedia && (
-                      <div className="mt-2">
-                        <span className="px-3 py-1 bg-purple-50 text-purple-700 rounded-lg text-sm font-medium">
-                          📱 {task.socialMedia}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="flex flex-col items-end space-y-2">
-                  <span className={`px-4 py-2 rounded-full text-xs font-bold ${
-                    task.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
-                    task.status === 'in-progress' ? 'bg-amber-100 text-amber-700' :
-                    'bg-cyan-100 text-cyan-700'
-                  }`}>
-                    {task.status.replace('-', ' ').toUpperCase()}
-                  </span>
-                  <span className="px-4 py-2 rounded-full text-xs font-bold bg-red-100 text-red-700">
-                    DUE DATE
-                  </span>
-                  <span className={`px-4 py-2 rounded-full text-xs font-bold ${getPriorityColor(task.priority)}`}>
-                    {task.priority === 'high' ? 'ON PRIORITY' : task.priority.toUpperCase()}
-                  </span>
-                  <button 
-                    onClick={() => setShowTaskDetails(showTaskDetails === task.id ? null : task.id)}
-                    className="mt-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors"
-                  >
-                    <Mail className="w-4 h-4" />
-                    <Phone className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Expandable Task Details */}
-              {showTaskDetails === task.id && (
+              {filteredTasks.map((task, index) => (
                 <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  className="border-t border-gray-200 pt-4"
+                  key={task.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                  className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow"
                 >
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <p className="text-sm font-medium text-gray-700 mb-2">📅 Due Date: {task.dueDate}</p>
-                    <button className="w-full mt-2 bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg font-medium transition-colors">
-                      Complete {task.title}
-                    </button>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-3 mb-2">
+                        {getStatusIcon(task.status)}
+                        <h3 className="text-lg font-semibold text-gray-900">{task.title}</h3>
+                      </div>
+
+                      {task.description && (
+                        <p className="text-gray-600 text-sm mb-3">{task.description}</p>
+                      )}
+
+                      <div className="flex flex-wrap items-center gap-2 mb-3">
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${getPriorityColor(task.priority)}`}>
+                          {task.priority || 'medium'}
+                        </span>
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(task.status)}`}>
+                          {task.status.replace('_', ' ').toUpperCase()}
+                        </span>
+                        {task.department && (
+                          <span className="px-3 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
+                            {task.department}
+                          </span>
+                        )}
+                        {task.due_date && (
+                          <span className="text-xs text-gray-600 ml-auto">
+                            Due: {new Date(task.due_date).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+
+                      {task.completion_percentage > 0 && (
+                        <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
+                          <div
+                            className="bg-emerald-500 h-2 rounded-full transition-all"
+                            style={{ width: `${task.completion_percentage}%` }}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex items-center space-x-2 ml-4">
+                      {task.status !== 'completed' && (
+                        <motion.button
+                          whileHover={{ scale: 1.1 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => handleCompleteTask(task.id)}
+                          className="p-2 hover:bg-emerald-100 rounded-lg transition-colors"
+                          title="Complete task"
+                        >
+                          <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                        </motion.button>
+                      )}
+
+                      <motion.button
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => handleDeleteTask(task.id)}
+                        className="p-2 hover:bg-red-100 rounded-lg transition-colors"
+                        title="Delete task"
+                      >
+                        <Trash2 className="w-5 h-5 text-red-600" />
+                      </motion.button>
+                    </div>
                   </div>
                 </motion.div>
-              )}
+              ))}
             </div>
-          </motion.div>
-        ))}
-      </div>
-
-      {/* Previous Assigned Tasks Section */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.8 }}
-        className="mt-8 bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
-      >
-        <h2 className="text-2xl font-bold text-gray-900 mb-6">Previous Assigned Tasks</h2>
-        <div className="space-y-4">
-          {previousTasks.map((prevTask, index) => (
+          ) : (
             <motion.div
-              key={prevTask.id}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.9 + index * 0.05 }}
-              className="border border-gray-200 rounded-xl p-4 hover:border-emerald-300 transition-colors"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="bg-white rounded-2xl shadow-lg p-12 text-center"
             >
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <p className="text-sm text-gray-600 font-medium mb-2">Description</p>
-                  <p className="text-gray-800 mb-3">{prevTask.description}</p>
-                  <div className="flex flex-wrap gap-3">
-                    <span className="px-4 py-2 bg-emerald-50 text-emerald-700 rounded-full text-sm font-medium">
-                      {prevTask.assignedTo}
-                    </span>
-                    <span className="px-4 py-2 bg-cyan-100 text-cyan-700 rounded-full text-sm font-bold">
-                      {prevTask.status.toUpperCase()}
-                    </span>
-                  </div>
+              <p className="text-gray-500 text-lg">No tasks found. Create one to get started.</p>
+            </motion.div>
+          )}
+        </>
+      )}
+
+      {/* Create Task Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6"
+          >
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">Create New Task</h2>
+
+            <form onSubmit={handleCreateTask} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Title */}
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Title *</label>
+                  <input
+                    type="text"
+                    value={newTask.title}
+                    onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="Task title"
+                    required
+                  />
                 </div>
-                <div className="flex flex-col items-end space-y-2 ml-4">
-                  <span className="px-4 py-2 rounded-full text-xs font-bold bg-red-100 text-red-700">
-                    DUE DATE
-                  </span>
-                  <span className="px-4 py-2 rounded-full text-xs font-bold bg-red-100 text-red-700">
-                    {prevTask.priority}
-                  </span>
-                  <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                    <ChevronDown className="w-5 h-5 text-gray-600" />
-                  </button>
+
+                {/* Description */}
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                  <textarea
+                    value={newTask.description}
+                    onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="Task description"
+                    rows={3}
+                  />
+                </div>
+
+                {/* Priority */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Priority</label>
+                  <select
+                    value={newTask.priority}
+                    onChange={(e) => setNewTask({ ...newTask, priority: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                </div>
+
+                {/* Status */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                  <select
+                    value={newTask.status}
+                    onChange={(e) => setNewTask({ ...newTask, status: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="not_started">Not Started</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="completed">Completed</option>
+                    <option value="on_priority">On Priority</option>
+                  </select>
+                </div>
+
+                {/* Due Date */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Due Date</label>
+                  <input
+                    type="date"
+                    value={newTask.due_date}
+                    onChange={(e) => setNewTask({ ...newTask, due_date: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                {/* Department */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
+                  <select
+                    value={newTask.department}
+                    onChange={(e) => setNewTask({ ...newTask, department: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="">Select Department</option>
+                    {departments.map((dept) => (
+                      <option key={dept} value={dept}>
+                        {dept}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Task Type */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Task Type</label>
+                  <select
+                    value={newTask.task_type}
+                    onChange={(e) => setNewTask({ ...newTask, task_type: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="Development">Development</option>
+                    <option value="Research">Research</option>
+                    <option value="Meeting">Meeting</option>
+                    <option value="Review">Review</option>
+                    <option value="Distribution">Distribution</option>
+                    <option value="Event">Event</option>
+                    <option value="Infrastructure">Infrastructure</option>
+                    <option value="Education">Education</option>
+                    <option value="Logistics">Logistics</option>
+                    <option value="Finance">Finance</option>
+                  </select>
+                </div>
+
+                {/* Assigned To */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Assigned To *</label>
+                  <input
+                    type="text"
+                    value={newTask.assigned_to}
+                    onChange={(e) => setNewTask({ ...newTask, assigned_to: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="User ID or name"
+                    required
+                  />
                 </div>
               </div>
-            </motion.div>
-          ))}
+
+              {/* Form Actions */}
+              <div className="flex items-center justify-end space-x-3 pt-6 border-t">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors"
+                >
+                  Create Task
+                </button>
+              </div>
+            </form>
+          </motion.div>
         </div>
-      </motion.div>
+      )}
     </div>
   );
 };

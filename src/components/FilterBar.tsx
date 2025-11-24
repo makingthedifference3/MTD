@@ -1,24 +1,29 @@
-import { useFilter } from '../context/FilterContext';
-import { csrPartners, projects } from '../mockData';
-import { Building2, FolderKanban, X } from 'lucide-react';
+import { useFilter } from '../context/useFilter';
+import type { CSRPartner, Project } from '../services/filterService';
+import { Building2, FolderKanban, X, Loader } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const FilterBar = () => {
-  const { selectedPartner, selectedProject, setSelectedPartner, setSelectedProject, resetFilters } = useFilter();
-
-  // Filter projects based on selected partner
-  const filteredProjects = selectedPartner
-    ? projects.filter((p) => p.partnerId === selectedPartner)
-    : projects;
+  const {
+    selectedPartner,
+    selectedProject,
+    csrPartners,
+    filteredProjects,
+    isLoading,
+    error,
+    setSelectedPartner,
+    setSelectedProject,
+    resetFilters,
+  } = useFilter();
 
   // Get selected partner name
   const selectedPartnerName = selectedPartner
-    ? csrPartners.find((cp) => cp.id === selectedPartner)?.name
+    ? csrPartners.find((cp: CSRPartner) => cp.id === selectedPartner)?.name
     : null;
 
   // Get selected project name
   const selectedProjectName = selectedProject
-    ? projects.find((p) => p.id === selectedProject)?.name
+    ? filteredProjects.find((p: Project) => p.id === selectedProject)?.name
     : null;
 
   const handlePartnerChange = (partnerId: string) => {
@@ -41,28 +46,46 @@ const FilterBar = () => {
 
   const hasActiveFilters = selectedPartner || selectedProject;
 
+  if (error) {
+    console.error('FilterBar Error:', error);
+  }
+
   return (
     <div className="bg-white/70 backdrop-blur-xl border-b border-emerald-100 px-8 py-4">
       <div className="flex items-center gap-4 flex-wrap">
         {/* CSR Partner Dropdown */}
         <div className="flex-1 min-w-[250px]">
-          <label className="block text-xs font-semibold text-emerald-700 mb-2">CSR Partner</label>
+          <label className="block text-xs font-semibold text-emerald-700 mb-2">
+            CSR Partner
+          </label>
           <div className="relative">
             <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-600" />
-            <select
-              value={selectedPartner || 'all'}
-              onChange={(e) => handlePartnerChange(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl border-2 border-emerald-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all bg-white text-gray-900 font-medium text-sm appearance-none cursor-pointer hover:border-emerald-300"
-            >
-              <option value="all">Overall (All Partners)</option>
-              {csrPartners.map((partner) => (
-                <option key={partner.id} value={partner.id}>
-                  {partner.name}
-                </option>
-              ))}
-            </select>
+            {isLoading ? (
+              <div className="w-full pl-10 pr-4 py-2.5 rounded-xl border-2 border-emerald-200 bg-white text-gray-500 flex items-center gap-2">
+                <Loader className="w-4 h-4 animate-spin" />
+                Loading partners...
+              </div>
+            ) : (
+              <select
+                value={selectedPartner || 'all'}
+                onChange={(e) => handlePartnerChange(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl border-2 border-emerald-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all bg-white text-gray-900 font-medium text-sm appearance-none cursor-pointer hover:border-emerald-300"
+              >
+                <option value="all">Overall (All Partners)</option>
+                {csrPartners.map((partner: CSRPartner) => (
+                  <option key={partner.id} value={partner.id}>
+                    {partner.name}
+                  </option>
+                ))}
+              </select>
+            )}
             <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-              <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg
+                className="w-4 h-4 text-emerald-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
             </div>
@@ -77,20 +100,25 @@ const FilterBar = () => {
             <select
               value={selectedProject || 'all'}
               onChange={(e) => handleProjectChange(e.target.value)}
-              disabled={!selectedPartner}
+              disabled={!selectedPartner || isLoading}
               className="w-full pl-10 pr-4 py-2.5 rounded-xl border-2 border-emerald-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all bg-white text-gray-900 font-medium text-sm appearance-none cursor-pointer hover:border-emerald-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-50"
             >
               <option value="all">
                 {selectedPartner ? 'All Projects (Partner-wise)' : 'Select Partner First'}
               </option>
-              {filteredProjects.map((project) => (
+              {filteredProjects.map((project: Project) => (
                 <option key={project.id} value={project.id}>
                   {project.name}
                 </option>
               ))}
             </select>
             <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-              <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg
+                className="w-4 h-4 text-emerald-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
             </div>

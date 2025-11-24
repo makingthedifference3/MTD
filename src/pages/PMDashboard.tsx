@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
   TrendingUp, Users, DollarSign, FolderKanban, CheckCircle2, Clock, AlertCircle,
@@ -6,70 +6,95 @@ import {
 } from 'lucide-react';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { useFilteredData } from '../hooks/useFilteredData';
-import { projects } from '../mockData';
+import { projectService } from '../services/projectService';
+import type { BeneficiaryMetrics, MonthlyPerformance, ProjectStats, Activity as ActivityType } from '../services/projectService';
 
 const PMDashboard = () => {
   const [selectedPeriod, setSelectedPeriod] = useState('month');
+  const [loading, setLoading] = useState(true);
+  const [beneficiaryMetrics, setBeneficiaryMetrics] = useState<BeneficiaryMetrics>({
+    beneficiaries: { current: 0, target: 0 },
+    pads: { current: 0, target: 0 },
+    meals: { current: 0, target: 0 },
+    students: { current: 0, target: 0 },
+    trees: { current: 0, target: 0 },
+    schools: { current: 0, target: 0 },
+  });
+  const [projectStats, setProjectStats] = useState<ProjectStats>({ active: 0, upcoming: 0, completed: 0, onHold: 0 });
+  const [monthlyData, setMonthlyData] = useState<MonthlyPerformance[]>([]);
+  const [recentActivities, setRecentActivities] = useState<ActivityType[]>([]);
+
   const { filteredCards, filterMode, aggregatedMetrics, hasFilters } = useFilteredData();
 
-  // Get filtered projects based on selected partner/project
-  const filteredProjectIds = [...new Set(filteredCards.map(c => c.projectId))];
-  const filteredProjects = projects.filter(p => filteredProjectIds.includes(p.id));
-  
-  // Calculate dynamic beneficiary metrics from filtered projects
-  const beneficiaryMetrics = {
-    beneficiaries: {
-      current: filteredProjects.reduce((sum, p) => sum + (p.beneficiariesCurrent || 0), 0),
-      target: filteredProjects.reduce((sum, p) => sum + (p.beneficiariesTarget || 0), 0)
-    },
-    pads: {
-      current: filteredProjects.reduce((sum, p) => sum + (p.projectMetrics?.pads_donated?.current || 0), 0),
-      target: filteredProjects.reduce((sum, p) => sum + (p.projectMetrics?.pads_donated?.target || 0), 0)
-    },
-    meals: {
-      current: filteredProjects.reduce((sum, p) => sum + (p.projectMetrics?.meals_distributed?.current || 0), 0),
-      target: filteredProjects.reduce((sum, p) => sum + (p.projectMetrics?.meals_distributed?.target || 0), 0)
-    },
-    students: {
-      current: filteredProjects.reduce((sum, p) => sum + (p.projectMetrics?.students_enrolled?.current || 0), 0),
-      target: filteredProjects.reduce((sum, p) => sum + (p.projectMetrics?.students_enrolled?.target || 0), 0)
-    },
-    trees: {
-      current: filteredProjects.reduce((sum, p) => sum + (p.projectMetrics?.trees_planted?.current || 0), 0),
-      target: filteredProjects.reduce((sum, p) => sum + (p.projectMetrics?.trees_planted?.target || 0), 0)
-    },
-    schools: {
-      current: filteredProjects.reduce((sum, p) => sum + (p.projectMetrics?.schools_renovated?.current || 0), 0),
-      target: filteredProjects.reduce((sum, p) => sum + (p.projectMetrics?.schools_renovated?.target || 0), 0)
-    }
-  };
+  // Load data from database on component mount and when filters change
+  useEffect(() => {
+    const loadDashboardData = async () => {
+      try {
+        setLoading(true);
+        // Fetch all projects
+        const allProjects = await projectService.getAllProjects();
+
+        // Get filtered projects based on selected partner/project
+        const filteredProjectIds = [...new Set(filteredCards.map(c => c.project_id))];
+        const filteredProjects = hasFilters 
+          ? allProjects.filter(p => filteredProjectIds.includes(p.id))
+          : allProjects;
+
+        // Calculate metrics from database
+        const metrics = await projectService.getBeneficiaryMetrics(filteredProjects);
+        setBeneficiaryMetrics(metrics);
+
+        const stats = await projectService.getProjectStats(filteredProjects);
+        setProjectStats(stats);
+
+        const monthly = await projectService.getMonthlyPerformance(filteredProjects);
+        setMonthlyData(monthly.length > 0 ? monthly : [
+          { month: 'Jan', completed: 0, ongoing: 0 },
+          { month: 'Feb', completed: 0, ongoing: 0 },
+          { month: 'Mar', completed: 0, ongoing: 0 },
+          { month: 'Apr', completed: 0, ongoing: 0 },
+          { month: 'May', completed: 0, ongoing: 0 },
+          { month: 'Jun', completed: 0, ongoing: 0 },
+        ]);
+
+        const activities = await projectService.getRecentActivities(4);
+        setRecentActivities(activities);
+      } catch (error) {
+        console.error('Error loading dashboard data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadDashboardData();
+  }, [filteredCards, hasFilters]);
 
   const stats = [
     { 
       label: hasFilters ? 'Filtered Projects' : 'Active Projects', 
-      value: aggregatedMetrics.totalCards, 
+      value: projectStats.active, 
       change: '+12%', 
       icon: FolderKanban, 
       color: 'emerald' 
     },
     { 
       label: 'Beneficiaries', 
-      value: aggregatedMetrics.beneficiaries.current.toLocaleString(), 
-      change: `${aggregatedMetrics.beneficiaries.target.toLocaleString()} target`, 
+      value: beneficiaryMetrics.beneficiaries.current.toLocaleString(), 
+      change: `${beneficiaryMetrics.beneficiaries.target.toLocaleString()} target`, 
       icon: Users, 
       color: 'emerald' 
     },
     { 
-      label: 'Total Donations', 
-      value: `₹${(aggregatedMetrics.donations.current / 1000).toFixed(1)}K`, 
-      change: `₹${(aggregatedMetrics.donations.target / 1000).toFixed(1)}K target`, 
+      label: 'Total Budget Utilized', 
+      value: `${aggregatedMetrics.donations.current}`, 
+      change: `${aggregatedMetrics.donations.target} target`, 
       icon: DollarSign, 
       color: 'emerald' 
     },
     { 
-      label: 'Events Completed', 
-      value: aggregatedMetrics.events.current, 
-      change: `${aggregatedMetrics.events.target} target`, 
+      label: 'Projects Completed', 
+      value: projectStats.completed, 
+      change: `${projectStats.ongoing} ongoing`, 
       icon: TrendingUp, 
       color: 'emerald' 
     },
@@ -78,58 +103,49 @@ const PMDashboard = () => {
   const projectStatus = [
     { 
       name: 'Active', 
-      value: filteredProjects.filter(p => p.status === 'active').length, 
+      value: projectStats.active, 
       color: '#10b981' 
     },
     { 
       name: 'Upcoming', 
-      value: filteredProjects.filter(p => p.status === 'upcoming').length, 
+      value: projectStats.upcoming, 
       color: '#f59e0b' 
     },
     { 
       name: 'Completed', 
-      value: filteredProjects.filter(p => p.status === 'completed').length, 
+      value: projectStats.completed, 
       color: '#6366f1' 
     },
   ];
 
-  const monthlyData = [
-    { month: 'Jan', completed: 12, ongoing: 8 },
-    { month: 'Feb', completed: 15, ongoing: 10 },
-    { month: 'Mar', completed: 18, ongoing: 12 },
-    { month: 'Apr', completed: 14, ongoing: 15 },
-    { month: 'May', completed: 20, ongoing: 18 },
-    { month: 'Jun', completed: 22, ongoing: 16 },
-  ];
-
-  // Generate recent activities from filtered projects
-  const recentActivities = filteredProjects.slice(0, 4).map((project, idx) => ({
-    id: project.id,
-    project: project.name,
-    action: project.status === 'active' ? 'In Progress' : 
-            project.status === 'completed' ? 'Completed' : 'Scheduled',
-    time: idx === 0 ? '2 hours ago' : idx === 1 ? '4 hours ago' : idx === 2 ? '6 hours ago' : '8 hours ago',
-    status: project.status === 'completed' ? 'completed' : 
-            project.status === 'active' ? 'pending' : 'alert'
-  }));
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-linear-to-br from-gray-50 via-emerald-50/20 to-gray-50 p-4 md:p-8 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500 mx-auto mb-4"></div>
+          <p className="text-gray-600 font-semibold">Loading dashboard data...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-emerald-50/20 to-gray-50 p-4 md:p-8">
+    <div className="min-h-screen bg-linear-to-br from-gray-50 via-emerald-50/20 to-gray-50 p-4 md:p-8">
       {/* Modern Header with Glassmorphism */}
       <motion.div 
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         className="mb-8 relative"
       >
-        <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 via-emerald-400/5 to-transparent rounded-3xl blur-3xl"></div>
+        <div className="absolute inset-0 bg-linear-to-r from-emerald-500/10 via-emerald-400/5 to-transparent rounded-3xl blur-3xl"></div>
         <div className="relative bg-white/60 backdrop-blur-xl border border-white/20 shadow-xl shadow-emerald-500/5 rounded-3xl p-6 md:p-8">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className="p-3 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl shadow-lg shadow-emerald-500/30">
+              <div className="p-3 bg-linear-to-br from-emerald-500 to-emerald-600 rounded-2xl shadow-lg shadow-emerald-500/30">
                 <FolderKanban className="w-8 h-8 text-white" />
               </div>
               <div>
-                <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-gray-900 via-emerald-800 to-gray-900 bg-clip-text text-transparent">
+                <h1 className="text-3xl md:text-4xl font-bold bg-linear-to-r from-gray-900 via-emerald-800 to-gray-900 bg-clip-text text-transparent">
                   Project Command Center
                 </h1>
                 <p className="text-gray-600 mt-1 font-medium">Real-time project oversight & team coordination</p>
@@ -139,7 +155,7 @@ const PMDashboard = () => {
               <motion.div
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="flex items-center gap-3 px-5 py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-2xl shadow-lg shadow-emerald-500/30"
+                className="flex items-center gap-3 px-5 py-3 bg-linear-to-r from-emerald-500 to-emerald-600 rounded-2xl shadow-lg shadow-emerald-500/30"
               >
                 <div className="relative">
                   <div className="w-2.5 h-2.5 bg-white rounded-full animate-pulse"></div>
@@ -163,11 +179,11 @@ const PMDashboard = () => {
             className="group relative bg-white border border-gray-200/50 rounded-2xl p-6 hover:shadow-2xl hover:shadow-emerald-500/10 transition-all duration-300 hover:-translate-y-1 overflow-hidden"
           >
             {/* Gradient Background on Hover */}
-            <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/0 to-emerald-600/0 group-hover:from-emerald-500/5 group-hover:to-emerald-600/5 transition-all duration-300 rounded-2xl"></div>
+            <div className="absolute inset-0 bg-linear-to-br from-emerald-500/0 to-emerald-600/0 group-hover:from-emerald-500/5 group-hover:to-emerald-600/5 transition-all duration-300 rounded-2xl"></div>
             
             <div className="relative z-10">
               <div className="flex items-start justify-between mb-4">
-                <div className={`p-3 bg-gradient-to-br from-emerald-500/10 to-emerald-600/10 group-hover:from-emerald-500/20 group-hover:to-emerald-600/20 rounded-xl transition-all duration-300 group-hover:scale-110`}>
+                <div className={`p-3 bg-linear-to-br from-emerald-500/10 to-emerald-600/10 group-hover:from-emerald-500/20 group-hover:to-emerald-600/20 rounded-xl transition-all duration-300 group-hover:scale-110`}>
                   <stat.icon className="w-6 h-6 text-emerald-600" />
                 </div>
                 <div className="flex items-center gap-1 text-emerald-600 text-xs font-bold uppercase tracking-wider bg-emerald-50 px-3 py-1.5 rounded-full">
@@ -180,7 +196,7 @@ const PMDashboard = () => {
             </div>
 
             {/* Decorative Corner */}
-            <div className="absolute -bottom-4 -right-4 w-24 h-24 bg-gradient-to-br from-emerald-500/5 to-transparent rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500"></div>
+            <div className="absolute -bottom-4 -right-4 w-24 h-24 bg-linear-to-br from-emerald-500/5 to-transparent rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500"></div>
           </motion.div>
         ))}
       </div>
@@ -315,11 +331,11 @@ const PMDashboard = () => {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.4 }}
-        className="bg-gradient-to-br from-white via-emerald-50/30 to-white border border-gray-200/50 rounded-2xl p-6 md:p-8 shadow-lg hover:shadow-2xl hover:shadow-emerald-500/10 transition-all duration-300 mb-6"
+        className="bg-linear-to-br from-white via-emerald-50/30 to-white border border-gray-200/50 rounded-2xl p-6 md:p-8 shadow-lg hover:shadow-2xl hover:shadow-emerald-500/10 transition-all duration-300 mb-6"
       >
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
           <div className="flex items-center gap-4">
-            <div className="p-3 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl shadow-lg shadow-emerald-500/30">
+            <div className="p-3 bg-linear-to-br from-emerald-500 to-emerald-600 rounded-2xl shadow-lg shadow-emerald-500/30">
               <Target className="w-7 h-7 text-white" />
             </div>
             <div>
@@ -337,7 +353,7 @@ const PMDashboard = () => {
         
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
           {/* Beneficiaries */}
-          <div className="group relative bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl p-5 transition-all cursor-pointer hover:shadow-2xl hover:shadow-emerald-500/40 hover:scale-105 overflow-hidden">
+          <div className="group relative bg-linear-to-br from-emerald-500 to-emerald-600 rounded-2xl p-5 transition-all cursor-pointer hover:shadow-2xl hover:shadow-emerald-500/40 hover:scale-105 overflow-hidden">
             <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -mr-10 -mt-10"></div>
             <div className="relative z-10">
               <div className="flex items-center justify-between mb-3">
@@ -441,7 +457,7 @@ const PMDashboard = () => {
         transition={{ delay: 0.5 }}
         className="bg-white border border-gray-200/50 rounded-2xl shadow-lg hover:shadow-2xl hover:shadow-emerald-500/10 transition-all duration-300 overflow-hidden"
       >
-        <div className="bg-gradient-to-r from-gray-50 to-emerald-50/30 p-6 border-b border-gray-200/50">
+        <div className="bg-linear-to-r from-gray-50 to-emerald-50/30 p-6 border-b border-gray-200/50">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-emerald-500 rounded-lg">
               <Clock className="w-5 h-5 text-white" />
@@ -459,7 +475,7 @@ const PMDashboard = () => {
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.6 + index * 0.05 }}
-              className="group p-6 hover:bg-gradient-to-r hover:from-emerald-50/50 hover:to-transparent transition-all duration-300 cursor-pointer"
+              className="group p-6 hover:bg-linear-to-r hover:from-emerald-50/50 hover:to-transparent transition-all duration-300 cursor-pointer"
             >
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-4 flex-1">
