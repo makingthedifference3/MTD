@@ -16,6 +16,10 @@ const FilterBar = () => {
     resetFilters,
   } = useFilter();
 
+  console.log('FilterBar - selectedPartner:', selectedPartner);
+  console.log('FilterBar - filteredProjects:', filteredProjects);
+  console.log('FilterBar - filteredProjects count:', filteredProjects.length);
+
   // Get selected partner name
   const selectedPartnerName = selectedPartner
     ? csrPartners.find((cp: CSRPartner) => cp.id === selectedPartner)?.name

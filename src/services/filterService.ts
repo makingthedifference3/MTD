@@ -19,6 +19,22 @@ export interface Project {
   state?: string;
   status?: string;
   is_active: boolean;
+  // Beneficiary stats from database
+  total_beneficiaries?: number;
+  direct_beneficiaries?: number;
+  indirect_beneficiaries?: number;
+  male_beneficiaries?: number;
+  female_beneficiaries?: number;
+  children_beneficiaries?: number;
+  // Impact metrics from database
+  meals_served?: number;
+  pads_distributed?: number;
+  students_enrolled?: number;
+  trees_planted?: number;
+  schools_renovated?: number;
+  // UI display properties from database
+  display_color?: string;
+  display_icon?: string;
 }
 
 /**
@@ -54,7 +70,7 @@ export const fetchProjectsByPartner = async (
     const { data, error } = await supabase
       .from('projects')
       .select(
-        'id, name, project_code, csr_partner_id, description, location, state, status, is_active'
+        'id, name, project_code, csr_partner_id, description, location, state, status, is_active, total_beneficiaries, direct_beneficiaries, indirect_beneficiaries, male_beneficiaries, female_beneficiaries, children_beneficiaries, meals_served, pads_distributed, students_enrolled, trees_planted, schools_renovated, display_color, display_icon'
       )
       .eq('csr_partner_id', partnerId)
       .eq('is_active', true)
@@ -80,9 +96,8 @@ export const fetchAllProjects = async (): Promise<Project[]> => {
     const { data, error } = await supabase
       .from('projects')
       .select(
-        'id, name, project_code, csr_partner_id, description, location, state, status, is_active'
+        'id, name, project_code, csr_partner_id, description, location, state, status, is_active, total_beneficiaries, direct_beneficiaries, indirect_beneficiaries, male_beneficiaries, female_beneficiaries, children_beneficiaries, meals_served, pads_distributed, students_enrolled, trees_planted, schools_renovated, display_color, display_icon'
       )
-      .eq('is_active', true)
       .order('name', { ascending: true });
 
     if (error) {
@@ -90,6 +105,9 @@ export const fetchAllProjects = async (): Promise<Project[]> => {
       return [];
     }
 
+    console.log('fetchAllProjects - Raw data from Supabase:', data);
+    console.log('fetchAllProjects - Sample csr_partner_ids:', data?.slice(0, 3).map(p => ({ name: p.name, csr_partner_id: p.csr_partner_id, type: typeof p.csr_partner_id })));
+    
     return data || [];
   } catch (error) {
     console.error('Exception fetching all projects:', error);
@@ -105,7 +123,7 @@ export const fetchProjectById = async (projectId: string): Promise<Project | nul
     const { data, error } = await supabase
       .from('projects')
       .select(
-        'id, name, project_code, csr_partner_id, description, location, state, status, is_active'
+        'id, name, project_code, csr_partner_id, description, location, state, status, is_active, total_beneficiaries, direct_beneficiaries, indirect_beneficiaries, male_beneficiaries, female_beneficiaries, children_beneficiaries'
       )
       .eq('id', projectId)
       .single();

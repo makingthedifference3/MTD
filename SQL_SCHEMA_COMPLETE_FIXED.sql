@@ -1413,6 +1413,8 @@ AFTER UPDATE ON public.project_expenses
 FOR EACH ROW
 EXECUTE FUNCTION update_project_budget_on_expense();
 
+
+
 -- =====================================================================
 -- END OF FIXED SCHEMA
 -- =====================================================================

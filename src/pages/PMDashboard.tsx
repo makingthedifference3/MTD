@@ -1,137 +1,138 @@
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  TrendingUp, Users, DollarSign, FolderKanban, CheckCircle2, Clock, AlertCircle,
-  Target, Zap, Activity, Award, ArrowUpRight, Calendar, Sparkles
+  FolderKanban, ChevronRight,
+  ArrowLeft, MapPin, Briefcase, Leaf, Building2, Heart, Droplet, GraduationCap,
+  CheckCircle2, Users, Activity, Award, type LucideIcon
 } from 'lucide-react';
-import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { useFilteredData } from '../hooks/useFilteredData';
-import { projectService } from '../services/projectService';
-import type { BeneficiaryMetrics, MonthlyPerformance, ProjectStats, Activity as ActivityType } from '../services/projectService';
+import { useFilter } from '../context/useFilter';
+import FilterBar from '../components/FilterBar';
+import type { Project } from '../services/filterService';
+
+// Helper function to map icon names to actual Lucide icons
+const getIconComponent = (iconName?: string): LucideIcon => {
+  const iconMap: Record<string, LucideIcon> = {
+    'Leaf': Leaf,
+    'Heart': Heart,
+    'GraduationCap': GraduationCap,
+    'Droplet': Droplet,
+    'FolderKanban': FolderKanban,
+  };
+  return iconMap[iconName || 'FolderKanban'] || FolderKanban;
+};
+
+interface ProjectWithBeneficiaries extends Project {
+  description?: string;
+  beneficiaryStats?: {
+    totalBeneficiaries: number;
+    mealsServed: number;
+    padsDistributed: number;
+    studentsEnrolled: number;
+    treesPlanted: number;
+    schoolsRenovated: number;
+  };
+}
 
 const PMDashboard = () => {
-  const [selectedPeriod, setSelectedPeriod] = useState('month');
-  const [loading, setLoading] = useState(true);
-  const [beneficiaryMetrics, setBeneficiaryMetrics] = useState<BeneficiaryMetrics>({
-    beneficiaries: { current: 0, target: 0 },
-    pads: { current: 0, target: 0 },
-    meals: { current: 0, target: 0 },
-    students: { current: 0, target: 0 },
-    trees: { current: 0, target: 0 },
-    schools: { current: 0, target: 0 },
-  });
-  const [projectStats, setProjectStats] = useState<ProjectStats>({ active: 0, upcoming: 0, completed: 0, onHold: 0 });
-  const [monthlyData, setMonthlyData] = useState<MonthlyPerformance[]>([]);
-  const [recentActivities, setRecentActivities] = useState<ActivityType[]>([]);
+  const {
+    csrPartners,
+    selectedPartner,
+    selectedProject,
+    filteredProjects,
+    setSelectedPartner,
+    setSelectedProject,
+    resetFilters,
+    isLoading,
+    error,
+  } = useFilter();
 
-  const { filteredCards, filterMode, aggregatedMetrics, hasFilters } = useFilteredData();
+  const [viewMode, setViewMode] = useState<'partners' | 'projects' | 'projectDetails'>('partners');
+  const [selectedProjectData, setSelectedProjectData] = useState<ProjectWithBeneficiaries | null>(null);
 
-  // Load data from database on component mount and when filters change
+  // Auto-switch to projects view when a partner is selected via FilterBar
   useEffect(() => {
-    const loadDashboardData = async () => {
-      try {
-        setLoading(true);
-        // Fetch all projects
-        const allProjects = await projectService.getAllProjects();
+    if (selectedPartner) {
+      setViewMode('projects');
+    }
+  }, [selectedPartner]);
 
-        // Get filtered projects based on selected partner/project
-        const filteredProjectIds = [...new Set(filteredCards.map(c => c.project_id))];
-        const filteredProjects = hasFilters 
-          ? allProjects.filter(p => filteredProjectIds.includes(p.id))
-          : allProjects;
+  // Auto-switch to project details when a project is selected via FilterBar
+  useEffect(() => {
+    console.log('PMDashboard - selectedProject:', selectedProject);
+    if (selectedProject && filteredProjects.length > 0) {
+      const project = filteredProjects.find(p => p.id === selectedProject);
+      console.log('PMDashboard - Found project:', project?.name);
+      if (project) {
+        const projectWithDesc: ProjectWithBeneficiaries = {
+          ...project,
+          beneficiaryStats: {
+            totalBeneficiaries: project.total_beneficiaries || 0,
+            mealsServed: project.meals_served || 0,
+            padsDistributed: project.pads_distributed || 0,
+            studentsEnrolled: project.students_enrolled || 0,
+            treesPlanted: project.trees_planted || 0,
+            schoolsRenovated: project.schools_renovated || 0,
+          },
+          description: project.description || 'No description available',
+        };
 
-        // Calculate metrics from database
-        const metrics = await projectService.getBeneficiaryMetrics(filteredProjects);
-        setBeneficiaryMetrics(metrics);
-
-        const stats = await projectService.getProjectStats(filteredProjects);
-        setProjectStats(stats);
-
-        const monthly = await projectService.getMonthlyPerformance(filteredProjects);
-        setMonthlyData(monthly.length > 0 ? monthly : [
-          { month: 'Jan', completed: 0, ongoing: 0 },
-          { month: 'Feb', completed: 0, ongoing: 0 },
-          { month: 'Mar', completed: 0, ongoing: 0 },
-          { month: 'Apr', completed: 0, ongoing: 0 },
-          { month: 'May', completed: 0, ongoing: 0 },
-          { month: 'Jun', completed: 0, ongoing: 0 },
-        ]);
-
-        const activities = await projectService.getRecentActivities(4);
-        setRecentActivities(activities);
-      } catch (error) {
-        console.error('Error loading dashboard data:', error);
-      } finally {
-        setLoading(false);
+        setSelectedProjectData(projectWithDesc);
+        setViewMode('projectDetails');
       }
+    }
+  }, [selectedProject, filteredProjects]);
+
+  // Get selected partner object from csrPartners using the selectedPartner ID from context
+  const selectedPartnerObject = selectedPartner 
+    ? csrPartners.find(p => p.id === selectedPartner)
+    : null;
+
+  // Get projects for selected partner - directly use filteredProjects which is already filtered by context
+  const partnerProjects = filteredProjects;
+
+  console.log('PMDashboard - selectedPartner:', selectedPartner);
+  console.log('PMDashboard - partnerProjects count:', partnerProjects.length);
+  console.log('PMDashboard - partnerProjects:', partnerProjects);
+
+  const handlePartnerClick = (partnerId: string) => {
+    setSelectedPartner(partnerId);
+    setViewMode('projects');
+  };
+
+  const handleProjectClick = (project: Project) => {
+    const projectWithDesc: ProjectWithBeneficiaries = {
+      ...project,
+      beneficiaryStats: {
+        totalBeneficiaries: project.total_beneficiaries || 0,
+        mealsServed: project.meals_served || 0,
+        padsDistributed: project.pads_distributed || 0,
+        studentsEnrolled: project.students_enrolled || 0,
+        treesPlanted: project.trees_planted || 0,
+        schoolsRenovated: project.schools_renovated || 0,
+      },
+      description: project.description || 'No description available',
     };
+    
+    setSelectedProjectData(projectWithDesc);
+    setSelectedProject(project.id);
+    setViewMode('projectDetails');
+  };
 
-    loadDashboardData();
-  }, [filteredCards, hasFilters]);
-
-  const stats = [
-    { 
-      label: hasFilters ? 'Filtered Projects' : 'Active Projects', 
-      value: projectStats.active, 
-      change: '+12%', 
-      icon: FolderKanban, 
-      color: 'emerald' 
-    },
-    { 
-      label: 'Beneficiaries', 
-      value: beneficiaryMetrics.beneficiaries.current.toLocaleString(), 
-      change: `${beneficiaryMetrics.beneficiaries.target.toLocaleString()} target`, 
-      icon: Users, 
-      color: 'emerald' 
-    },
-    { 
-      label: 'Total Budget Utilized', 
-      value: `${aggregatedMetrics.donations.current}`, 
-      change: `${aggregatedMetrics.donations.target} target`, 
-      icon: DollarSign, 
-      color: 'emerald' 
-    },
-    { 
-      label: 'Projects Completed', 
-      value: projectStats.completed, 
-      change: `${projectStats.ongoing} ongoing`, 
-      icon: TrendingUp, 
-      color: 'emerald' 
-    },
-  ];
-
-  const projectStatus = [
-    { 
-      name: 'Active', 
-      value: projectStats.active, 
-      color: '#10b981' 
-    },
-    { 
-      name: 'Upcoming', 
-      value: projectStats.upcoming, 
-      color: '#f59e0b' 
-    },
-    { 
-      name: 'Completed', 
-      value: projectStats.completed, 
-      color: '#6366f1' 
-    },
-  ];
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-linear-to-br from-gray-50 via-emerald-50/20 to-gray-50 p-4 md:p-8 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500 mx-auto mb-4"></div>
-          <p className="text-gray-600 font-semibold">Loading dashboard data...</p>
-        </div>
-      </div>
-    );
-  }
+  const handleBack = () => {
+    if (viewMode === 'projectDetails') {
+      setViewMode('projects');
+      setSelectedProjectData(null);
+      setSelectedProject(null);
+    } else if (viewMode === 'projects') {
+      setViewMode('partners');
+      setSelectedPartner(null);
+      resetFilters();
+    }
+  };
 
   return (
     <div className="min-h-screen bg-linear-to-br from-gray-50 via-emerald-50/20 to-gray-50 p-4 md:p-8">
-      {/* Modern Header with Glassmorphism */}
+      {/* Header */}
       <motion.div 
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -142,376 +143,334 @@ const PMDashboard = () => {
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-center gap-4">
               <div className="p-3 bg-linear-to-br from-emerald-500 to-emerald-600 rounded-2xl shadow-lg shadow-emerald-500/30">
-                <FolderKanban className="w-8 h-8 text-white" />
+                <Building2 className="w-8 h-8 text-white" />
               </div>
               <div>
                 <h1 className="text-3xl md:text-4xl font-bold bg-linear-to-r from-gray-900 via-emerald-800 to-gray-900 bg-clip-text text-transparent">
                   Project Command Center
                 </h1>
-                <p className="text-gray-600 mt-1 font-medium">Real-time project oversight & team coordination</p>
+                <p className="text-gray-600 mt-1 font-medium">
+                  {viewMode === 'partners' && 'Select CSR Partner to view their projects'}
+                  {viewMode === 'projects' && selectedPartnerObject && `Projects by ${selectedPartnerObject.name}`}
+                  {viewMode === 'projectDetails' && selectedProjectData && `Project: ${selectedProjectData.name}`}
+                </p>
               </div>
             </div>
-            {hasFilters && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="flex items-center gap-3 px-5 py-3 bg-linear-to-r from-emerald-500 to-emerald-600 rounded-2xl shadow-lg shadow-emerald-500/30"
-              >
-                <div className="relative">
-                  <div className="w-2.5 h-2.5 bg-white rounded-full animate-pulse"></div>
-                  <div className="absolute inset-0 w-2.5 h-2.5 bg-white rounded-full animate-ping"></div>
-                </div>
-                <span className="text-sm font-bold text-white uppercase tracking-wide">{filterMode.label}</span>
-              </motion.div>
-            )}
           </div>
         </div>
       </motion.div>
 
-      {/* Bento Grid Layout - Main Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-6">
-        {stats.map((stat, index) => (
+      {/* Filter Bar */}
+      <FilterBar />
+
+      {/* Back Button */}
+      {viewMode !== 'partners' && (
+        <motion.button
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          onClick={handleBack}
+          className="mb-6 flex items-center gap-2 px-6 py-3 bg-white border-2 border-gray-200 rounded-2xl hover:border-emerald-500 hover:bg-emerald-50 transition-all font-semibold text-gray-900 hover:text-emerald-600 shadow-lg hover:shadow-emerald-500/20"
+        >
+          <ArrowLeft className="w-5 h-5" />
+          Go Back
+        </motion.button>
+      )}
+
+      <AnimatePresence mode="wait">
+        {/* PARTNERS VIEW */}
+        {viewMode === 'partners' && (
           <motion.div
-            key={stat.label}
+            key="partners"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.05 }}
-            className="group relative bg-white border border-gray-200/50 rounded-2xl p-6 hover:shadow-2xl hover:shadow-emerald-500/10 transition-all duration-300 hover:-translate-y-1 overflow-hidden"
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
           >
-            {/* Gradient Background on Hover */}
-            <div className="absolute inset-0 bg-linear-to-br from-emerald-500/0 to-emerald-600/0 group-hover:from-emerald-500/5 group-hover:to-emerald-600/5 transition-all duration-300 rounded-2xl"></div>
-            
-            <div className="relative z-10">
-              <div className="flex items-start justify-between mb-4">
-                <div className={`p-3 bg-linear-to-br from-emerald-500/10 to-emerald-600/10 group-hover:from-emerald-500/20 group-hover:to-emerald-600/20 rounded-xl transition-all duration-300 group-hover:scale-110`}>
-                  <stat.icon className="w-6 h-6 text-emerald-600" />
-                </div>
-                <div className="flex items-center gap-1 text-emerald-600 text-xs font-bold uppercase tracking-wider bg-emerald-50 px-3 py-1.5 rounded-full">
-                  <TrendingUp className="w-3 h-3" />
-                  {stat.change}
-                </div>
+            {isLoading ? (
+              <div className="flex flex-col items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500 mb-4"></div>
+                <p className="text-gray-600 font-semibold">Loading partners...</p>
               </div>
-              <p className="text-gray-500 text-sm font-semibold mb-2 uppercase tracking-wide">{stat.label}</p>
-              <h3 className="text-4xl font-black text-gray-900 tracking-tight">{stat.value}</h3>
-            </div>
-
-            {/* Decorative Corner */}
-            <div className="absolute -bottom-4 -right-4 w-24 h-24 bg-linear-to-br from-emerald-500/5 to-transparent rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500"></div>
+            ) : error ? (
+              <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-6 text-center">
+                <p className="text-red-700 font-semibold">{error}</p>
+              </div>
+            ) : csrPartners.length === 0 ? (
+              <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-8 text-center">
+                <p className="text-amber-800 font-semibold text-lg">No CSR Partners found</p>
+                <p className="text-amber-700 mt-2">Please insert sample data into the database first</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {csrPartners.map((partner, index) => {
+                // Count projects for this partner from filteredProjects
+                const partnerProjectCount = filteredProjects.filter((p: Project) => p.csr_partner_id === partner.id).length;
+                return (
+                  <motion.button
+                    key={partner.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.1 }}
+                    onClick={() => handlePartnerClick(partner.id)}
+                    className="group relative text-left"
+                  >
+                    <div className="absolute inset-0 bg-linear-to-br from-emerald-500/20 to-emerald-600/20 rounded-2xl blur-2xl group-hover:blur-3xl transition-all opacity-0 group-hover:opacity-100"></div>
+                    
+                    <div className="relative bg-white border-2 border-gray-200 hover:border-emerald-500 rounded-2xl p-6 transition-all duration-300 hover:shadow-2xl hover:shadow-emerald-500/20 hover:-translate-y-2 overflow-hidden">
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-bl-3xl group-hover:bg-emerald-500/10 transition-colors"></div>
+                      
+                      <div className="relative z-10">
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="p-3 bg-emerald-100 group-hover:bg-emerald-200 rounded-xl transition-all">
+                            <Briefcase className="w-6 h-6 text-emerald-600" />
+                          </div>
+                          <div className="text-sm font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">
+                            {partnerProjectCount} Projects
+                          </div>
+                        </div>
+                        
+                        <h3 className="text-xl font-bold text-gray-900 mb-2">{partner.name}</h3>
+                        {partner.company_name && (
+                          <p className="text-sm text-gray-600 mb-4 line-clamp-2">{partner.company_name}</p>
+                        )}
+                        
+                        <div className="flex items-center gap-2 text-emerald-600 font-semibold text-sm group-hover:gap-3 transition-all">
+                          View Projects
+                          <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                        </div>
+                      </div>
+                    </div>
+                  </motion.button>
+                );
+              })}
+              </div>
+            )}
           </motion.div>
-        ))}
-      </div>
+        )}
 
-      {/* Bento Grid - Hero Section with Charts and Impact */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        {/* Project Status - Compact Card */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="bg-white border border-gray-200/50 rounded-2xl p-6 shadow-lg hover:shadow-2xl hover:shadow-emerald-500/10 transition-all duration-300"
-        >
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="text-xl font-bold text-gray-900">Project Pipeline</h2>
-              <p className="text-sm text-gray-500 mt-1">Distribution overview</p>
+        {/* PROJECTS VIEW */}
+        {viewMode === 'projects' && selectedPartnerObject && (
+          <motion.div
+            key="projects"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+          >
+            <div className="mb-6">
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-100 text-emerald-700 rounded-full font-semibold">
+                <Building2 className="w-4 h-4" />
+                {selectedPartnerObject.name}
+              </div>
             </div>
-            <div className="p-2 bg-emerald-50 rounded-xl">
-              <Activity className="w-5 h-5 text-emerald-600" />
-            </div>
-          </div>
-          <ResponsiveContainer width="100%" height={220}>
-            <PieChart>
-              <Pie
-                data={projectStatus}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={90}
-                paddingAngle={5}
-                dataKey="value"
+
+            {partnerProjects.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {partnerProjects.map((project, index) => {
+                  // Get icon and color from database, fallback to defaults
+                  const Icon = getIconComponent(project.display_icon);
+                  const colorClass = project.display_color || 'emerald';
+                  
+                  return (
+                    <motion.button
+                      key={project.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.1 }}
+                      onClick={() => handleProjectClick(project)}
+                      className="group relative text-left"
+                    >
+                      <div className={`absolute inset-0 bg-linear-to-br from-${colorClass}-500/20 to-${colorClass}-600/20 rounded-2xl blur-2xl group-hover:blur-3xl transition-all opacity-0 group-hover:opacity-100`}></div>
+                      
+                      <div className="relative bg-white border-2 border-gray-200 hover:border-emerald-500 rounded-2xl p-6 transition-all duration-300 hover:shadow-2xl hover:shadow-emerald-500/20 hover:-translate-y-2 overflow-hidden">
+                        <div className={`absolute top-0 right-0 w-24 h-24 bg-${colorClass}-500/5 rounded-bl-3xl group-hover:bg-${colorClass}-500/10 transition-colors`}></div>
+                        
+                        <div className="relative z-10">
+                          <div className="flex items-start justify-between mb-4">
+                            <div className={`p-3 bg-${colorClass}-100 group-hover:bg-${colorClass}-200 rounded-xl transition-all`}>
+                              <Icon className={`w-6 h-6 text-${colorClass}-600`} />
+                            </div>
+                            <div className={`text-sm font-bold text-${colorClass}-600 bg-${colorClass}-50 px-3 py-1 rounded-full`}>
+                              {project.status || 'Active'}
+                            </div>
+                          </div>
+                          
+                          <h3 className="text-xl font-bold text-gray-900 mb-2">{project.name}</h3>
+                          <p className="text-sm text-gray-600 mb-4 line-clamp-2">{project.description}</p>
+                          
+                          <div className="flex items-center gap-2 text-emerald-600 font-semibold text-sm group-hover:gap-3 transition-all">
+                            View Details
+                            <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                          </div>
+                        </div>
+                      </div>
+                    </motion.button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <FolderKanban className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                <p className="text-gray-500 font-semibold">No projects found for this partner</p>
+              </div>
+            )}
+          </motion.div>
+        )}
+
+        {/* PROJECT DETAILS VIEW */}
+        {viewMode === 'projectDetails' && selectedProjectData && (
+          <motion.div
+            key="projectDetails"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+          >
+            <div className="max-w-4xl mx-auto">
+              {/* Project Header Card */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-white border-2 border-gray-200 rounded-2xl p-8 mb-6 shadow-lg"
               >
-                {projectStatus.map((entry, index) => (
-                  <Cell 
-                    key={`cell-${index}`} 
-                    fill={entry.color}
-                    className="hover:opacity-80 transition-opacity cursor-pointer"
-                  />
-                ))}
-              </Pie>
-              <Tooltip 
-                contentStyle={{ 
-                  background: 'white', 
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '12px',
-                  boxShadow: '0 10px 40px rgba(0,0,0,0.1)'
-                }}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="flex justify-center gap-4 mt-4">
-            {projectStatus.map((status, idx) => (
-              <div key={idx} className="flex items-center gap-2">
-                <div className={`w-3 h-3 rounded-full`} style={{ backgroundColor: status.color }}></div>
-                <span className="text-xs font-semibold text-gray-600">{status.name}</span>
-              </div>
-            ))}
-          </div>
-        </motion.div>
-
-        {/* Monthly Performance - Large Chart */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="lg:col-span-2 bg-white border border-gray-200/50 rounded-2xl p-6 shadow-lg hover:shadow-2xl hover:shadow-emerald-500/10 transition-all duration-300"
-        >
-          <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
-            <div>
-              <h2 className="text-xl font-bold text-gray-900">Performance Trends</h2>
-              <p className="text-sm text-gray-500 mt-1">Projects completed vs ongoing</p>
-            </div>
-            <select
-              value={selectedPeriod}
-              onChange={(e) => setSelectedPeriod(e.target.value)}
-              className="px-4 py-2.5 border-2 border-gray-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white hover:border-emerald-300 transition-colors cursor-pointer"
-            >
-              <option value="week">This Week</option>
-              <option value="month">This Month</option>
-              <option value="year">This Year</option>
-            </select>
-          </div>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={monthlyData} barGap={8}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-              <XAxis 
-                dataKey="month" 
-                stroke="#9ca3af" 
-                tick={{ fill: '#6b7280', fontSize: 12, fontWeight: 600 }}
-                axisLine={{ stroke: '#e5e7eb' }}
-              />
-              <YAxis 
-                stroke="#9ca3af"
-                tick={{ fill: '#6b7280', fontSize: 12, fontWeight: 600 }}
-                axisLine={{ stroke: '#e5e7eb' }}
-              />
-              <Tooltip 
-                contentStyle={{ 
-                  background: 'white', 
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '12px',
-                  boxShadow: '0 10px 40px rgba(0,0,0,0.1)'
-                }}
-                cursor={{ fill: 'rgba(16, 185, 129, 0.05)' }}
-              />
-              <Legend 
-                wrapperStyle={{ paddingTop: '20px' }}
-                iconType="circle"
-              />
-              <Bar 
-                dataKey="completed" 
-                fill="#10b981" 
-                name="Completed" 
-                radius={[8, 8, 0, 0]}
-                className="hover:opacity-80 transition-opacity"
-              />
-              <Bar 
-                dataKey="ongoing" 
-                fill="#6366f1" 
-                name="Ongoing" 
-                radius={[8, 8, 0, 0]}
-                className="hover:opacity-80 transition-opacity"
-              />
-            </BarChart>
-          </ResponsiveContainer>
-        </motion.div>
-      </div>
-
-      {/* Impact Metrics - Full Width Bento */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4 }}
-        className="bg-linear-to-br from-white via-emerald-50/30 to-white border border-gray-200/50 rounded-2xl p-6 md:p-8 shadow-lg hover:shadow-2xl hover:shadow-emerald-500/10 transition-all duration-300 mb-6"
-      >
-        <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-linear-to-br from-emerald-500 to-emerald-600 rounded-2xl shadow-lg shadow-emerald-500/30">
-              <Target className="w-7 h-7 text-white" />
-            </div>
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900">Impact Dashboard</h2>
-              <p className="text-gray-600 text-sm mt-1 font-medium">Real-time beneficiary metrics & project outcomes</p>
-            </div>
-          </div>
-          <select className="px-5 py-3 text-sm font-bold rounded-xl border-2 border-emerald-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 bg-white text-gray-900 appearance-none cursor-pointer hover:border-emerald-400 transition-colors shadow-sm">
-            <option value="all">🌍 ALL LOCATIONS</option>
-            <option value="mumbai">Mumbai</option>
-            <option value="delhi">Delhi</option>
-            <option value="bangalore">Bangalore</option>
-          </select>
-        </div>
-        
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-          {/* Beneficiaries */}
-          <div className="group relative bg-linear-to-br from-emerald-500 to-emerald-600 rounded-2xl p-5 transition-all cursor-pointer hover:shadow-2xl hover:shadow-emerald-500/40 hover:scale-105 overflow-hidden">
-            <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -mr-10 -mt-10"></div>
-            <div className="relative z-10">
-              <div className="flex items-center justify-between mb-3">
-                <Users className="w-5 h-5 text-white/80" />
-                <Sparkles className="w-4 h-4 text-emerald-200" />
-              </div>
-              <p className="text-xs text-emerald-100 font-bold mb-2 uppercase tracking-wider">Total Reach</p>
-              <p className="text-3xl font-black text-white mb-1">{beneficiaryMetrics.beneficiaries.current.toLocaleString()}</p>
-              <div className="flex items-center gap-1 text-emerald-100 text-xs font-semibold">
-                <Target className="w-3 h-3" />
-                {beneficiaryMetrics.beneficiaries.target.toLocaleString()} goal
-              </div>
-            </div>
-          </div>
-
-          {/* Pads Donated */}
-          <div className="group relative bg-white border-2 border-pink-200 hover:border-pink-400 rounded-2xl p-5 transition-all cursor-pointer hover:shadow-2xl hover:shadow-pink-500/20 hover:scale-105">
-            <div className="flex items-center justify-between mb-3">
-              <div className="p-2 bg-pink-100 rounded-lg group-hover:bg-pink-200 transition-colors">
-                <Award className="w-5 h-5 text-pink-600" />
-              </div>
-              <div className="px-2 py-1 bg-pink-50 rounded-full">
-                <ArrowUpRight className="w-3 h-3 text-pink-600" />
-              </div>
-            </div>
-            <p className="text-xs text-pink-700 font-bold mb-2 uppercase tracking-wider">Pads Donated</p>
-            <p className="text-3xl font-black text-gray-900 mb-1">{beneficiaryMetrics.pads.current.toLocaleString()}</p>
-            <p className="text-xs text-gray-500 font-semibold">of {beneficiaryMetrics.pads.target.toLocaleString()}</p>
-          </div>
-
-          {/* Meals Served */}
-          <div className="group relative bg-white border-2 border-orange-200 hover:border-orange-400 rounded-2xl p-5 transition-all cursor-pointer hover:shadow-2xl hover:shadow-orange-500/20 hover:scale-105">
-            <div className="flex items-center justify-between mb-3">
-              <div className="p-2 bg-orange-100 rounded-lg group-hover:bg-orange-200 transition-colors">
-                <Activity className="w-5 h-5 text-orange-600" />
-              </div>
-              <div className="px-2 py-1 bg-orange-50 rounded-full">
-                <Zap className="w-3 h-3 text-orange-600" />
-              </div>
-            </div>
-            <p className="text-xs text-orange-700 font-bold mb-2 uppercase tracking-wider">Meals Served</p>
-            <p className="text-3xl font-black text-gray-900 mb-1">
-              {beneficiaryMetrics.meals.current > 1000 ? `${(beneficiaryMetrics.meals.current / 1000).toFixed(0)}K` : beneficiaryMetrics.meals.current.toLocaleString()}
-            </p>
-            <p className="text-xs text-gray-500 font-semibold">
-              of {beneficiaryMetrics.meals.target > 1000 ? `${(beneficiaryMetrics.meals.target / 1000).toFixed(0)}K` : beneficiaryMetrics.meals.target.toLocaleString()}
-            </p>
-          </div>
-
-          {/* Students Enrolled */}
-          <div className="group relative bg-white border-2 border-blue-200 hover:border-blue-400 rounded-2xl p-5 transition-all cursor-pointer hover:shadow-2xl hover:shadow-blue-500/20 hover:scale-105">
-            <div className="flex items-center justify-between mb-3">
-              <div className="p-2 bg-blue-100 rounded-lg group-hover:bg-blue-200 transition-colors">
-                <Users className="w-5 h-5 text-blue-600" />
-              </div>
-              <div className="px-2 py-1 bg-blue-50 rounded-full">
-                <TrendingUp className="w-3 h-3 text-blue-600" />
-              </div>
-            </div>
-            <p className="text-xs text-blue-700 font-bold mb-2 uppercase tracking-wider">Students</p>
-            <p className="text-3xl font-black text-gray-900 mb-1">{beneficiaryMetrics.students.current.toLocaleString()}</p>
-            <p className="text-xs text-gray-500 font-semibold">of {beneficiaryMetrics.students.target.toLocaleString()}</p>
-          </div>
-
-          {/* Trees Planted */}
-          <div className="group relative bg-white border-2 border-green-200 hover:border-green-400 rounded-2xl p-5 transition-all cursor-pointer hover:shadow-2xl hover:shadow-green-500/20 hover:scale-105">
-            <div className="flex items-center justify-between mb-3">
-              <div className="p-2 bg-green-100 rounded-lg group-hover:bg-green-200 transition-colors">
-                <Sparkles className="w-5 h-5 text-green-600" />
-              </div>
-              <div className="px-2 py-1 bg-green-50 rounded-full">
-                <ArrowUpRight className="w-3 h-3 text-green-600" />
-              </div>
-            </div>
-            <p className="text-xs text-green-700 font-bold mb-2 uppercase tracking-wider">Trees Planted</p>
-            <p className="text-3xl font-black text-gray-900 mb-1">{beneficiaryMetrics.trees.current.toLocaleString()}</p>
-            <p className="text-xs text-gray-500 font-semibold">of {beneficiaryMetrics.trees.target.toLocaleString()}</p>
-          </div>
-
-          {/* Schools Renovated */}
-          <div className="group relative bg-white border-2 border-purple-200 hover:border-purple-400 rounded-2xl p-5 transition-all cursor-pointer hover:shadow-2xl hover:shadow-purple-500/20 hover:scale-105">
-            <div className="flex items-center justify-between mb-3">
-              <div className="p-2 bg-purple-100 rounded-lg group-hover:bg-purple-200 transition-colors">
-                <FolderKanban className="w-5 h-5 text-purple-600" />
-              </div>
-              <div className="px-2 py-1 bg-purple-50 rounded-full">
-                <CheckCircle2 className="w-3 h-3 text-purple-600" />
-              </div>
-            </div>
-            <p className="text-xs text-purple-700 font-bold mb-2 uppercase tracking-wider">Schools</p>
-            <p className="text-3xl font-black text-gray-900 mb-1">{beneficiaryMetrics.schools.current}</p>
-            <p className="text-xs text-gray-500 font-semibold">of {beneficiaryMetrics.schools.target}</p>
-          </div>
-        </div>
-      </motion.div>
-
-      {/* Recent Activities - Modern Timeline */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.5 }}
-        className="bg-white border border-gray-200/50 rounded-2xl shadow-lg hover:shadow-2xl hover:shadow-emerald-500/10 transition-all duration-300 overflow-hidden"
-      >
-        <div className="bg-linear-to-r from-gray-50 to-emerald-50/30 p-6 border-b border-gray-200/50">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-emerald-500 rounded-lg">
-              <Clock className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-gray-900">Activity Stream</h2>
-              <p className="text-sm text-gray-500 mt-0.5">Latest project updates</p>
-            </div>
-          </div>
-        </div>
-        <div className="divide-y divide-gray-100">
-          {recentActivities.map((activity, index) => (
-            <motion.div
-              key={activity.id}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.6 + index * 0.05 }}
-              className="group p-6 hover:bg-linear-to-r hover:from-emerald-50/50 hover:to-transparent transition-all duration-300 cursor-pointer"
-            >
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-4 flex-1">
-                  <div className={`relative p-3 rounded-xl transition-all duration-300 group-hover:scale-110 ${
-                    activity.status === 'completed' ? 'bg-emerald-100 group-hover:bg-emerald-200' :
-                    activity.status === 'pending' ? 'bg-amber-100 group-hover:bg-amber-200' :
-                    'bg-red-100 group-hover:bg-red-200'
-                  }`}>
-                    {activity.status === 'completed' ? (
-                      <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                    ) : activity.status === 'pending' ? (
-                      <Clock className="w-5 h-5 text-amber-600" />
-                    ) : (
-                      <AlertCircle className="w-5 h-5 text-red-600" />
-                    )}
-                    {activity.status === 'pending' && (
-                      <div className="absolute -top-1 -right-1 w-2 h-2 bg-amber-500 rounded-full animate-pulse"></div>
-                    )}
+                <div className="flex items-start gap-6 mb-6">
+                  <div className="p-4 bg-emerald-100 rounded-xl">
+                    <FolderKanban className="w-8 h-8 text-emerald-600" />
                   </div>
                   <div className="flex-1">
-                    <h3 className="font-bold text-gray-900 group-hover:text-emerald-600 transition-colors">{activity.project}</h3>
-                    <p className="text-sm text-gray-600 mt-0.5 font-medium">{activity.action}</p>
+                    <h2 className="text-3xl font-bold text-gray-900 mb-2">{selectedProjectData.name}</h2>
+                    <div className="flex flex-wrap gap-3">
+                      <span className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-100 text-emerald-700 rounded-full font-semibold text-sm">
+                        <CheckCircle2 className="w-4 h-4" />
+                        {selectedProjectData.status || 'Active'}
+                      </span>
+                      {selectedPartnerObject && (
+                        <span className="inline-flex items-center gap-2 px-4 py-2 bg-blue-100 text-blue-700 rounded-full font-semibold text-sm">
+                          <Building2 className="w-4 h-4" />
+                          {selectedPartnerObject.name}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 rounded-full group-hover:bg-emerald-100 transition-colors">
-                    <Calendar className="w-3.5 h-3.5 text-gray-500 group-hover:text-emerald-600" />
-                    <span className="text-xs font-semibold text-gray-600 group-hover:text-emerald-700">{activity.time}</span>
-                  </div>
-                  <ArrowUpRight className="w-4 h-4 text-gray-400 group-hover:text-emerald-600 transition-colors" />
+
+                {/* Description */}
+                <div className="bg-gray-50 rounded-xl p-6 mb-8">
+                  <h3 className="font-bold text-gray-900 mb-3 text-lg">Project Overview</h3>
+                  <p className="text-gray-700 leading-relaxed">{selectedProjectData.description}</p>
                 </div>
-              </div>
-            </motion.div>
-          ))}
-        </div>
-      </motion.div>
+
+                {/* Beneficiary Stats */}
+                <h3 className="font-bold text-gray-900 mb-4 text-lg">Impact Metrics</h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  {/* Total Beneficiaries */}
+                  <div className="bg-emerald-50 border-2 border-emerald-200 rounded-xl p-4 hover:shadow-lg transition-all">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Users className="w-5 h-5 text-emerald-600" />
+                      <span className="text-xs font-bold text-emerald-700 uppercase">Total Reach</span>
+                    </div>
+                    <p className="text-2xl font-black text-emerald-900">
+                      {selectedProjectData.beneficiaryStats?.totalBeneficiaries.toLocaleString() || '0'}
+                    </p>
+                  </div>
+
+                  {/* Meals Served */}
+                  {(selectedProjectData.beneficiaryStats?.mealsServed || 0) > 0 && (
+                    <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-4 hover:shadow-lg transition-all">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Activity className="w-5 h-5 text-orange-600" />
+                        <span className="text-xs font-bold text-orange-700 uppercase">Meals</span>
+                      </div>
+                      <p className="text-2xl font-black text-orange-900">
+                        {((selectedProjectData.beneficiaryStats?.mealsServed || 0) / 1000).toFixed(1)}K
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Pads Distributed */}
+                  {(selectedProjectData.beneficiaryStats?.padsDistributed || 0) > 0 && (
+                    <div className="bg-pink-50 border-2 border-pink-200 rounded-xl p-4 hover:shadow-lg transition-all">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Award className="w-5 h-5 text-pink-600" />
+                        <span className="text-xs font-bold text-pink-700 uppercase">Pads</span>
+                      </div>
+                      <p className="text-2xl font-black text-pink-900">
+                        {((selectedProjectData.beneficiaryStats?.padsDistributed || 0) / 1000).toFixed(0)}K
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Students Enrolled */}
+                  {(selectedProjectData.beneficiaryStats?.studentsEnrolled || 0) > 0 && (
+                    <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4 hover:shadow-lg transition-all">
+                      <div className="flex items-center gap-2 mb-2">
+                        <GraduationCap className="w-5 h-5 text-blue-600" />
+                        <span className="text-xs font-bold text-blue-700 uppercase">Students</span>
+                      </div>
+                      <p className="text-2xl font-black text-blue-900">
+                        {(selectedProjectData.beneficiaryStats?.studentsEnrolled || 0).toLocaleString()}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Trees Planted */}
+                  {(selectedProjectData.beneficiaryStats?.treesPlanted || 0) > 0 && (
+                    <div className="bg-green-50 border-2 border-green-200 rounded-xl p-4 hover:shadow-lg transition-all">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Leaf className="w-5 h-5 text-green-600" />
+                        <span className="text-xs font-bold text-green-700 uppercase">Trees</span>
+                      </div>
+                      <p className="text-2xl font-black text-green-900">
+                        {((selectedProjectData.beneficiaryStats?.treesPlanted || 0) / 1000).toFixed(0)}K
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Schools Renovated */}
+                  {(selectedProjectData.beneficiaryStats?.schoolsRenovated || 0) > 0 && (
+                    <div className="bg-purple-50 border-2 border-purple-200 rounded-xl p-4 hover:shadow-lg transition-all">
+                      <div className="flex items-center gap-2 mb-2">
+                        <FolderKanban className="w-5 h-5 text-purple-600" />
+                        <span className="text-xs font-bold text-purple-700 uppercase">Schools</span>
+                      </div>
+                      <p className="text-2xl font-black text-purple-900">
+                        {selectedProjectData.beneficiaryStats?.schoolsRenovated || '0'}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+
+              {/* Additional Info */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="bg-white border-2 border-gray-200 rounded-2xl p-8 shadow-lg"
+              >
+                <h3 className="font-bold text-gray-900 mb-6 text-lg">Project Information</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <p className="text-sm text-gray-600 font-semibold mb-2">PROJECT ID</p>
+                    <p className="text-gray-900 font-bold">{selectedProjectData.id}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600 font-semibold mb-2">STATUS</p>
+                    <p className="text-gray-900 font-bold">{selectedProjectData.status || 'Active'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600 font-semibold mb-2">LOCATION</p>
+                    <p className="text-gray-900 font-bold flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-emerald-600" />
+                      {selectedProjectData.location || 'India'}
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

@@ -130,7 +130,7 @@ interface SidebarProps {
 
 const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'accountant', 'project_manager'] },
-  { id: 'csr-partners', label: 'CSR Partners', icon: Briefcase, roles: ['admin', 'accountant', 'project_manager'] },
+  { id: 'csr-partners', label: 'CSR Partners', icon: Briefcase, roles: ['admin', 'accountant'] },
   { id: 'projects', label: 'Projects', icon: Briefcase, roles: ['admin', 'accountant', 'project_manager'] },
   { id: 'todo', label: 'To-Do List Assignment', icon: CheckSquare, roles: ['admin', 'accountant', 'project_manager'] },
   { id: 'real-time-update', label: 'Real Time Update', icon: RefreshCw, roles: ['admin', 'project_manager'] },
@@ -300,8 +300,8 @@ const Sidebar = ({ children, currentPage, onNavigate }: SidebarProps) => {
           </h2>
         </header>
         
-        {/* Filter Bar - Show on dashboard and related pages */}
-        {['dashboard', 'csr-partners', 'project-expenses', 'csr-budget', 'analysis-report'].includes(currentPage) && (
+        {/* Filter Bar - Show on related pages (but NOT dashboard since PMDashboard has its own) */}
+        {['csr-partners', 'project-expenses', 'csr-budget', 'analysis-report'].includes(currentPage) && (
           <FilterBar />
         )}
         

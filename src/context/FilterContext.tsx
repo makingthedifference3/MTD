@@ -64,9 +64,14 @@ export const FilterProvider = ({ children }: { children: ReactNode }) => {
   // Filter projects based on selected partner
   useEffect(() => {
     if (selectedPartner) {
+      console.log('FilterContext - Filtering with selectedPartner:', selectedPartner);
+      console.log('FilterContext - Total projects available:', projects.length);
+      console.log('FilterContext - Sample project csr_partner_ids:', projects.slice(0, 3).map(p => ({ name: p.name, csr_partner_id: p.csr_partner_id })));
       const filtered = projects.filter((p) => p.csr_partner_id === selectedPartner);
+      console.log('FilterContext - Filtered projects:', filtered.length);
       setFilteredProjects(filtered);
     } else {
+      console.log('FilterContext - No partner selected, showing all projects:', projects.length);
       setFilteredProjects(projects);
     }
   }, [selectedPartner, projects]);
