@@ -133,19 +133,19 @@ const menuItems = [
   { id: 'csr-partners', label: 'CSR Partners', icon: Briefcase, roles: ['admin', 'accountant'] },
   { id: 'projects', label: 'Projects', icon: Briefcase, roles: ['admin', 'accountant', 'project_manager'] },
   { id: 'todo', label: 'To-Do List Assignment', icon: CheckSquare, roles: ['admin', 'accountant', 'project_manager'] },
-  { id: 'real-time-update', label: 'Real Time Update', icon: RefreshCw, roles: ['admin', 'project_manager'] },
-  { id: 'media', label: 'Media', icon: Image, roles: ['admin', 'project_manager'] },
-  { id: 'article', label: 'Article', icon: FileText, roles: ['admin', 'project_manager'] },
-  { id: 'team-members', label: 'Team Members', icon: Users, roles: ['admin', 'project_manager'] },
-  { id: 'dashboard-forms', label: 'Dashboard Forms', icon: FileSpreadsheet, roles: ['admin', 'project_manager', 'team_member'] },
+  { id: 'real-time-update', label: 'Real Time Update', icon: RefreshCw, roles: ['admin', 'accountant', 'project_manager'] },
+  { id: 'media', label: 'Media', icon: Image, roles: ['admin', 'accountant', 'project_manager'] },
+  { id: 'article', label: 'Article', icon: FileText, roles: ['admin', 'accountant', 'project_manager'] },
+  { id: 'team-members', label: 'Team Members', icon: Users, roles: ['admin', 'accountant', 'project_manager'] },
+  { id: 'dashboard-forms', label: 'Dashboard Forms', icon: FileSpreadsheet, roles: ['admin', 'accountant', 'project_manager', 'team_member'] },
   { id: 'calendar', label: 'Calendar', icon: Calendar, roles: ['admin', 'accountant', 'project_manager', 'team_member'] },
   { id: 'project-expenses', label: 'Project Expenses', icon: DollarSign, roles: ['admin', 'accountant', 'project_manager', 'team_member'] },
-  { id: 'daily-report', label: 'Daily Report', icon: ClipboardList, roles: ['admin', 'project_manager', 'team_member'] },
-  { id: 'data-entry', label: 'Data Entry', icon: Database, roles: ['admin', 'project_manager', 'team_member'] },
+  { id: 'daily-report', label: 'Daily Report', icon: ClipboardList, roles: ['admin', 'accountant', 'project_manager', 'team_member'] },
+  { id: 'data-entry', label: 'Data Entry', icon: Database, roles: ['admin', 'accountant', 'project_manager', 'team_member'] },
   { id: 'csr-budget', label: 'CSR Budget', icon: CreditCard, roles: ['admin', 'accountant'] },
   { id: 'upcoming-expenses', label: 'Upcoming Expenses', icon: TrendingUp, roles: ['admin', 'accountant', 'project_manager'] },
-  { id: 'bills', label: 'Bills', icon: Receipt, roles: ['admin', 'project_manager', 'team_member'] },
-  { id: 'analysis-report', label: 'Analysis Report', icon: BarChart3, roles: ['admin', 'project_manager'] },
+  { id: 'bills', label: 'Bills', icon: Receipt, roles: ['admin', 'accountant', 'project_manager', 'team_member'] },
+  { id: 'analysis-report', label: 'Analysis Report', icon: BarChart3, roles: ['admin', 'accountant', 'project_manager'] },
   { id: 'tasks', label: 'My Tasks', icon: CheckSquare, roles: ['team_member'] },
   // Admin Only
   { id: 'user-management', label: 'User Management', icon: Users, roles: ['admin'] },
@@ -300,8 +300,8 @@ const Sidebar = ({ children, currentPage, onNavigate }: SidebarProps) => {
           </h2>
         </header>
         
-        {/* Filter Bar - Show on related pages (but NOT dashboard since PMDashboard has its own) */}
-        {['csr-partners', 'project-expenses', 'csr-budget', 'analysis-report'].includes(currentPage) && (
+        {/* Filter Bar - Show on related pages (but NOT on dashboard pages since they have their own FilterBar) */}
+        {!['dashboard'].includes(currentPage) && ['csr-partners', 'project-expenses', 'csr-budget', 'analysis-report'].includes(currentPage) && (
           <FilterBar />
         )}
         
