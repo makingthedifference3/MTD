@@ -52,6 +52,8 @@ export const FilterProvider = ({ children }: { children: ReactNode }) => {
     const loadAllProjects = async () => {
       try {
         const allProjects = await fetchAllProjects();
+        console.log('FilterContext - LoadAllProjects returned:', allProjects.length, 'projects');
+        console.log('FilterContext - Sample projects:', allProjects.slice(0, 3).map(p => ({ id: p.id, name: p.name, status: p.status, direct_beneficiaries: p.direct_beneficiaries, total_budget: p.total_budget })));
         setProjects(allProjects);
       } catch (err) {
         console.error('Failed to load projects:', err);
