@@ -26,6 +26,7 @@ import CSRPartnersPage from './pages/CSRPartnersPage';
 import ProjectsPage from './pages/ProjectsPage';
 import UserAssignmentPage from './pages/UserAssignmentPage';
 import UserManagementPage from './pages/UserManagementPage';
+import UtilizationCertificatePage from './pages/UtilizationCertificatePage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { currentUser } = useAuth();
@@ -130,6 +131,16 @@ function AppRoutes() {
           <ProtectedRoute>
             <Sidebar currentPage="csr-partners" onNavigate={() => {}}>
               <CSRPartnersPage />
+            </Sidebar>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/utilization-certificate"
+        element={
+          <ProtectedRoute>
+            <Sidebar currentPage="utilization-certificate" onNavigate={() => {}}>
+              <UtilizationCertificatePage />
             </Sidebar>
           </ProtectedRoute>
         }

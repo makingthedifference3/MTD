@@ -116,7 +116,7 @@ import type { ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Menu, X, LogOut, LayoutDashboard, Briefcase, CheckSquare, Image, FileText, Users, Calendar,
-  DollarSign, Receipt, CreditCard, BarChart3, FileSpreadsheet, RefreshCw, ClipboardList, Database, TrendingUp
+  DollarSign, Receipt, CreditCard, BarChart3, FileSpreadsheet, RefreshCw, ClipboardList, Database, TrendingUp, FileCheck
 } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -143,6 +143,7 @@ const menuItems = [
   { id: 'daily-report', label: 'Daily Report', icon: ClipboardList, roles: ['admin', 'accountant', 'project_manager', 'team_member'] },
   { id: 'data-entry', label: 'Data Entry', icon: Database, roles: ['admin', 'project_manager', 'team_member'] },
   { id: 'csr-budget', label: 'CSR Budget', icon: CreditCard, roles: ['admin', 'accountant'] },
+  { id: 'utilization-certificate', label: 'Utilization Certificate', icon: FileCheck, roles: ['accountant'] },
   { id: 'upcoming-expenses', label: 'Upcoming Expenses', icon: TrendingUp, roles: ['admin', 'project_manager'] },
   { id: 'bills', label: 'Bills', icon: Receipt, roles: ['admin', 'project_manager', 'team_member'] },
   { id: 'analysis-report', label: 'Analysis Report', icon: BarChart3, roles: ['admin', 'project_manager'] },
@@ -176,6 +177,7 @@ const Sidebar = ({ children, currentPage, onNavigate }: SidebarProps) => {
     'daily-report': '/daily-report',
     'data-entry': '/data-entry',
     'csr-budget': '/csr-budget',
+    'utilization-certificate': '/utilization-certificate',
     'upcoming-expenses': '/upcoming-expenses',
     'bills': '/bills',
     'analysis-report': '/analysis-report',
@@ -301,7 +303,7 @@ const Sidebar = ({ children, currentPage, onNavigate }: SidebarProps) => {
         </header>
         
         {/* Filter Bar - Show on related pages (but NOT on dashboard pages since they have their own FilterBar) */}
-        {!['dashboard'].includes(currentPage) && ['csr-partners', 'project-expenses', 'csr-budget', 'analysis-report'].includes(currentPage) && (
+        {!['dashboard'].includes(currentPage) && ['csr-partners', 'analysis-report'].includes(currentPage) && (
           <FilterBar />
         )}
         
