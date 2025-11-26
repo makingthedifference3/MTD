@@ -243,7 +243,7 @@ const ProjectExpenses: React.FC = () => {
     }
 
     try {
-      const expenseData: Omit<ProjectExpense, 'id' | 'created_at' | 'updated_at'> = {
+      const expenseData: Omit<ProjectExpense, 'id' | 'created_at' | 'updated_at'> & { bill_drive_link?: string } = {
         expense_code: `EXP-${Date.now()}`,
         project_id: newExpense.project_id,
         category_id: validCategoryId, // Use the validated category ID
@@ -260,7 +260,7 @@ const ProjectExpenses: React.FC = () => {
 
       // Add bill_drive_link if provided
       if (newExpense.bill_drive_link) {
-        (expenseData as any).bill_drive_link = newExpense.bill_drive_link;
+        expenseData.bill_drive_link = newExpense.bill_drive_link;
       }
 
       console.log('Submitting expense with data:', expenseData);
@@ -603,11 +603,11 @@ const ProjectExpenses: React.FC = () => {
                   <p className="text-red-700 mt-1">{selectedExpense.rejection_reason}</p>
                 </div>
               )}
-              {(selectedExpense as any).bill_drive_link && (
+              {(selectedExpense as ProjectExpense & { bill_drive_link?: string }).bill_drive_link && (
                 <div>
                   <label className="text-sm font-medium text-gray-600">Bill Link</label>
                   <a 
-                    href={(selectedExpense as any).bill_drive_link} 
+                    href={(selectedExpense as ProjectExpense & { bill_drive_link?: string }).bill_drive_link} 
                     target="_blank" 
                     rel="noopener noreferrer"
                     className="text-emerald-600 hover:text-emerald-700 mt-1 block"
