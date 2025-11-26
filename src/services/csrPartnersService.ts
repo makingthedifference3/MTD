@@ -4,9 +4,9 @@ export interface CSRPartner {
   id: string;
   name: string;
   company_name: string;
-  registration_number: string;
-  pan_number: string;
-  gst_number: string;
+  registration_number: string | null;
+  pan_number: string | null;
+  gst_number: string | null;
   contact_person: string;
   designation: string;
   email: string;
@@ -35,8 +35,8 @@ export interface CSRPartner {
   metadata: Record<string, string | number>;
   created_at: string;
   updated_at: string;
-  created_by: string;
-  updated_by: string;
+  created_by: string | null;
+  updated_by: string | null;
 }
 
 export interface CSRPartnerStats {
@@ -163,20 +163,19 @@ export const getCSRPartnersByState = async (state: string): Promise<CSRPartner[]
  */
 export const createCSRPartner = async (
   data: Omit<CSRPartner, 'id' | 'created_at' | 'updated_at'>
-): Promise<CSRPartner | null> => {
-  try {
-    const { data: result, error } = await supabase
-      .from('csr_partners')
-      .insert([data])
-      .select()
-      .single();
+): Promise<CSRPartner> => {
+  const { data: result, error } = await supabase
+    .from('csr_partners')
+    .insert([data])
+    .select()
+    .single();
 
-    if (error) throw error;
-    return result;
-  } catch (error) {
+  if (error) {
     console.error('Error creating CSR partner:', error);
-    return null;
+    throw new Error(error.message || 'Unable to create CSR partner');
   }
+
+  return result as CSRPartner;
 };
 
 /**

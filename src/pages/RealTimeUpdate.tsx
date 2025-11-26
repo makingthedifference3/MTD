@@ -1,14 +1,18 @@
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { Activity, Bell, TrendingUp } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Activity, Bell, TrendingUp, Plus, X } from 'lucide-react';
 import { realTimeUpdatesService } from '../services/realTimeUpdatesService';
 import type { RealTimeUpdateWithDetails, UpdateStats } from '../services/realTimeUpdatesService';
 import { useFilter } from '../context/useFilter';
+import { supabase } from '../services/supabaseClient';
+import FilterBar from '../components/FilterBar';
 
 const RealTimeUpdate = () => {
-  const { selectedProject } = useFilter();
+  const { selectedProject, selectedPartner, projects, filteredProjects, csrPartners } = useFilter();
   const [allUpdates, setAllUpdates] = useState<RealTimeUpdateWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [stats, setStats] = useState<UpdateStats>({
     total: 0,
     progress: 0,
@@ -20,10 +24,97 @@ const RealTimeUpdate = () => {
     lowPriority: 0,
   });
 
+  // Form state
+  const [formData, setFormData] = useState({
+    partnerId: selectedPartner || '',
+    projectId: selectedProject || '',
+    title: '',
+    description: '',
+    updateType: 'Progress',
+    schoolName: '',
+    address: '',
+    city: '',
+    state: '',
+    isPublic: true,
+    isSentToClient: false,
+  });
+
+  // Load updates on mount and when project or partner changes
   useEffect(() => {
     loadUpdates();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedProject]);
+  }, [selectedProject, selectedPartner]);
+
+  const handleAddUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!formData.projectId || !formData.title || !formData.description) {
+      alert('Please fill in all required fields');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+
+      // Generate unique update code using timestamp and random number
+      const timestamp = Date.now().toString(36).toUpperCase();
+      const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+      const updateCode = `UPDATE-${timestamp}-${random}`;
+
+      // Insert into Supabase
+      const { error } = await supabase
+        .from('real_time_updates')
+        .insert([
+          {
+            update_code: updateCode,
+            project_id: formData.projectId,
+            title: formData.title,
+            description: formData.description,
+            update_type: formData.updateType,
+            school_name: formData.schoolName || null,
+            address: formData.address || null,
+            city: formData.city || null,
+            state: formData.state || null,
+            is_public: formData.isPublic,
+            is_sent_to_client: formData.isSentToClient,
+            images: [],
+            videos: {},
+            documents: {},
+            impact_data: {},
+            metrics: {},
+            date: new Date().toISOString(),
+          }
+        ]);
+
+      if (error) {
+        console.error('Error creating update:', error);
+        alert('Failed to create update: ' + error.message);
+        return;
+      }
+
+      // Reset form and reload
+      setFormData({
+        partnerId: selectedPartner || '',
+        projectId: selectedProject || '',
+        title: '',
+        description: '',
+        updateType: 'Progress',
+        schoolName: '',
+        address: '',
+        city: '',
+        state: '',
+        isPublic: true,
+        isSentToClient: false,
+      });
+      setShowModal(false);
+      loadUpdates();
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Failed to create update');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const loadUpdates = async () => {
     try {
@@ -31,8 +122,15 @@ const RealTimeUpdate = () => {
       let data;
 
       if (selectedProject) {
+        // Show updates for selected project
         data = await realTimeUpdatesService.getUpdatesByProject(selectedProject);
+      } else if (selectedPartner) {
+        // Show updates for selected partner (filtered projects)
+        const partnerProjectIds = filteredProjects.map(p => p.id);
+        data = await realTimeUpdatesService.getAllUpdates();
+        data = data.filter(u => partnerProjectIds.includes(u.project_id));
       } else {
+        // Show all updates
         data = await realTimeUpdatesService.getAllUpdates();
       }
 
@@ -104,10 +202,24 @@ const RealTimeUpdate = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Real-Time Updates</h1>
-        <p className="text-gray-600 mt-2">Live feed of project activities and notifications</p>
+      {/* FilterBar */}
+      <div className="mb-6">
+        <FilterBar />
+      </div>
+
+      {/* Header with Add Button */}
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Real-Time Updates</h1>
+          <p className="text-gray-600 mt-2">Live feed of project activities and notifications</p>
+        </div>
+        <button
+          onClick={() => setShowModal(true)}
+          className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-lg font-medium flex items-center space-x-2 transition-colors"
+        >
+          <Plus className="w-5 h-5" />
+          <span>New Update</span>
+        </button>
       </div>
 
       {/* Stats Grid */}
@@ -201,6 +313,244 @@ const RealTimeUpdate = () => {
           </motion.div>
         ))}
       </div>
+
+      {/* New Update Modal */}
+      <AnimatePresence>
+        {showModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto"
+            onClick={() => setShowModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-3xl p-8 max-w-2xl w-full shadow-2xl border border-gray-100 my-8 max-h-[90vh] overflow-y-auto"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">Add New Update</h2>
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <X className="w-6 h-6 text-gray-500" />
+                </button>
+              </div>
+
+              {/* Form */}
+              <form onSubmit={handleAddUpdate} className="space-y-4">
+                {/* CSR Partner Selection */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    CSR Partner
+                  </label>
+                  <select
+                    value={formData.partnerId}
+                    onChange={(e) => {
+                      setFormData({ ...formData, partnerId: e.target.value, projectId: '' });
+                    }}
+                    className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all bg-white"
+                  >
+                    <option value="">All Partners</option>
+                    {csrPartners.map((partner) => (
+                      <option key={partner.id} value={partner.id}>
+                        {partner.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Project Selection */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Project <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={formData.projectId}
+                    onChange={(e) => setFormData({ ...formData, projectId: e.target.value })}
+                    className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all bg-white"
+                    required
+                  >
+                    <option value="">Select a project</option>
+                    {formData.partnerId
+                      ? projects
+                          .filter(p => p.csr_partner_id === formData.partnerId)
+                          .map((project) => (
+                            <option key={project.id} value={project.id}>
+                              {project.name}
+                            </option>
+                          ))
+                      : projects.map((project) => (
+                          <option key={project.id} value={project.id}>
+                            {project.name}
+                          </option>
+                        ))
+                    }
+                  </select>
+                </div>
+
+                {/* Update Type */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Update Type <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={formData.updateType}
+                    onChange={(e) => setFormData({ ...formData, updateType: e.target.value })}
+                    className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all bg-white"
+                  >
+                    <option value="Progress">Progress</option>
+                    <option value="Achievement">Achievement</option>
+                    <option value="Milestone">Milestone</option>
+                    <option value="Issue">Issue</option>
+                  </select>
+                </div>
+
+                {/* Title */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Title <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.title}
+                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                    placeholder="e.g., LAJJA Kit Distribution Drive"
+                    className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all"
+                    required
+                  />
+                </div>
+
+                {/* Description */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Description <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    placeholder="Detailed description of the update..."
+                    className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all resize-none"
+                    rows={4}
+                    required
+                  />
+                </div>
+
+                {/* School Name */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    School Name
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.schoolName}
+                    onChange={(e) => setFormData({ ...formData, schoolName: e.target.value })}
+                    placeholder="e.g., St. Mary's School"
+                    className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all"
+                  />
+                </div>
+
+                {/* Address */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Address
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.address}
+                      onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                      placeholder="Street address"
+                      className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      City
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.city}
+                      onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                      placeholder="City"
+                      className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all"
+                    />
+                  </div>
+                </div>
+
+                {/* State */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    State
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.state}
+                    onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                    placeholder="State"
+                    className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all"
+                  />
+                </div>
+
+                {/* Checkboxes */}
+                <div className="grid grid-cols-2 gap-4">
+                  <label className="flex items-center space-x-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.isPublic}
+                      onChange={(e) => setFormData({ ...formData, isPublic: e.target.checked })}
+                      className="w-4 h-4 rounded border-gray-300 text-emerald-500 focus:ring-emerald-500"
+                    />
+                    <span className="text-sm font-medium text-gray-700">Make Public</span>
+                  </label>
+                  <label className="flex items-center space-x-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.isSentToClient}
+                      onChange={(e) => setFormData({ ...formData, isSentToClient: e.target.checked })}
+                      className="w-4 h-4 rounded border-gray-300 text-emerald-500 focus:ring-emerald-500"
+                    />
+                    <span className="text-sm font-medium text-gray-700">Send to Client</span>
+                  </label>
+                </div>
+
+                {/* Buttons */}
+                <div className="flex gap-4 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowModal(false)}
+                    className="flex-1 px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-900 font-medium rounded-xl transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="flex-1 px-6 py-3 bg-emerald-500 hover:bg-emerald-600 disabled:bg-gray-400 text-white font-medium rounded-xl transition-colors flex items-center justify-center space-x-2"
+                  >
+                    {submitting ? (
+                      <>
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                        <span>Creating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-5 h-5" />
+                        <span>Create Update</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

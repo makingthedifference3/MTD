@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Download, Calendar, Loader, X, FileText } from 'lucide-react';
+import { Plus, Download, Calendar, Loader, FileText } from 'lucide-react';
 import { type Task } from '@/services/tasksService';
 import { getUserById } from '@/services/usersService';
 import { projectService } from '@/services/projectService';
-import { useAuth } from '@/context/useAuth';
 import { supabase } from '@/services/supabaseClient';
 import * as taskService from '@/services/taskService';
 import * as XLSX from 'xlsx';
@@ -17,27 +16,11 @@ interface TaskWithUser extends Task {
   projectName?: string;
 }
 
-interface DailyReportStats {
-  totalTasks: number;
-  completedTasks: number;
-  inProgressTasks: number;
-  notStartedTasks: number;
-  blockedTasks: number;
-}
-
 const DailyReportPage = () => {
-  const { currentUser } = useAuth();
   const today = new Date().toISOString().split('T')[0];
   const [dateRange, setDateRange] = useState({ start: today, end: today });
   const [showExportOptions, setShowExportOptions] = useState(false);
   const [tasks, setTasks] = useState<TaskWithUser[]>([]);
-  const [stats, setStats] = useState<DailyReportStats>({
-    totalTasks: 0,
-    completedTasks: 0,
-    inProgressTasks: 0,
-    notStartedTasks: 0,
-    blockedTasks: 0,
-  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -131,24 +114,12 @@ const DailyReportPage = () => {
       );
       
       setTasks(tasksWithDetails);
-      calculateStats(tasksWithDetails);
     } catch (err) {
       setError('Failed to load task data');
       console.error('Error fetching task data:', err);
     } finally {
       setLoading(false);
     }
-  };
-
-  const calculateStats = (taskList: TaskWithUser[]) => {
-    // All tasks are completed, so we just show the total
-    setStats({
-      totalTasks: taskList.length,
-      completedTasks: taskList.length,
-      inProgressTasks: 0,
-      notStartedTasks: 0,
-      blockedTasks: 0,
-    });
   };
 
   const handleApplyDateRange = () => {

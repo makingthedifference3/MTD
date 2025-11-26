@@ -1,4 +1,4 @@
-import { createContext, useState, useEffect, type ReactNode } from 'react';
+import { createContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import type { CSRPartner, Project } from '../services/filterService';
 import { fetchCSRPartners, fetchAllProjects } from '../services/filterService';
 
@@ -13,6 +13,7 @@ interface FilterContextType {
   setSelectedPartner: (partnerId: string | null) => void;
   setSelectedProject: (projectId: string | null) => void;
   resetFilters: () => void;
+  refreshData: () => Promise<void>;
 }
 
 const FilterContext = createContext<FilterContextType | undefined>(undefined);
@@ -83,6 +84,25 @@ export const FilterProvider = ({ children }: { children: ReactNode }) => {
     setSelectedProject(null);
   };
 
+  // Refresh data from the server
+  const refreshData = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const [partners, allProjects] = await Promise.all([
+        fetchCSRPartners(),
+        fetchAllProjects(),
+      ]);
+      setCSRPartners(partners);
+      setProjects(allProjects);
+    } catch (err) {
+      console.error('Failed to refresh data:', err);
+      setError('Failed to refresh data');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   return (
     <FilterContext.Provider
       value={{
@@ -96,6 +116,7 @@ export const FilterProvider = ({ children }: { children: ReactNode }) => {
         setSelectedPartner,
         setSelectedProject,
         resetFilters,
+        refreshData,
       }}
     >
       {children}

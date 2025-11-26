@@ -48,7 +48,7 @@ interface ProjectWithBeneficiaries extends Project {
   utilized_budget?: number;
 }
 
-const PMDashboard = () => {
+const PMDashboardInner = () => {
   const {
     csrPartners,
     selectedPartner,
@@ -122,7 +122,7 @@ const PMDashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-gray-50 via-emerald-50/20 to-gray-50 p-4 md:p-8">
+    <>
       {/* Header */}
       <motion.div 
         initial={{ opacity: 0, y: -20 }}
@@ -789,8 +789,15 @@ const PMDashboard = () => {
           </AnimatePresence>
         </>
       )}
-    </div>
+    </>
   );
 };
 
+const PMDashboard = () => (
+  <div className="min-h-screen bg-linear-to-br from-gray-50 via-emerald-50/20 to-gray-50 p-4 md:p-8">
+    <PMDashboardInner />
+  </div>
+);
+
+export { PMDashboardInner };
 export default PMDashboard;
