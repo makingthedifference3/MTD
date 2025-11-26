@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Plus, Download, Calendar, Loader, X, FileText } from 'lucide-react';
 import { type Task } from '@/services/tasksService';
 import { getUserById } from '@/services/usersService';
 import { projectService } from '@/services/projectService';
-import { createDailyReport } from '@/services/dailyReportsService';
 import { useAuth } from '@/context/useAuth';
 import { supabase } from '@/services/supabaseClient';
 import * as taskService from '@/services/taskService';
