@@ -1,16 +1,26 @@
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ChevronLeft, ChevronRight, Calendar, X, User, Clock } from 'lucide-react';
 import { getAllTasks, type Task } from '@/services/tasksService';
+import { getUserById } from '@/services/usersService';
+
+interface TaskWithUser extends Task {
+  assignedByName?: string;
+  assignedToName?: string;
+}
 
 const CalendarPage = () => {
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('calendar');
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const [tasks, setTasks] = useState<TaskWithUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  const [dayModalOpen, setDayModalOpen] = useState(false);
+  const [upcomingPage, setUpcomingPage] = useState(0);
+  const ITEMS_PER_PAGE = 4;
 
-  // Fetch tasks and stats on component mount
+  // Fetch tasks and user names on component mount
   useEffect(() => {
     const fetchTasksData = async () => {
       try {
@@ -19,7 +29,32 @@ const CalendarPage = () => {
 
         // Get all tasks
         const allTasks = await getAllTasks();
-        setTasks(allTasks);
+        
+        // Fetch user names for assigned_by and assigned_to
+        const tasksWithUsers = await Promise.all(
+          allTasks.map(async (task) => {
+            let assignedByName = 'N/A';
+            let assignedToName = 'N/A';
+            
+            if (task.assigned_by) {
+              const assignedByUser = await getUserById(task.assigned_by);
+              assignedByName = assignedByUser?.full_name || 'Unknown';
+            }
+            
+            if (task.assigned_to) {
+              const assignedToUser = await getUserById(task.assigned_to);
+              assignedToName = assignedToUser?.full_name || 'Unknown';
+            }
+            
+            return {
+              ...task,
+              assignedByName,
+              assignedToName,
+            };
+          })
+        );
+        
+        setTasks(tasksWithUsers);
       } catch (err) {
         console.error('Error fetching tasks data:', err);
         setError('Failed to load tasks');
@@ -32,6 +67,21 @@ const CalendarPage = () => {
     fetchTasksData();
   }, []);
 
+  // Get upcoming tasks (future tasks only)
+  const getUpcomingTasks = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    return tasks
+      .filter((task) => {
+        if (!task.due_date) return false;
+        const dueDate = new Date(task.due_date);
+        dueDate.setHours(0, 0, 0, 0);
+        return dueDate >= today;
+      })
+      .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
+  };
+
   // Get tasks for a specific day
   const getTasksForDay = (day: number) => {
     return tasks.filter((task) => {
@@ -43,6 +93,14 @@ const CalendarPage = () => {
         dueDate.getFullYear() === currentMonth.getFullYear()
       );
     });
+  };
+
+  const handleDayClick = (day: number) => {
+    const dayTasks = getTasksForDay(day);
+    if (dayTasks.length > 0) {
+      setSelectedDay(day);
+      setDayModalOpen(true);
+    }
   };
 
   // Get days in current month
@@ -110,6 +168,13 @@ const CalendarPage = () => {
   const daysInMonth = getDaysInMonth(currentMonth);
   const firstDay = getFirstDayOfMonth(currentMonth);
   const monthName = currentMonth.toLocaleString('default', { month: 'long', year: 'numeric' });
+  
+  const upcomingTasks = getUpcomingTasks();
+  const paginatedUpcomingTasks = upcomingTasks.slice(
+    upcomingPage * ITEMS_PER_PAGE,
+    (upcomingPage + 1) * ITEMS_PER_PAGE
+  );
+  const totalPages = Math.ceil(upcomingTasks.length / ITEMS_PER_PAGE);
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
@@ -167,21 +232,26 @@ const CalendarPage = () => {
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: index * 0.05 }}
-                      className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                      className="bg-white border border-gray-200 rounded-lg p-5 hover:shadow-md transition-shadow"
                     >
-                      <div className="flex items-start justify-between">
+                      <div className="flex items-start justify-between mb-3">
                         <div className="flex-1">
-                          <h3 className="font-bold text-gray-900 mb-3">{task.title}</h3>
+                          <h3 className="font-bold text-gray-900 mb-2 text-lg">{task.title}</h3>
+                          {task.description && (
+                            <p className="text-gray-600 text-sm mb-3 leading-relaxed">{task.description}</p>
+                          )}
                           <div className="flex flex-wrap gap-2">
-                            <span className="px-3 py-1 rounded-full text-xs font-medium bg-emerald-500 text-white">
-                              DUE DATE: {task.due_date ? new Date(task.due_date).toLocaleDateString() : 'N/A'}
+                            <span className="px-3 py-1 rounded-full text-xs font-medium bg-emerald-500 text-white flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {task.due_date ? new Date(task.due_date).toLocaleDateString() : 'N/A'}
                             </span>
                             <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusBadgeColor(task.status)}`}>
                               {formatStatus(task.status)}
                             </span>
-                            {task.assigned_by && (
-                              <span className="px-3 py-1 rounded-full text-xs font-medium border border-gray-300 text-gray-700">
-                                ASSIGN BY: {task.assigned_by}
+                            {task.assignedByName && (
+                              <span className="px-3 py-1 rounded-full text-xs font-medium bg-blue-50 border border-blue-300 text-blue-700 flex items-center gap-1">
+                                <User className="w-3 h-3" />
+                                Assigned by: {task.assignedByName}
                               </span>
                             )}
                           </div>
@@ -196,38 +266,70 @@ const CalendarPage = () => {
             <div className="space-y-6">
               {/* Task List Above Calendar */}
               <div className="bg-white rounded-2xl shadow-lg p-6">
-                <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center">
-                  <Calendar className="w-6 h-6 mr-2 text-emerald-600" />
-                  Upcoming Tasks
-                </h2>
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-xl font-bold text-gray-900 flex items-center">
+                    <Calendar className="w-6 h-6 mr-2 text-emerald-600" />
+                    Upcoming Tasks
+                  </h2>
+                  {totalPages > 1 && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setUpcomingPage(Math.max(0, upcomingPage - 1))}
+                        disabled={upcomingPage === 0}
+                        className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <ChevronLeft className="w-5 h-5 text-gray-600" />
+                      </button>
+                      <span className="text-sm text-gray-600">
+                        {upcomingPage + 1} / {totalPages}
+                      </span>
+                      <button
+                        onClick={() => setUpcomingPage(Math.min(totalPages - 1, upcomingPage + 1))}
+                        disabled={upcomingPage >= totalPages - 1}
+                        className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <ChevronRight className="w-5 h-5 text-gray-600" />
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {tasks.slice(0, 4).map((task, index) => (
-                    <motion.div
-                      key={task.id}
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: index * 0.05 }}
-                      className="bg-gray-50 border border-gray-200 rounded-lg p-4"
-                    >
-                      <h3 className="font-bold text-gray-900 mb-3 text-sm">{task.title}</h3>
-                      <div className="flex flex-wrap gap-2">
-                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-emerald-500 text-white">
-                          DUE DATE
-                        </span>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeColor(task.status)}`}>
-                          {task.status ? task.status.replace(/_/g, '').toUpperCase() : 'N/A'}
-                        </span>
-                        {task.assigned_by && (
-                          <span className="px-2 py-1 rounded-full text-xs font-medium border border-gray-300 text-gray-700">
-                            ASSIGN BY
-                          </span>
+                  {paginatedUpcomingTasks.length > 0 ? (
+                    paginatedUpcomingTasks.map((task, index) => (
+                      <motion.div
+                        key={task.id}
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: index * 0.05 }}
+                        className="bg-gray-50 border border-gray-200 rounded-lg p-4"
+                      >
+                        <h3 className="font-bold text-gray-900 mb-2 text-sm">{task.title}</h3>
+                        {task.description && (
+                          <p className="text-xs text-gray-600 mb-3 line-clamp-2">{task.description}</p>
                         )}
-                      </div>
-                      <p className="text-xs text-gray-600 mt-2">
-                        {task.due_date ? new Date(task.due_date).toLocaleDateString() : 'N/A'}
-                      </p>
-                    </motion.div>
-                  ))}
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          <span className="px-2 py-1 rounded-full text-xs font-medium bg-emerald-500 text-white flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {task.due_date ? new Date(task.due_date).toLocaleDateString() : 'N/A'}
+                          </span>
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeColor(task.status)}`}>
+                            {formatStatus(task.status)}
+                          </span>
+                        </div>
+                        {task.assignedByName && (
+                          <p className="text-xs text-gray-500 flex items-center gap-1">
+                            <User className="w-3 h-3" />
+                            Assigned by: <span className="font-medium">{task.assignedByName}</span>
+                          </p>
+                        )}
+                      </motion.div>
+                    ))
+                  ) : (
+                    <div className="col-span-full text-center py-8 text-gray-500">
+                      <Calendar className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                      <p>No upcoming tasks</p>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -277,11 +379,12 @@ const CalendarPage = () => {
                         initial={{ opacity: 0, scale: 0.9 }}
                         animate={{ opacity: 1, scale: 1 }}
                         transition={{ delay: day * 0.01 }}
+                        onClick={() => handleDayClick(day)}
                         className={`aspect-square border-2 rounded-xl p-2 hover:shadow-md cursor-pointer transition-all ${
                           hasOverdue
-                            ? 'border-red-500 bg-red-50'
+                            ? 'border-red-500 bg-red-50 hover:bg-red-100'
                             : dayTasks.length > 0
-                              ? 'border-emerald-300 bg-emerald-50'
+                              ? 'border-emerald-300 bg-emerald-50 hover:bg-emerald-100'
                               : 'border-gray-200 hover:bg-gray-50'
                         }`}
                       >
@@ -350,6 +453,87 @@ const CalendarPage = () => {
           )}
         </>
       )}
+
+      {/* Day Tasks Modal */}
+      <AnimatePresence>
+        {dayModalOpen && selectedDay && (
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+            onClick={() => setDayModalOpen(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl shadow-2xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-2xl font-bold text-gray-900">
+                  Tasks for {currentMonth.toLocaleString('default', { month: 'long' })} {selectedDay}, {currentMonth.getFullYear()}
+                </h3>
+                <button
+                  onClick={() => setDayModalOpen(false)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <X className="w-6 h-6 text-gray-600" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {getTasksForDay(selectedDay).map((task) => (
+                  <motion.div
+                    key={task.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-gray-50 border border-gray-200 rounded-lg p-4"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <h4 className="font-bold text-gray-900 text-lg flex-1">{task.title}</h4>
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusBadgeColor(task.status)}`}>
+                        {formatStatus(task.status)}
+                      </span>
+                    </div>
+                    
+                    {task.description && (
+                      <p className="text-gray-600 text-sm mb-3 leading-relaxed">{task.description}</p>
+                    )}
+
+                    <div className="flex flex-wrap gap-3 text-sm">
+                      <div className="flex items-center gap-1 text-gray-600">
+                        <Clock className="w-4 h-4 text-emerald-600" />
+                        <span className="font-medium">Due:</span> {new Date(task.due_date).toLocaleDateString()}
+                      </div>
+                      
+                      {task.assignedToName && (
+                        <div className="flex items-center gap-1 text-gray-600">
+                          <User className="w-4 h-4 text-blue-600" />
+                          <span className="font-medium">Assigned to:</span> {task.assignedToName}
+                        </div>
+                      )}
+                      
+                      {task.assignedByName && (
+                        <div className="flex items-center gap-1 text-gray-600">
+                          <User className="w-4 h-4 text-purple-600" />
+                          <span className="font-medium">Assigned by:</span> {task.assignedByName}
+                        </div>
+                      )}
+                    </div>
+
+                    {task.task_type && (
+                      <div className="mt-3">
+                        <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+                          {task.task_type}
+                        </span>
+                      </div>
+                    )}
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
