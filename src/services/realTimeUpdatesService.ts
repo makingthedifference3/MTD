@@ -86,40 +86,42 @@ class RealTimeUpdatesService {
    */
   async getAllUpdates(): Promise<RealTimeUpdateWithDetails[]> {
     try {
+      console.log('Fetching all updates...');
       const { data, error } = await supabase
         .from('real_time_updates')
         .select('*')
-        .eq('is_public', true)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
+
+      console.log('Fetched updates:', data?.length || 0);
+
+      if (!data || data.length === 0) {
+        return [];
+      }
 
       // Enrich with related data
       const updatesWithDetails = await Promise.all(
-        (data || []).map(async (update: RealTimeUpdate) => {
+        data.map(async (update: RealTimeUpdate) => {
           const projectName = await this.getProjectName(update.project_id);
-          const projectCode = await this.getProjectCode(update.project_id);
-          const taskTitle = await this.getTaskTitle(update.task_id);
-          const createdByName = await this.getUserName(update.created_by);
-          const updatedByName = await this.getUserName(update.updated_by);
           const daysAgo = this.calculateTimeAgo(update.created_at);
 
           return {
             ...update,
             project_name: projectName,
-            project_code: projectCode,
-            task_title: taskTitle,
-            created_by_name: createdByName,
-            updated_by_name: updatedByName,
             days_ago: daysAgo,
           };
         })
       );
 
+      console.log('Enriched updates:', updatesWithDetails.length);
       return updatesWithDetails;
     } catch (error) {
       console.error('Error fetching all updates:', error);
-      throw error;
+      return [];
     }
   }
 
@@ -481,50 +483,6 @@ class RealTimeUpdatesService {
     }
   }
 
-  /**
-   * Get project code by ID
-   */
-  private async getProjectCode(projectId?: string): Promise<string> {
-    if (!projectId) return '';
-
-    try {
-      const { data } = await supabase.from('projects').select('project_code').eq('id', projectId).single();
-
-      return data?.project_code || '';
-    } catch {
-      return '';
-    }
-  }
-
-  /**
-   * Get task title by ID
-   */
-  private async getTaskTitle(taskId?: string): Promise<string> {
-    if (!taskId) return '';
-
-    try {
-      const { data } = await supabase.from('tasks').select('title').eq('id', taskId).single();
-
-      return data?.title || '';
-    } catch {
-      return '';
-    }
-  }
-
-  /**
-   * Get user name by ID
-   */
-  private async getUserName(userId?: string): Promise<string> {
-    if (!userId) return 'System';
-
-    try {
-      const { data } = await supabase.from('users').select('full_name').eq('id', userId).single();
-
-      return data?.full_name || 'System';
-    } catch {
-      return 'System';
-    }
-  }
 
   /**
    * Calculate time ago string from timestamp
