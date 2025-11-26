@@ -4,7 +4,7 @@ import {
   FolderKanban, ChevronRight,
   ArrowLeft, MapPin, Briefcase, Leaf, Building2, Heart, Droplet, GraduationCap,
   CheckCircle2, Users, Activity, Award, type LucideIcon, BarChart3, Grid3x3,
-  Target, Zap, TrendingUp, ArrowUpRight, ArrowDownRight, Wallet, CreditCard, Receipt
+  TrendingUp, ArrowUpRight, ArrowDownRight, Wallet, CreditCard, Receipt
 } from 'lucide-react';
 import { PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { useFilter } from '../context/useFilter';
@@ -58,7 +58,6 @@ const AccountantDashboard = () => {
     selectedPartner,
     selectedProject,
     filteredProjects,
-    projects,
     setSelectedPartner,
     setSelectedProject,
     resetFilters,
