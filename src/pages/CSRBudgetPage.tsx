@@ -136,7 +136,7 @@ const CSRBudgetPage = () => {
       }
 
       const project = adjustModal.project;
-      let updates: Partial<Project> = {};
+      const updates: Partial<Project> = {};
 
       if (adjustModal.type === 'allocated') {
         const newAllocated = project.allocatedAmount + amount;

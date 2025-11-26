@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, Download, Calendar, Loader, FileText } from 'lucide-react';
 import { type Task } from '@/services/tasksService';
@@ -57,11 +57,7 @@ const DailyReportPage = () => {
     fetchInitialData();
   }, []);
 
-  useEffect(() => {
-    fetchTasksData();
-  }, [dateRange]);
-
-  const fetchTasksData = async () => {
+  const fetchTasksData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -120,7 +116,11 @@ const DailyReportPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [dateRange]);
+
+  useEffect(() => {
+    fetchTasksData();
+  }, [fetchTasksData]);
 
   const handleApplyDateRange = () => {
     fetchTasksData();
