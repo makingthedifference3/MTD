@@ -22,6 +22,7 @@ interface AuthProviderProps {
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const [currentUser, setCurrentUserState] = useState<AuthUser | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [selectedRole, setSelectedRole] = useState<
     'admin' | 'accountant' | 'project_manager' | 'team_member' | null
   >(null);
@@ -31,12 +32,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const storedUser = localStorage.getItem('currentUser');
     if (storedUser) {
       try {
-        setCurrentUserState(JSON.parse(storedUser));
+        const user = JSON.parse(storedUser);
+        setCurrentUserState(user);
       } catch (error) {
         console.error('Failed to load user from storage:', error);
         localStorage.removeItem('currentUser');
       }
     }
+    setIsLoading(false);
   }, []);
 
   const login = (user: AuthUser) => {
@@ -66,7 +69,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         currentUser,
         currentRole,
         isAuthenticated,
-        isLoading: false,
+        isLoading,
         login,
         logout,
         setSelectedRole,

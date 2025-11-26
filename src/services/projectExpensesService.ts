@@ -275,13 +275,19 @@ export const projectExpensesService = {
 
   async createExpense(expense: Omit<ProjectExpense, 'id' | 'created_at' | 'updated_at'>): Promise<ProjectExpense | null> {
     try {
+      console.log('Service received expense data:', JSON.stringify(expense, null, 2));
+      console.log('category_id in service:', expense.category_id);
+      
       const { data, error } = await supabase
         .from('project_expenses')
         .insert([expense])
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error details:', JSON.stringify(error, null, 2));
+        throw error;
+      }
       return data;
     } catch (error) {
       console.error('Error creating expense:', error);
