@@ -3,6 +3,13 @@ import { motion } from 'framer-motion';
 import { Plus, CheckCircle2, Clock, AlertCircle, Trash2, Loader } from 'lucide-react';
 import * as taskService from '../services/taskService';
 import { type Task, type TaskStats } from '../services/taskService';
+import { supabase } from '../services/supabaseClient';
+
+interface TeamMember {
+  id: string;
+  full_name: string;
+  department: string;
+}
 
 const ToDoList = () => {
   const [loading, setLoading] = useState(true);
@@ -12,6 +19,8 @@ const ToDoList = () => {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterDepartment, setFilterDepartment] = useState<string>('all');
   const [departments, setDepartments] = useState<string[]>([]);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [projects, setProjects] = useState<Array<{id: string; name: string; project_code: string}>>([]);
   const [showModal, setShowModal] = useState(false);
   const [newTask, setNewTask] = useState({
     title: '',
@@ -19,7 +28,7 @@ const ToDoList = () => {
     project_id: '',
     assigned_to: '',
     department: '',
-    priority: 'medium',
+    priority: 'On Priority',
     status: 'not_started',
     due_date: '',
     task_type: 'Development',
@@ -32,19 +41,63 @@ const ToDoList = () => {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [allTasks, taskStats, allDepartments] = await Promise.all([
+      const [allTasks, allDepartments, members, allProjects] = await Promise.all([
         taskService.getAllTasks(),
-        taskService.getTaskStats(''),
         taskService.getAllDepartments(),
+        fetchTeamMembers(),
+        fetchProjects(),
       ]);
 
       setTasks(allTasks);
-      setStats(taskStats);
       setDepartments(allDepartments);
+      setTeamMembers(members);
+      setProjects(allProjects);
+
+      // Calculate stats from all tasks
+      const taskStats: TaskStats = {
+        totalTasks: allTasks.length,
+        total: allTasks.length,
+        completed: allTasks.filter(t => t.status === 'completed').length,
+        inProgress: allTasks.filter(t => t.status === 'in_progress').length,
+        pending: allTasks.filter(t => t.status === 'not_started').length,
+        notStarted: allTasks.filter(t => t.status === 'not_started').length,
+      };
+      setStats(taskStats);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchTeamMembers = async (): Promise<TeamMember[]> => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, full_name, department')
+        .eq('role', 'team_member')
+        .order('full_name');
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching team members:', error);
+      return [];
+    }
+  };
+
+  const fetchProjects = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('projects')
+        .select('id, name, project_code')
+        .order('name');
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching projects:', error);
+      return [];
     }
   };
 
@@ -58,8 +111,8 @@ const ToDoList = () => {
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!newTask.title || !newTask.assigned_to) {
-      alert('Title and assignee are required');
+    if (!newTask.title || !newTask.assigned_to || !newTask.project_id) {
+      alert('Title, Project, and Assignee are required');
       return;
     }
 
@@ -87,7 +140,7 @@ const ToDoList = () => {
           project_id: '',
           assigned_to: '',
           department: '',
-          priority: 'medium',
+          priority: 'On Priority',
           status: 'not_started',
           due_date: '',
           task_type: 'Development',
@@ -237,9 +290,9 @@ const ToDoList = () => {
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 >
                   <option value="all">All Priorities</option>
-                  <option value="high">High</option>
-                  <option value="medium">Medium</option>
-                  <option value="low">Low</option>
+                  <option value="On Priority">On Priority</option>
+                  <option value="High Priority">High Priority</option>
+                  <option value="Less Priority">Less Priority</option>
                 </select>
               </div>
 
@@ -254,7 +307,6 @@ const ToDoList = () => {
                   <option value="not_started">Not Started</option>
                   <option value="in_progress">In Progress</option>
                   <option value="completed">Completed</option>
-                  <option value="on_priority">On Priority</option>
                 </select>
               </div>
 
@@ -379,6 +431,24 @@ const ToDoList = () => {
 
             <form onSubmit={handleCreateTask} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Project */}
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Project *</label>
+                  <select
+                    value={newTask.project_id}
+                    onChange={(e) => setNewTask({ ...newTask, project_id: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    required
+                  >
+                    <option value="">Select Project</option>
+                    {projects.map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.project_code} - {project.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 {/* Title */}
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Title *</label>
@@ -412,9 +482,9 @@ const ToDoList = () => {
                     onChange={(e) => setNewTask({ ...newTask, priority: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   >
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
+                    <option value="On Priority">On Priority</option>
+                    <option value="High Priority">High Priority</option>
+                    <option value="Less Priority">Less Priority</option>
                   </select>
                 </div>
 
@@ -429,7 +499,6 @@ const ToDoList = () => {
                     <option value="not_started">Not Started</option>
                     <option value="in_progress">In Progress</option>
                     <option value="completed">Completed</option>
-                    <option value="on_priority">On Priority</option>
                   </select>
                 </div>
 
@@ -485,14 +554,19 @@ const ToDoList = () => {
                 {/* Assigned To */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Assigned To *</label>
-                  <input
-                    type="text"
+                  <select
                     value={newTask.assigned_to}
                     onChange={(e) => setNewTask({ ...newTask, assigned_to: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    placeholder="User ID or name"
                     required
-                  />
+                  >
+                    <option value="">Select Team Member</option>
+                    {teamMembers.map((member) => (
+                      <option key={member.id} value={member.id}>
+                        {member.full_name} - {member.department}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 

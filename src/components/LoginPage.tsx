@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Crown, Briefcase, UserCircle, Users, Lock, User, ArrowLeft, Loader } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/useAuth';
+import { authenticateUser } from '../services/authService';
 
 const ROLES = [
   { id: 'admin', title: 'Admin', icon: Crown },
@@ -46,17 +47,24 @@ export default function LoginPage() {
     setError('');
 
     try {
-      // Create user object with entered credentials and selected role
-      const user = {
-        id: Math.random().toString(36).substr(2, 9),
-        username: username,
-        email: `${username}@mtd.com`,
-        full_name: username,
-        role: selectedRole as 'admin' | 'accountant' | 'project_manager' | 'team_member',
-        is_active: true,
-      };
+      // Authenticate user against database
+      const authenticatedUser = await authenticateUser(username.trim(), password);
       
-      login(user);
+      if (!authenticatedUser) {
+        setError('Invalid username or password');
+        setIsLoading(false);
+        return;
+      }
+
+      // Verify role matches selected role
+      if (authenticatedUser.role !== selectedRole) {
+        setError(`Your account is registered as ${authenticatedUser.role}, not ${selectedRole}`);
+        setIsLoading(false);
+        return;
+      }
+      
+      // Login successful
+      login(authenticatedUser);
       
       // Navigate to appropriate dashboard
       const dashboardMap: Record<string, string> = {
@@ -66,11 +74,10 @@ export default function LoginPage() {
         'team_member': '/team-member-dashboard',
       };
       
-      navigate(dashboardMap[selectedRole || ''] || '/');
+      navigate(dashboardMap[authenticatedUser.role] || '/');
     } catch (err) {
       console.error('Login error:', err);
       setError('Login failed. Please try again.');
-    } finally {
       setIsLoading(false);
     }
   };

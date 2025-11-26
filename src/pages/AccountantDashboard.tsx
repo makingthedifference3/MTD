@@ -3,8 +3,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   FolderKanban, ChevronRight,
   ArrowLeft, MapPin, Briefcase, Leaf, Building2, Heart, Droplet, GraduationCap,
-  CheckCircle2, Users, Activity, Award, type LucideIcon
+  CheckCircle2, Users, Activity, Award, type LucideIcon, BarChart3, Grid3x3,
+  Target, Zap
 } from 'lucide-react';
+import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useFilter } from '../context/useFilter';
 import FilterBar from '../components/FilterBar';
 import type { Project } from '../services/filterService';
@@ -17,20 +19,33 @@ const getIconComponent = (iconName?: string): LucideIcon => {
     'GraduationCap': GraduationCap,
     'Droplet': Droplet,
     'FolderKanban': FolderKanban,
+    'Activity': Activity,
+    'Laptop': Building2,
+    'Users': Users,
+    'Briefcase': Briefcase,
+    'AlertCircle': Award,
+    'TrendingUp': Activity,
+    'Wrench': Award,
+    'Camera': FolderKanban,
+    'Music': Heart,
+    'Home': Building2,
+    'Shield': Heart,
+    'Hammer': Award,
+    'ShoppingCart': Users,
+    'Truck': Activity,
+    'Apple': Heart,
+    'BookOpen': Heart,
+    'Lightbulb': Heart,
+    'Bike': Heart,
+    'Wallet': Heart,
   };
   return iconMap[iconName || 'FolderKanban'] || FolderKanban;
 };
 
 interface ProjectWithBeneficiaries extends Project {
-  description?: string;
-  beneficiaryStats?: {
-    totalBeneficiaries: number;
-    mealsServed: number;
-    padsDistributed: number;
-    studentsEnrolled: number;
-    treesPlanted: number;
-    schoolsRenovated: number;
-  };
+  displayName?: string;
+  total_budget?: number;
+  utilized_budget?: number;
 }
 
 const AccountantDashboard = () => {
@@ -39,6 +54,7 @@ const AccountantDashboard = () => {
     selectedPartner,
     selectedProject,
     filteredProjects,
+    projects,
     setSelectedPartner,
     setSelectedProject,
     resetFilters,
@@ -48,6 +64,7 @@ const AccountantDashboard = () => {
 
   const [viewMode, setViewMode] = useState<'partners' | 'projects' | 'projectDetails'>('partners');
   const [selectedProjectData, setSelectedProjectData] = useState<ProjectWithBeneficiaries | null>(null);
+  const [dashboardView, setDashboardView] = useState<'hierarchy' | 'analytics'>('hierarchy');
 
   // Auto-switch to projects view when a partner is selected via FilterBar
   useEffect(() => {
@@ -63,20 +80,7 @@ const AccountantDashboard = () => {
       const project = filteredProjects.find(p => p.id === selectedProject);
       console.log('AccountantDashboard - Found project:', project?.name);
       if (project) {
-        const projectWithDesc: ProjectWithBeneficiaries = {
-          ...project,
-          beneficiaryStats: {
-            totalBeneficiaries: project.total_beneficiaries || 0,
-            mealsServed: project.meals_served || 0,
-            padsDistributed: project.pads_distributed || 0,
-            studentsEnrolled: project.students_enrolled || 0,
-            treesPlanted: project.trees_planted || 0,
-            schoolsRenovated: project.schools_renovated || 0,
-          },
-          description: project.description || 'No description available',
-        };
-
-        setSelectedProjectData(projectWithDesc);
+        setSelectedProjectData(project as ProjectWithBeneficiaries);
         setViewMode('projectDetails');
       }
     }
@@ -100,20 +104,7 @@ const AccountantDashboard = () => {
   };
 
   const handleProjectClick = (project: Project) => {
-    const projectWithDesc: ProjectWithBeneficiaries = {
-      ...project,
-      beneficiaryStats: {
-        totalBeneficiaries: project.total_beneficiaries || 0,
-        mealsServed: project.meals_served || 0,
-        padsDistributed: project.pads_distributed || 0,
-        studentsEnrolled: project.students_enrolled || 0,
-        treesPlanted: project.trees_planted || 0,
-        schoolsRenovated: project.schools_renovated || 0,
-      },
-      description: project.description || 'No description available',
-    };
-    
-    setSelectedProjectData(projectWithDesc);
+    setSelectedProjectData(project as ProjectWithBeneficiaries);
     setSelectedProject(project.id);
     setViewMode('projectDetails');
   };
@@ -150,33 +141,330 @@ const AccountantDashboard = () => {
                   Project Command Center
                 </h1>
                 <p className="text-gray-600 mt-1 font-medium">
-                  {viewMode === 'partners' && 'Select CSR Partner to view their projects'}
-                  {viewMode === 'projects' && selectedPartnerObject && `Projects by ${selectedPartnerObject.name}`}
-                  {viewMode === 'projectDetails' && selectedProjectData && `Project: ${selectedProjectData.name}`}
+                  {dashboardView === 'hierarchy' ? (
+                    <>
+                      {viewMode === 'partners' && 'Select CSR Partner to view their projects'}
+                      {viewMode === 'projects' && selectedPartnerObject && `Projects by ${selectedPartnerObject.name}`}
+                      {viewMode === 'projectDetails' && selectedProjectData && `Project: ${selectedProjectData.name}`}
+                    </>
+                  ) : (
+                    'Analytics Dashboard - All Projects Overview'
+                  )}
                 </p>
               </div>
             </div>
+            {/* View Toggle Button */}
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => {
+                if (dashboardView === 'hierarchy') {
+                  setDashboardView('analytics');
+                } else {
+                  setDashboardView('hierarchy');
+                  setViewMode('partners');
+                  resetFilters();
+                }
+              }}
+              className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-bold transition-all whitespace-nowrap ${
+                dashboardView === 'analytics' 
+                  ? 'bg-linear-to-r from-emerald-500 to-emerald-600 text-white shadow-lg shadow-emerald-500/30' 
+                  : 'bg-white border-2 border-gray-200 text-gray-700 hover:border-emerald-500'
+              }`}
+            >
+              {dashboardView === 'hierarchy' ? (
+                <>
+                  <BarChart3 className="w-5 h-5" />
+                  <span>Analytics</span>
+                </>
+              ) : (
+                <>
+                  <Grid3x3 className="w-5 h-5" />
+                  <span>Projects</span>
+                </>
+              )}
+            </motion.button>
           </div>
         </div>
       </motion.div>
 
-      {/* Filter Bar */}
-      <FilterBar />
-
-      {/* Back Button */}
-      {viewMode !== 'partners' && (
-        <motion.button
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          onClick={handleBack}
-          className="mb-6 flex items-center gap-2 px-6 py-3 bg-white border-2 border-gray-200 rounded-2xl hover:border-emerald-500 hover:bg-emerald-50 transition-all font-semibold text-gray-900 hover:text-emerald-600 shadow-lg hover:shadow-emerald-500/20"
+      {/* ANALYTICS VIEW */}
+      {dashboardView === 'analytics' ? (
+        <motion.div
+          key="analytics-view"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+          transition={{ duration: 0.3 }}
+          className="space-y-6"
         >
-          <ArrowLeft className="w-5 h-5" />
-          Go Back
-        </motion.button>
-      )}
+          {/* Summary Stats */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Active Projects Card */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="bg-linear-to-br from-emerald-50 to-emerald-100 border-2 border-emerald-200 rounded-2xl p-6 shadow-lg hover:shadow-emerald-500/20 transition-all"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div className="p-3 bg-emerald-200 rounded-xl">
+                  <Target className="w-6 h-6 text-emerald-700" />
+                </div>
+                <span className="text-xs font-bold text-emerald-700 bg-emerald-200 px-3 py-1 rounded-full">ACTIVE</span>
+              </div>
+              <p className="text-3xl font-black text-emerald-900 mb-1">{projects.length}</p>
+              <p className="text-sm text-emerald-700 font-semibold">Active Projects</p>
+            </motion.div>
 
-      <AnimatePresence mode="wait">
+            {/* Total Beneficiaries Card */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="bg-linear-to-br from-blue-50 to-blue-100 border-2 border-blue-200 rounded-2xl p-6 shadow-lg hover:shadow-blue-500/20 transition-all"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div className="p-3 bg-blue-200 rounded-xl">
+                  <Users className="w-6 h-6 text-blue-700" />
+                </div>
+                <span className="text-xs font-bold text-blue-700 bg-blue-200 px-3 py-1 rounded-full">REACH</span>
+              </div>
+              <p className="text-3xl font-black text-blue-900 mb-1">
+                {(projects.reduce((sum: number, p: Project) => sum + (p.direct_beneficiaries || 0), 0) / 1000).toFixed(1)}K
+              </p>
+              <p className="text-sm text-blue-700 font-semibold">Total Beneficiaries</p>
+            </motion.div>
+
+            {/* Total Budget Card */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="bg-linear-to-br from-purple-50 to-purple-100 border-2 border-purple-200 rounded-2xl p-6 shadow-lg hover:shadow-purple-500/20 transition-all"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div className="p-3 bg-purple-200 rounded-xl">
+                  <Zap className="w-6 h-6 text-purple-700" />
+                </div>
+                <span className="text-xs font-bold text-purple-700 bg-purple-200 px-3 py-1 rounded-full">BUDGET</span>
+              </div>
+              <p className="text-3xl font-black text-purple-900 mb-1">
+                ₹{(projects.reduce((sum: number, p: Project) => sum + (p.total_budget || 0), 0) / 10000000).toFixed(1)}Cr
+              </p>
+              <p className="text-sm text-purple-700 font-semibold">Total Budget</p>
+            </motion.div>
+
+            {/* Completed Projects Card */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+              className="bg-linear-to-br from-orange-50 to-orange-100 border-2 border-orange-200 rounded-2xl p-6 shadow-lg hover:shadow-orange-500/20 transition-all"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div className="p-3 bg-orange-200 rounded-xl">
+                  <CheckCircle2 className="w-6 h-6 text-orange-700" />
+                </div>
+                <span className="text-xs font-bold text-orange-700 bg-orange-200 px-3 py-1 rounded-full">DONE</span>
+              </div>
+              <p className="text-3xl font-black text-orange-900 mb-1">
+                {projects.filter((p: Project) => p.status === 'completed').length}
+              </p>
+              <p className="text-sm text-orange-700 font-semibold">Completed Projects</p>
+            </motion.div>
+          </div>
+
+          {/* Charts Section */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Project Status Distribution */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+              className="bg-white border-2 border-gray-200 rounded-2xl p-8 shadow-lg"
+            >
+              <h3 className="text-xl font-bold text-gray-900 mb-6">Project Status Distribution</h3>
+              <div className="flex items-center justify-center min-h-[300px]">
+                {projects.length === 0 ? (
+                  <div className="text-center py-12">
+                    <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
+                      <BarChart3 className="w-8 h-8 text-gray-400" />
+                    </div>
+                    <p className="text-gray-500 font-semibold">No project data available</p>
+                    <p className="text-gray-400 text-sm mt-1">Projects will appear here once data is added</p>
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <PieChart>
+                      <Pie
+                        data={[
+                          { name: 'Active', value: projects.filter((p: Project) => p.status === 'active').length, fill: '#10b981' },
+                          { name: 'Completed', value: projects.filter((p: Project) => p.status === 'completed').length, fill: '#f59e0b' }
+                        ]}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={({ name, percent }: { name?: string; percent?: number }) => `${name || ''} ${((percent || 0) * 100).toFixed(0)}%`}
+                        outerRadius={80}
+                        fill="#8884d8"
+                        dataKey="value"
+                      >
+                        <Cell fill="#10b981" />
+                        <Cell fill="#3b82f6" />
+                        <Cell fill="#f59e0b" />
+                      </Pie>
+                      <Tooltip formatter={(value) => `${value} projects`} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </motion.div>
+
+            {/* Top CSR Partners by Project Count */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.6 }}
+              className="bg-white border-2 border-gray-200 rounded-2xl p-8 shadow-lg"
+            >
+              <h3 className="text-xl font-bold text-gray-900 mb-6">Top Partners by Projects</h3>
+              <div className="flex items-center justify-center min-h-[300px]">
+                {projects.length === 0 ? (
+                  <div className="text-center py-12">
+                    <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
+                      <BarChart3 className="w-8 h-8 text-gray-400" />
+                    </div>
+                    <p className="text-gray-500 font-semibold">No partner data available</p>
+                    <p className="text-gray-400 text-sm mt-1">Partner statistics will appear here once projects are added</p>
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={csrPartners.slice(0, 8).map(partner => ({
+                      name: partner.name.substring(0, 12),
+                      projects: projects.filter((p: Project) => p.csr_partner_id === partner.id).length
+                    }))}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis dataKey="name" stroke="#6b7280" style={{ fontSize: '12px' }} />
+                      <YAxis stroke="#6b7280" />
+                      <Tooltip contentStyle={{ backgroundColor: '#fff', border: '2px solid #10b981' }} />
+                      <Bar dataKey="projects" fill="#10b981" radius={[8, 8, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </motion.div>
+          </div>
+
+          {/* Impact Metrics Dashboard */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.7 }}
+            className="bg-white border-2 border-gray-200 rounded-2xl p-8 shadow-lg"
+          >
+            <h3 className="text-xl font-bold text-gray-900 mb-6">Overall Impact Metrics</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Total Beneficiaries */}
+              <div className="bg-emerald-50 border-2 border-emerald-200 rounded-xl p-6 hover:shadow-lg transition-all">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-3 bg-emerald-200 rounded-lg">
+                    <Users className="w-5 h-5 text-emerald-700" />
+                  </div>
+                  <span className="text-sm font-bold text-emerald-700 uppercase">Total Beneficiaries</span>
+                </div>
+                <p className="text-3xl font-black text-emerald-900">
+                  {(projects.reduce((sum: number, p: Project) => sum + (p.direct_beneficiaries || 0), 0) / 1000).toFixed(1)}K
+                </p>
+              </div>
+
+              {/* Meals Served */}
+              <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-6 hover:shadow-lg transition-all">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-3 bg-orange-200 rounded-lg">
+                    <Activity className="w-5 h-5 text-orange-700" />
+                  </div>
+                  <span className="text-sm font-bold text-orange-700 uppercase">Meals Served</span>
+                </div>
+                <p className="text-3xl font-black text-orange-900">
+                  {(projects.reduce((sum: number, p: Project) => sum + (p.meals_served || 0), 0) / 1000000).toFixed(1)}M
+                </p>
+              </div>
+
+              {/* Pads Distributed */}
+              <div className="bg-pink-50 border-2 border-pink-200 rounded-xl p-6 hover:shadow-lg transition-all">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-3 bg-pink-200 rounded-lg">
+                    <Award className="w-5 h-5 text-pink-700" />
+                  </div>
+                  <span className="text-sm font-bold text-pink-700 uppercase">Pads Distributed</span>
+                </div>
+                <p className="text-3xl font-black text-pink-900">
+                  {(projects.reduce((sum: number, p: Project) => sum + (p.pads_distributed || 0), 0) / 1000000).toFixed(1)}M
+                </p>
+              </div>
+
+              {/* Students Enrolled */}
+              <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-6 hover:shadow-lg transition-all">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-3 bg-blue-200 rounded-lg">
+                    <GraduationCap className="w-5 h-5 text-blue-700" />
+                  </div>
+                  <span className="text-sm font-bold text-blue-700 uppercase">Students Enrolled</span>
+                </div>
+                <p className="text-3xl font-black text-blue-900">
+                  {(projects.reduce((sum: number, p: Project) => sum + (p.students_enrolled || 0), 0) / 1000).toFixed(1)}K
+                </p>
+              </div>
+
+              {/* Trees Planted */}
+              <div className="bg-green-50 border-2 border-green-200 rounded-xl p-6 hover:shadow-lg transition-all">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-3 bg-green-200 rounded-lg">
+                    <Leaf className="w-5 h-5 text-green-700" />
+                  </div>
+                  <span className="text-sm font-bold text-green-700 uppercase">Trees Planted</span>
+                </div>
+                <p className="text-3xl font-black text-green-900">
+                  {(projects.reduce((sum: number, p: Project) => sum + (p.trees_planted || 0), 0) / 1000).toFixed(1)}K
+                </p>
+              </div>
+
+              {/* Schools Renovated */}
+              <div className="bg-purple-50 border-2 border-purple-200 rounded-xl p-6 hover:shadow-lg transition-all">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-3 bg-purple-200 rounded-lg">
+                    <FolderKanban className="w-5 h-5 text-purple-700" />
+                  </div>
+                  <span className="text-sm font-bold text-purple-700 uppercase">Schools Renovated</span>
+                </div>
+                <p className="text-3xl font-black text-purple-900">
+                  {projects.reduce((sum: number, p: Project) => sum + (p.schools_renovated || 0), 0)}
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      ) : (
+        // HIERARCHY VIEW - All existing code
+        <>
+          {/* Filter Bar */}
+          <FilterBar />
+
+          {/* Back Button */}
+          {viewMode !== 'partners' && (
+            <motion.button
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              onClick={handleBack}
+              className="mb-6 flex items-center gap-2 px-6 py-3 bg-white border-2 border-gray-200 rounded-2xl hover:border-emerald-500 hover:bg-emerald-50 transition-all font-semibold text-gray-900 hover:text-emerald-600 shadow-lg hover:shadow-emerald-500/20"
+            >
+              <ArrowLeft className="w-5 h-5" />
+              Go Back
+            </motion.button>
+          )}
+
+          <AnimatePresence mode="wait">
         {/* PARTNERS VIEW */}
         {viewMode === 'partners' && (
           <motion.div
@@ -267,7 +555,6 @@ const AccountantDashboard = () => {
             {partnerProjects.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {partnerProjects.map((project, index) => {
-                  // Get icon and color from database, fallback to defaults
                   const Icon = getIconComponent(project.display_icon);
                   const colorClass = project.display_color || 'emerald';
                   
@@ -334,8 +621,11 @@ const AccountantDashboard = () => {
                 className="bg-white border-2 border-gray-200 rounded-2xl p-8 mb-6 shadow-lg"
               >
                 <div className="flex items-start gap-6 mb-6">
-                  <div className="p-4 bg-emerald-100 rounded-xl">
-                    <FolderKanban className="w-8 h-8 text-emerald-600" />
+                  <div className={`p-4 bg-${selectedProjectData.display_color || 'emerald'}-100 rounded-xl`}>
+                    {(() => {
+                      const Icon = getIconComponent(selectedProjectData.display_icon);
+                      return <Icon className={`w-8 h-8 text-${selectedProjectData.display_color || 'emerald'}-600`} />;
+                    })()}
                   </div>
                   <div className="flex-1">
                     <h2 className="text-3xl font-bold text-gray-900 mb-2">{selectedProjectData.name}</h2>
@@ -360,7 +650,7 @@ const AccountantDashboard = () => {
                   <p className="text-gray-700 leading-relaxed">{selectedProjectData.description}</p>
                 </div>
 
-                {/* Beneficiary Stats */}
+                {/* Impact Metrics - ALL FROM DATABASE */}
                 <h3 className="font-bold text-gray-900 mb-4 text-lg">Impact Metrics</h3>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   {/* Total Beneficiaries */}
@@ -370,78 +660,78 @@ const AccountantDashboard = () => {
                       <span className="text-xs font-bold text-emerald-700 uppercase">Total Reach</span>
                     </div>
                     <p className="text-2xl font-black text-emerald-900">
-                      {selectedProjectData.beneficiaryStats?.totalBeneficiaries.toLocaleString() || '0'}
+                      {(selectedProjectData.direct_beneficiaries || 0).toLocaleString()}
                     </p>
                   </div>
 
                   {/* Meals Served */}
-                  {(selectedProjectData.beneficiaryStats?.mealsServed || 0) > 0 && (
+                  {(selectedProjectData.meals_served || 0) > 0 && (
                     <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-4 hover:shadow-lg transition-all">
                       <div className="flex items-center gap-2 mb-2">
                         <Activity className="w-5 h-5 text-orange-600" />
                         <span className="text-xs font-bold text-orange-700 uppercase">Meals</span>
                       </div>
                       <p className="text-2xl font-black text-orange-900">
-                        {((selectedProjectData.beneficiaryStats?.mealsServed || 0) / 1000).toFixed(1)}K
+                        {((selectedProjectData.meals_served || 0) / 1000).toFixed(1)}K
                       </p>
                     </div>
                   )}
 
                   {/* Pads Distributed */}
-                  {(selectedProjectData.beneficiaryStats?.padsDistributed || 0) > 0 && (
+                  {(selectedProjectData.pads_distributed || 0) > 0 && (
                     <div className="bg-pink-50 border-2 border-pink-200 rounded-xl p-4 hover:shadow-lg transition-all">
                       <div className="flex items-center gap-2 mb-2">
                         <Award className="w-5 h-5 text-pink-600" />
                         <span className="text-xs font-bold text-pink-700 uppercase">Pads</span>
                       </div>
                       <p className="text-2xl font-black text-pink-900">
-                        {((selectedProjectData.beneficiaryStats?.padsDistributed || 0) / 1000).toFixed(0)}K
+                        {((selectedProjectData.pads_distributed || 0) / 1000).toFixed(0)}K
                       </p>
                     </div>
                   )}
 
                   {/* Students Enrolled */}
-                  {(selectedProjectData.beneficiaryStats?.studentsEnrolled || 0) > 0 && (
+                  {(selectedProjectData.students_enrolled || 0) > 0 && (
                     <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4 hover:shadow-lg transition-all">
                       <div className="flex items-center gap-2 mb-2">
                         <GraduationCap className="w-5 h-5 text-blue-600" />
                         <span className="text-xs font-bold text-blue-700 uppercase">Students</span>
                       </div>
                       <p className="text-2xl font-black text-blue-900">
-                        {(selectedProjectData.beneficiaryStats?.studentsEnrolled || 0).toLocaleString()}
+                        {(selectedProjectData.students_enrolled || 0).toLocaleString()}
                       </p>
                     </div>
                   )}
 
                   {/* Trees Planted */}
-                  {(selectedProjectData.beneficiaryStats?.treesPlanted || 0) > 0 && (
+                  {(selectedProjectData.trees_planted || 0) > 0 && (
                     <div className="bg-green-50 border-2 border-green-200 rounded-xl p-4 hover:shadow-lg transition-all">
                       <div className="flex items-center gap-2 mb-2">
                         <Leaf className="w-5 h-5 text-green-600" />
                         <span className="text-xs font-bold text-green-700 uppercase">Trees</span>
                       </div>
                       <p className="text-2xl font-black text-green-900">
-                        {((selectedProjectData.beneficiaryStats?.treesPlanted || 0) / 1000).toFixed(0)}K
+                        {((selectedProjectData.trees_planted || 0) / 1000).toFixed(0)}K
                       </p>
                     </div>
                   )}
 
                   {/* Schools Renovated */}
-                  {(selectedProjectData.beneficiaryStats?.schoolsRenovated || 0) > 0 && (
+                  {(selectedProjectData.schools_renovated || 0) > 0 && (
                     <div className="bg-purple-50 border-2 border-purple-200 rounded-xl p-4 hover:shadow-lg transition-all">
                       <div className="flex items-center gap-2 mb-2">
                         <FolderKanban className="w-5 h-5 text-purple-600" />
                         <span className="text-xs font-bold text-purple-700 uppercase">Schools</span>
                       </div>
                       <p className="text-2xl font-black text-purple-900">
-                        {selectedProjectData.beneficiaryStats?.schoolsRenovated || '0'}
+                        {selectedProjectData.schools_renovated || '0'}
                       </p>
                     </div>
                   )}
                 </div>
               </motion.div>
 
-              {/* Additional Info */}
+              {/* Project Information */}
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -455,6 +745,10 @@ const AccountantDashboard = () => {
                     <p className="text-gray-900 font-bold">{selectedProjectData.id}</p>
                   </div>
                   <div>
+                    <p className="text-sm text-gray-600 font-semibold mb-2">PROJECT CODE</p>
+                    <p className="text-gray-900 font-bold">{selectedProjectData.project_code}</p>
+                  </div>
+                  <div>
                     <p className="text-sm text-gray-600 font-semibold mb-2">STATUS</p>
                     <p className="text-gray-900 font-bold">{selectedProjectData.status || 'Active'}</p>
                   </div>
@@ -465,12 +759,36 @@ const AccountantDashboard = () => {
                       {selectedProjectData.location || 'India'}
                     </p>
                   </div>
+                  <div>
+                    <p className="text-sm text-gray-600 font-semibold mb-2">STATE</p>
+                    <p className="text-gray-900 font-bold">{selectedProjectData.state || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600 font-semibold mb-2">TOTAL BUDGET</p>
+                    <p className="text-gray-900 font-bold text-lg">₹{(selectedProjectData.total_budget || 0).toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600 font-semibold mb-2">UTILIZED BUDGET</p>
+                    <p className="text-gray-900 font-bold text-lg">₹{(selectedProjectData.utilized_budget || 0).toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600 font-semibold mb-2">BUDGET REMAINING</p>
+                    <p className="text-emerald-600 font-bold text-lg">
+                      ₹{((selectedProjectData.total_budget || 0) - (selectedProjectData.utilized_budget || 0)).toLocaleString()}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600 font-semibold mb-2">INDIRECT BENEFICIARIES</p>
+                    <p className="text-gray-900 font-bold">{(selectedProjectData.indirect_beneficiaries || 0).toLocaleString()}</p>
+                  </div>
                 </div>
               </motion.div>
             </div>
           </motion.div>
         )}
-      </AnimatePresence>
+          </AnimatePresence>
+        </>
+      )}
     </div>
   );
 };
