@@ -37,6 +37,18 @@ export interface Project {
   total_beneficiaries?: number;
   direct_beneficiaries?: number;
   indirect_beneficiaries?: number;
+  // Impact metrics
+  meals_served?: number;
+  pads_distributed?: number;
+  students_enrolled?: number;
+  trees_planted?: number;
+  schools_renovated?: number;
+  male_beneficiaries?: number;
+  female_beneficiaries?: number;
+  children_beneficiaries?: number;
+  display_color?: string;
+  display_icon?: string;
+  // Progress metrics
   completion_percentage?: number;
   milestones_completed?: number;
   total_milestones?: number;
