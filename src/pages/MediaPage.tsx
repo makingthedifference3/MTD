@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, Video, Image as ImageIcon, Eye, Trash2, Download, Link as LinkIcon } from 'lucide-react';
 import { useAuth } from '@/context/useAuth';
+import { supabase } from '@/services/supabaseClient';
 import {
   getAllArticles,
   getArticleStats,
@@ -26,6 +27,8 @@ const MediaPage = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [stats, setStats] = useState<ArticleStats>({ total: 0, published: 0, draft: 0, pending: 0 });
+  const [projects, setProjects] = useState<Array<{id: string; name: string; project_code: string}>>([]);
+  const [csrPartners, setCSRPartners] = useState<Array<{id: string; name: string; partner_code: string}>>([]);
   
   // Form state for creating new media
   const [showUploadForm, setShowUploadForm] = useState(false);
@@ -37,6 +40,7 @@ const MediaPage = () => {
     drive_link: '',
     news_channel: '',
     project_id: '',
+    csr_partner_id: '',
   });
 
   // Load media articles on component mount
@@ -44,12 +48,45 @@ const MediaPage = () => {
     const loadMediaData = async () => {
       setIsLoading(true);
       try {
-        const articles = await getAllArticles();
-        const formattedArticles: MediaItem[] = articles.map(article => ({
+        const [articles, projectsData, partnersData] = await Promise.all([
+          getAllArticles(),
+          (async () => {
+            try {
+              const { data, error } = await supabase
+                .from('projects')
+                .select('id, name, project_code')
+                .order('name');
+              if (error) throw error;
+              return data || [];
+            } catch (err) {
+              console.error('Error fetching projects:', err);
+              return [];
+            }
+          })(),
+          (async () => {
+            try {
+              const { data, error } = await supabase
+                .from('csr_partners')
+                .select('id, name, partner_code')
+                .order('name');
+              if (error) throw error;
+              return data || [];
+            } catch (err) {
+              console.error('Error fetching CSR partners:', err);
+              return [];
+            }
+          })(),
+        ]);
+        
+        const formattedArticles: MediaItem[] = (articles as MediaArticle[]).map((article: MediaArticle) => ({
           ...article,
           newsChannel: article.sub_category || 'General',
         }));
         setMediaItems(formattedArticles);
+        setProjects(projectsData || []);
+        setCSRPartners(partnersData || []);
+        console.log('Projects loaded:', projectsData?.length || 0);
+        console.log('CSR Partners loaded:', partnersData?.length || 0);
         const articleStats = await getArticleStats();
         setStats(articleStats);
       } catch (error) {
@@ -108,7 +145,11 @@ const MediaPage = () => {
 
     setIsUploading(true);
     try {
-      await createArticle({
+      interface MediaData extends Omit<MediaArticle, 'id' | 'created_at' | 'updated_at'> {
+        csr_partner_id?: string;
+      }
+      
+      const mediaData: MediaData = {
         media_code: `MEDIA-${Date.now()}`,
         title: uploadForm.title,
         description: uploadForm.description,
@@ -120,7 +161,14 @@ const MediaPage = () => {
         project_id: uploadForm.project_id as unknown as string,
         uploaded_by: currentUser?.id as unknown as string,
         created_by: currentUser?.id as unknown as string,
-      });
+      };
+      
+      // Add CSR partner if selected
+      if (uploadForm.csr_partner_id) {
+        mediaData.csr_partner_id = uploadForm.csr_partner_id;
+      }
+      
+      await createArticle(mediaData as MediaArticle);
 
       // Reset form and reload data
       setUploadForm({
@@ -131,6 +179,7 @@ const MediaPage = () => {
         drive_link: '',
         news_channel: '',
         project_id: '',
+        csr_partner_id: '',
       });
       setShowUploadForm(false);
       
@@ -309,13 +358,30 @@ const MediaPage = () => {
                 onChange={(e) => setUploadForm({...uploadForm, drive_link: e.target.value})}
                 className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
               />
-              <input
-                type="text"
-                placeholder="Project ID *"
+              <select
                 value={uploadForm.project_id}
                 onChange={(e) => setUploadForm({...uploadForm, project_id: e.target.value})}
                 className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-              />
+              >
+                <option value="">Select Project *</option>
+                {projects.length > 0 ? projects.map((project: {id: string; name: string; project_code: string}) => (
+                  <option key={project.id} value={project.id}>{project.name} ({project.project_code})</option>
+                )) : (
+                  <option disabled>Loading projects...</option>
+                )}
+              </select>
+              <select
+                value={uploadForm.csr_partner_id}
+                onChange={(e) => setUploadForm({...uploadForm, csr_partner_id: e.target.value})}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="">Select CSR Partner (Optional)</option>
+                {csrPartners.length > 0 ? csrPartners.map((partner: {id: string; name: string; partner_code: string}) => (
+                  <option key={partner.id} value={partner.id}>{partner.name} ({partner.partner_code})</option>
+                )) : (
+                  <option disabled>Loading partners...</option>
+                )}
+              </select>
             </div>
             <textarea
               placeholder="Description"

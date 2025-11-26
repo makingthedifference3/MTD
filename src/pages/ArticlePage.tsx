@@ -1,11 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Newspaper } from 'lucide-react';
-import { getAllArticles, createArticle, type MediaArticle } from '@/services/mediaArticleService';
+import { Plus, Newspaper, Trash2 } from 'lucide-react';
+import { supabase } from '@/services/supabaseClient';
+import { getAllArticles, createArticle, deleteArticle, type MediaArticle } from '@/services/mediaArticleService';
 
 const ArticlePage = () => {
   const formRef = useRef<HTMLDivElement>(null);
   const [articles, setArticles] = useState<MediaArticle[]>([]);
+  const [projects, setProjects] = useState<Array<{id: string; name: string; project_code: string}>>([]);
+  const [csrPartners, setCSRPartners] = useState<Array<{id: string; name: string; partner_code: string}>>([]);
   const [loading, setLoading] = useState(true);
   const [formData, setFormData] = useState({
     title: '',
@@ -14,24 +17,48 @@ const ArticlePage = () => {
     reporter_name: '',
     media_type: 'newspaper_cutting',
     description: '',
+    project_id: '',
+    csr_partner_id: '',
   });
 
-  // Fetch articles from database
+  // Fetch articles, projects, and CSR partners from database
   useEffect(() => {
-    const fetchArticles = async () => {
+    const fetchData = async () => {
       try {
         setLoading(true);
+        
+        // Fetch articles
         const data = await getAllArticles('published');
         setArticles(data);
+        
+        // Fetch projects
+        const { data: projectsData, error: projectsError } = await supabase
+          .from('projects')
+          .select('id, name, project_code')
+          .order('name');
+        
+        if (!projectsError && projectsData) {
+          setProjects(projectsData);
+        }
+        
+        // Fetch CSR Partners
+        const { data: partnersData, error: partnersError } = await supabase
+          .from('csr_partners')
+          .select('id, name, partner_code')
+          .order('name');
+        
+        if (!partnersError && partnersData) {
+          setCSRPartners(partnersData);
+        }
       } catch (err) {
-        console.error('Error loading articles:', err);
+        console.error('Error loading data:', err);
         setArticles([]);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchArticles();
+    fetchData();
   }, []);
 
   // Handle form input change
@@ -47,7 +74,11 @@ const ArticlePage = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const articleData: Omit<MediaArticle, 'id' | 'created_at' | 'updated_at'> = {
+      interface ArticleData extends Omit<MediaArticle, 'id' | 'created_at' | 'updated_at'> {
+        csr_partner_id?: string;
+      }
+      
+      const articleData: ArticleData = {
         media_code: `ART-${Date.now()}`,
         title: formData.title,
         description: formData.description,
@@ -57,10 +88,16 @@ const ArticlePage = () => {
         media_type: 'newspaper_cutting',
         category: 'News Article',
         is_public: true,
-        views_count: 0
+        views_count: 0,
+        project_id: formData.project_id || undefined,
       };
+      
+      // Add CSR partner if selected
+      if (formData.csr_partner_id) {
+        articleData.csr_partner_id = formData.csr_partner_id;
+      }
 
-      await createArticle(articleData);
+      await createArticle(articleData as MediaArticle);
 
       // Reset form
       setFormData({
@@ -70,6 +107,8 @@ const ArticlePage = () => {
         reporter_name: '',
         media_type: 'newspaper_cutting',
         description: '',
+        project_id: '',
+        csr_partner_id: '',
       });
 
       // Refresh articles
@@ -80,6 +119,20 @@ const ArticlePage = () => {
     } catch (err) {
       console.error('Error adding article:', err);
       alert('Failed to add article');
+    }
+  };
+
+  // Handle delete article
+  const handleDeleteArticle = async (id: string) => {
+    if (window.confirm('Are you sure you want to delete this article?')) {
+      try {
+        await deleteArticle(id);
+        setArticles(articles.filter(article => article.id !== id));
+        alert('Article deleted successfully!');
+      } catch (err) {
+        console.error('Error deleting article:', err);
+        alert('Failed to delete article');
+      }
     }
   };
 
@@ -137,6 +190,28 @@ const ArticlePage = () => {
               className="px-4 py-2 border border-gray-300 rounded-lg" 
               placeholder="Reporter Name" 
             />
+            <select
+              name="project_id"
+              value={formData.project_id}
+              onChange={handleInputChange}
+              className="px-4 py-2 border border-gray-300 rounded-lg"
+            >
+              <option value="">Select Project (Optional)</option>
+              {projects && projects.map((project) => (
+                <option key={project.id} value={project.id}>{project.name} ({project.project_code})</option>
+              ))}
+            </select>
+            <select
+              name="csr_partner_id"
+              value={formData.csr_partner_id}
+              onChange={handleInputChange}
+              className="px-4 py-2 border border-gray-300 rounded-lg"
+            >
+              <option value="">Select CSR Partner (Optional)</option>
+              {csrPartners && csrPartners.map((partner) => (
+                <option key={partner.id} value={partner.id}>{partner.name} ({partner.partner_code})</option>
+              ))}
+            </select>
             <textarea
               name="description"
               value={formData.description}
@@ -221,8 +296,12 @@ const ArticlePage = () => {
                           View More
                         </a>
                       )}
-                      <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium transition-colors">
-                        Edit
+                      <button 
+                        onClick={() => handleDeleteArticle(article.id)}
+                        className="px-4 py-2 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 text-sm font-medium transition-colors flex items-center space-x-1"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        <span>Delete</span>
                       </button>
                     </div>
                   </div>
