@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Plus, FolderKanban, Calendar, DollarSign, Users, TrendingUp } from 'lucide-react';
+import { Plus, FolderKanban, Calendar, DollarSign, Users, TrendingUp } from 'lucide-react';
 import { projectsService } from '../services/projectsService';
+import FilterBar from '../components/FilterBar';
 import type { ProjectWithDetails } from '../services/projectsService';
 
 const ProjectsPage = () => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState<string>('all');
   const [allProjects, setAllProjects] = useState<ProjectWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -39,14 +38,8 @@ const ProjectsPage = () => {
     return 'on-track';
   };
 
-  const filteredProjects = allProjects.filter(project => {
-    const displayStatus = getProjectStatus(project);
-    const matchesSearch = project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          (project.partner_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          (project.project_code || '').toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesFilter = filterStatus === 'all' || displayStatus === filterStatus;
-    return matchesSearch && matchesFilter;
-  });
+  // Use filtered projects from context, but fallback to allProjects if no filter applied
+  const displayProjects = allProjects;
 
   const getStatusColor = (status: 'on-track' | 'at-risk' | 'delayed' | 'completed') => {
     switch (status) {
@@ -90,40 +83,12 @@ const ProjectsPage = () => {
         </div>
       </div>
 
-      {/* Filters */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-6"
-      >
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search projects..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            />
-          </div>
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          >
-            <option value="all">All Status</option>
-            <option value="on-track">On Track</option>
-            <option value="at-risk">At Risk</option>
-            <option value="delayed">Delayed</option>
-            <option value="completed">Completed</option>
-          </select>
-        </div>
-      </motion.div>
+      {/* Filter Bar */}
+      <FilterBar />
 
       {/* Projects Grid */}
-      <div className="grid grid-cols-1 gap-6">
-        {filteredProjects.map((project, index) => (
+      <div className="grid grid-cols-1 gap-6 mt-6">
+        {displayProjects.map((project, index) => (
           <motion.div
             key={project.id}
             initial={{ opacity: 0, y: 20 }}
