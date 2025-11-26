@@ -4,9 +4,9 @@ export interface CSRPartner {
   id: string;
   name: string;
   company_name: string;
-  registration_number: string;
-  pan_number: string;
-  gst_number: string;
+  registration_number: string | null;
+  pan_number: string | null;
+  gst_number: string | null;
   contact_person: string;
   designation: string;
   email: string;

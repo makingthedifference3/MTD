@@ -1,15 +1,94 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import type { FormEvent, Dispatch, SetStateAction } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, FolderKanban, DollarSign, X } from 'lucide-react';
+import { Plus, FolderKanban, DollarSign, X, MapPin, Calendar, Loader } from 'lucide-react';
 import { useFilter } from '../context/useFilter';
 import { useAuth } from '../context/useAuth';
 import FilterBar from '../components/FilterBar';
 import type { Project } from '../services/filterService';
+import { projectsService } from '../services/projectsService';
+import { getActiveCSRPartners, type CSRPartner } from '../services/csrPartnersService';
+
+const INITIAL_PROJECT_FORM = {
+  name: '',
+  projectCode: '',
+  description: '',
+  csrPartnerId: '',
+  location: '',
+  state: '',
+  category: '',
+  status: 'planning' as const,
+  totalBudget: '',
+  startDate: '',
+  expectedEndDate: '',
+  directBeneficiaries: '',
+  padsDistributed: '',
+  studentsEnrolled: '',
+  schoolsRenovated: '',
+  treesPlanted: '',
+  mealsServed: '',
+};
 
 const ProjectsPage = () => {
-  const { projects, filteredProjects, selectedPartner, selectedProject } = useFilter();
+  const { projects, filteredProjects, selectedPartner, selectedProject, refreshData } = useFilter();
   const { currentRole } = useAuth();
   const [selectedProjectDetails, setSelectedProjectDetails] = useState<Project | null>(null);
+
+  // Add project modal state
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [formData, setFormData] = useState(INITIAL_PROJECT_FORM);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [csrPartners, setCsrPartners] = useState<CSRPartner[]>([]);
+  const [partnersLoading, setPartnersLoading] = useState(false);
+
+  // Fetch CSR partners when modal opens
+  const fetchPartners = useCallback(async () => {
+    try {
+      setPartnersLoading(true);
+      const partners = await getActiveCSRPartners();
+      setCsrPartners(partners);
+    } catch (err) {
+      console.error('Failed to fetch partners:', err);
+    } finally {
+      setPartnersLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isAddModalOpen && csrPartners.length === 0) {
+      fetchPartners();
+    }
+  }, [isAddModalOpen, csrPartners.length, fetchPartners]);
+
+  const handleAddProject = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!formData.name || !formData.csrPartnerId) {
+      setFormError('Please fill in the project name and select a CSR partner.');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      setFormError(null);
+
+      const payload = buildProjectPayload(formData);
+      await projectsService.createProject(payload);
+
+      setIsAddModalOpen(false);
+      setFormData({ ...INITIAL_PROJECT_FORM });
+      // Refresh the projects list
+      if (refreshData) {
+        await refreshData();
+      }
+    } catch (err) {
+      console.error('Failed to create project:', err);
+      const message = err instanceof Error ? err.message : 'Unable to create project. Please try again.';
+      setFormError(message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const getProjectStatus = (project: Project): 'on-track' | 'completed' => {
     // Map database status values to display status
@@ -59,7 +138,10 @@ const ProjectsPage = () => {
             <p className="text-gray-600 mt-2">Manage and track all CSR projects</p>
           </div>
           {currentRole === 'admin' && (
-            <button className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-lg font-medium flex items-center space-x-2 transition-colors">
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-lg font-medium flex items-center space-x-2 transition-colors"
+            >
               <Plus className="w-5 h-5" />
               <span>New Project</span>
             </button>
@@ -260,8 +342,453 @@ const ProjectsPage = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Add Project Modal */}
+      {isAddModalOpen && (
+        <AddProjectModal
+          formData={formData}
+          setFormData={setFormData}
+          isSubmitting={isSubmitting}
+          formError={formError}
+          csrPartners={csrPartners}
+          partnersLoading={partnersLoading}
+          onClose={() => {
+            if (!isSubmitting) {
+              setIsAddModalOpen(false);
+              setFormError(null);
+              setFormData({ ...INITIAL_PROJECT_FORM });
+            }
+          }}
+          onSubmit={handleAddProject}
+        />
+      )}
     </div>
   );
 };
 
 export default ProjectsPage;
+
+// Helper to generate a unique project code
+const generateProjectCode = () => {
+  const prefix = 'PRJ';
+  const timestamp = Date.now().toString(36).toUpperCase();
+  const random = Math.random().toString(36).substring(2, 5).toUpperCase();
+  return `${prefix}-${timestamp}-${random}`;
+};
+
+// Build payload for creating a new project
+const buildProjectPayload = (values: typeof INITIAL_PROJECT_FORM) => {
+  const now = new Date().toISOString();
+  const budgetValue = Number(values.totalBudget) || 0;
+  const beneficiaries = Number(values.directBeneficiaries) || 0;
+
+  return {
+    project_code: values.projectCode.trim() || generateProjectCode(),
+    name: values.name.trim(),
+    description: values.description.trim() || undefined,
+    csr_partner_id: values.csrPartnerId,
+    location: values.location.trim() || undefined,
+    state: values.state.trim() || undefined,
+    category: values.category.trim() || undefined,
+    status: values.status,
+    start_date: values.startDate || now,
+    expected_end_date: values.expectedEndDate || undefined,
+    total_budget: budgetValue,
+    approved_budget: budgetValue,
+    utilized_budget: 0,
+    pending_budget: budgetValue,
+    direct_beneficiaries: beneficiaries,
+    total_beneficiaries: beneficiaries,
+    completion_percentage: 0,
+    is_active: true,
+    pads_distributed: Number(values.padsDistributed) || 0,
+    students_enrolled: Number(values.studentsEnrolled) || 0,
+    schools_renovated: Number(values.schoolsRenovated) || 0,
+    trees_planted: Number(values.treesPlanted) || 0,
+    meals_served: Number(values.mealsServed) || 0,
+    created_by: undefined,
+    updated_by: undefined,
+  };
+};
+
+// Modal props interface
+interface AddProjectModalProps {
+  formData: typeof INITIAL_PROJECT_FORM;
+  setFormData: Dispatch<SetStateAction<typeof INITIAL_PROJECT_FORM>>;
+  isSubmitting: boolean;
+  formError: string | null;
+  csrPartners: CSRPartner[];
+  partnersLoading: boolean;
+  onClose: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}
+
+// Add Project Modal component
+const AddProjectModal = ({
+  formData,
+  setFormData,
+  isSubmitting,
+  formError,
+  csrPartners,
+  partnersLoading,
+  onClose,
+  onSubmit,
+}: AddProjectModalProps) => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
+    <motion.div
+      initial={{ opacity: 0, y: 40 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="w-full max-w-3xl bg-white rounded-3xl shadow-2xl border border-emerald-100 max-h-[90vh] overflow-y-auto"
+    >
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white rounded-t-3xl">
+        <div>
+          <p className="text-sm font-medium text-emerald-600">Create New Project</p>
+          <h3 className="text-2xl font-bold text-gray-900">Add Project</h3>
+        </div>
+        <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100" aria-label="Close modal">
+          <X className="w-5 h-5 text-gray-500" />
+        </button>
+      </div>
+      <form onSubmit={onSubmit} className="p-6 space-y-6">
+        {/* CSR Partner Selection */}
+        <div>
+          <label className="text-sm font-medium text-gray-700">
+            CSR Partner *
+            {partnersLoading ? (
+              <div className="mt-1 flex items-center gap-2 text-gray-500">
+                <Loader className="w-4 h-4 animate-spin" />
+                <span>Loading partners...</span>
+              </div>
+            ) : (
+              <select
+                value={formData.csrPartnerId}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    csrPartnerId: e.target.value,
+                  }))
+                }
+                required
+                className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+              >
+                <option value="">Select a CSR Partner</option>
+                {csrPartners.map((partner) => (
+                  <option key={partner.id} value={partner.id}>
+                    {partner.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </label>
+        </div>
+
+        {/* Project Name and Code */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <label className="text-sm font-medium text-gray-700">
+            Project Name *
+            <input
+              type="text"
+              value={formData.name}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  name: e.target.value,
+                }))
+              }
+              required
+              className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+              placeholder="Rural Education Initiative"
+            />
+          </label>
+          <label className="text-sm font-medium text-gray-700">
+            Project Code
+            <input
+              type="text"
+              value={formData.projectCode}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  projectCode: e.target.value,
+                }))
+              }
+              className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+              placeholder="Auto-generated if empty"
+            />
+          </label>
+        </div>
+
+        {/* Description */}
+        <label className="text-sm font-medium text-gray-700 block">
+          Description
+          <textarea
+            value={formData.description}
+            onChange={(e) =>
+              setFormData((prev) => ({
+                ...prev,
+                description: e.target.value,
+              }))
+            }
+            rows={3}
+            className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none"
+            placeholder="Project description..."
+          />
+        </label>
+
+        {/* Location and State */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <label className="text-sm font-medium text-gray-700">
+            <span className="flex items-center gap-1">
+              <MapPin className="w-4 h-4" /> Location
+            </span>
+            <input
+              type="text"
+              value={formData.location}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  location: e.target.value,
+                }))
+              }
+              className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+              placeholder="Mumbai"
+            />
+          </label>
+          <label className="text-sm font-medium text-gray-700">
+            State
+            <input
+              type="text"
+              value={formData.state}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  state: e.target.value,
+                }))
+              }
+              className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+              placeholder="Maharashtra"
+            />
+          </label>
+        </div>
+
+        {/* Category and Status */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <label className="text-sm font-medium text-gray-700">
+            Category
+            <input
+              type="text"
+              value={formData.category}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  category: e.target.value,
+                }))
+              }
+              className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+              placeholder="Education, Healthcare, Environment..."
+            />
+          </label>
+          <label className="text-sm font-medium text-gray-700">
+            Status
+            <select
+              value={formData.status}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  status: e.target.value as typeof INITIAL_PROJECT_FORM.status,
+                }))
+              }
+              className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            >
+              <option value="planning">Planning</option>
+              <option value="active">Active</option>
+              <option value="on_hold">On Hold</option>
+              <option value="completed">Completed</option>
+            </select>
+          </label>
+        </div>
+
+        {/* Dates */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <label className="text-sm font-medium text-gray-700">
+            <span className="flex items-center gap-1">
+              <Calendar className="w-4 h-4" /> Start Date
+            </span>
+            <input
+              type="date"
+              value={formData.startDate}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  startDate: e.target.value,
+                }))
+              }
+              className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            />
+          </label>
+          <label className="text-sm font-medium text-gray-700">
+            <span className="flex items-center gap-1">
+              <Calendar className="w-4 h-4" /> Expected End Date
+            </span>
+            <input
+              type="date"
+              value={formData.expectedEndDate}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  expectedEndDate: e.target.value,
+                }))
+              }
+              className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            />
+          </label>
+        </div>
+
+        {/* Budget and Beneficiaries */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <label className="text-sm font-medium text-gray-700">
+            <span className="flex items-center gap-1">
+              <DollarSign className="w-4 h-4" /> Total Budget (₹)
+            </span>
+            <input
+              type="number"
+              value={formData.totalBudget}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  totalBudget: e.target.value,
+                }))
+              }
+              className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+              placeholder="5000000"
+            />
+          </label>
+          <label className="text-sm font-medium text-gray-700">
+            Direct Beneficiaries
+            <input
+              type="number"
+              value={formData.directBeneficiaries}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  directBeneficiaries: e.target.value,
+                }))
+              }
+              className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+              placeholder="1000"
+            />
+          </label>
+        </div>
+
+        {/* Impact Metrics */}
+        <div className="bg-emerald-50 rounded-2xl p-4 border border-emerald-100">
+          <p className="text-sm font-semibold text-emerald-700 mb-4">Impact Metrics (Optional)</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <label className="text-sm font-medium text-gray-700">
+              Meals Served
+              <input
+                type="number"
+                value={formData.mealsServed}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    mealsServed: e.target.value,
+                  }))
+                }
+                className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
+                placeholder="0"
+              />
+            </label>
+            <label className="text-sm font-medium text-gray-700">
+              Pads Distributed
+              <input
+                type="number"
+                value={formData.padsDistributed}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    padsDistributed: e.target.value,
+                  }))
+                }
+                className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
+                placeholder="0"
+              />
+            </label>
+            <label className="text-sm font-medium text-gray-700">
+              Students Enrolled
+              <input
+                type="number"
+                value={formData.studentsEnrolled}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    studentsEnrolled: e.target.value,
+                  }))
+                }
+                className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
+                placeholder="0"
+              />
+            </label>
+            <label className="text-sm font-medium text-gray-700">
+              Schools Renovated
+              <input
+                type="number"
+                value={formData.schoolsRenovated}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    schoolsRenovated: e.target.value,
+                  }))
+                }
+                className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
+                placeholder="0"
+              />
+            </label>
+            <label className="text-sm font-medium text-gray-700">
+              Trees Planted
+              <input
+                type="number"
+                value={formData.treesPlanted}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    treesPlanted: e.target.value,
+                  }))
+                }
+                className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
+                placeholder="0"
+              />
+            </label>
+          </div>
+        </div>
+
+        {formError && <p className="text-sm text-red-600">{formError}</p>}
+
+        <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-5 py-3 rounded-xl border border-gray-200 font-medium text-gray-700 hover:bg-gray-50"
+            disabled={isSubmitting}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={isSubmitting || partnersLoading}
+            className="px-6 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold shadow-lg shadow-emerald-500/20 disabled:opacity-60 flex items-center gap-2"
+          >
+            {isSubmitting ? (
+              <>
+                <Loader className="w-4 h-4 animate-spin" />
+                Creating...
+              </>
+            ) : (
+              'Create Project'
+            )}
+          </button>
+        </div>
+      </form>
+    </motion.div>
+  </div>
+);
+
