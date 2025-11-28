@@ -93,31 +93,50 @@ export const replaceProjectTeamMembers = async (
 export const fetchProjectTeamMembers = async (
   projectId: string
 ): Promise<ProjectTeamMemberWithUser[]> => {
-  const { data, error } = await supabase
+  // First fetch team members
+  const { data: membersData, error: membersError } = await supabase
     .from('project_team_members')
-    .select(
-      `id, project_id, user_id, role, designation, responsibilities, is_lead, can_approve_expenses, can_assign_tasks, access_level, is_active, notes, created_at, updated_at, created_by, updated_by, roles,
-      user:users(id, full_name, email)`
-    )
+    .select('id, project_id, user_id, role, designation, responsibilities, is_lead, can_approve_expenses, can_assign_tasks, access_level, is_active, notes, created_at, updated_at, created_by, updated_by, roles')
     .eq('project_id', projectId)
     .eq('is_active', true)
     .order('created_at', { ascending: true });
 
-  if (error) throw error;
-  return (data || []).map((member) => {
-    const rawUser = Array.isArray(member.user) ? member.user[0] ?? null : member.user;
-    return {
-      ...member,
-      role: member.role as ProjectTeamRole | null,
-      user: rawUser
-        ? {
-            id: rawUser.id,
-            full_name: rawUser.full_name,
-            email: rawUser.email,
-          }
-        : null,
-    };
-  });
+  if (membersError) {
+    console.error('Error fetching project team members:', membersError);
+    throw membersError;
+  }
+
+  if (!membersData || membersData.length === 0) {
+    return [];
+  }
+
+  // Fetch user details for all team members
+  const userIds = membersData.map((m) => m.user_id).filter(Boolean);
+  
+  let usersMap: Record<string, { id: string; full_name: string; email?: string }> = {};
+  
+  if (userIds.length > 0) {
+    const { data: usersData, error: usersError } = await supabase
+      .from('users')
+      .select('id, full_name, email')
+      .in('id', userIds);
+
+    if (usersError) {
+      console.error('Error fetching users for team members:', usersError);
+      // Continue without user details rather than failing completely
+    } else if (usersData) {
+      usersMap = usersData.reduce((acc, user) => {
+        acc[user.id] = user;
+        return acc;
+      }, {} as Record<string, { id: string; full_name: string; email?: string }>);
+    }
+  }
+
+  return membersData.map((member) => ({
+    ...member,
+    role: member.role as ProjectTeamRole | null,
+    user: usersMap[member.user_id] || null,
+  }));
 };
 
 export const projectTeamMembersService = {

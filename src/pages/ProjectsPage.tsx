@@ -142,7 +142,10 @@ const ProjectsPage = () => {
     setFormData(createInitialProjectFormState());
     setTolls([]);
     setEditingProjectId(null);
+    setSkipPartnerChangeEffect(false);
   };
+
+  const [skipPartnerChangeEffect, setSkipPartnerChangeEffect] = useState(false);
 
   // Fetch CSR partners when modal opens
   const fetchPartners = useCallback(async () => {
@@ -198,6 +201,12 @@ const ProjectsPage = () => {
 
   // Fetch tolls when partner changes and auto-fill location from partner
   useEffect(() => {
+    // Skip the partner change effect when editing to preserve existing toll/location
+    if (skipPartnerChangeEffect) {
+      setSkipPartnerChangeEffect(false);
+      return;
+    }
+
     if (formData.csrPartnerId) {
       const selectedPartnerData = csrPartners.find((p) => p.id === formData.csrPartnerId);
       const partnerHasToll = Boolean(selectedPartnerData?.has_toll);
@@ -218,7 +227,7 @@ const ProjectsPage = () => {
     } else {
       setTolls([]);
     }
-  }, [formData.csrPartnerId, fetchTolls, csrPartners]);
+  }, [formData.csrPartnerId, fetchTolls, csrPartners, skipPartnerChangeEffect]);
 
   useEffect(() => {
     if (!selectedProjectDetails) {
@@ -237,7 +246,9 @@ const ProjectsPage = () => {
       }
 
       try {
+        console.log('Loading team members for project:', selectedProjectDetails.id);
         const members = await fetchProjectTeamMembers(selectedProjectDetails.id);
+        console.log('Loaded team members:', members);
         if (isMounted) {
           setSelectedProjectTeamMembers(members);
         }
@@ -332,16 +343,33 @@ const ProjectsPage = () => {
   };
 
   const handleEditProject = async (project: Project) => {
+    console.log('Editing project:', project.id, project.name);
     setFormError(null);
     setIsPreparingEdit(true);
     setEditingProjectId(project.id);
     setSelectedProjectDetails(null);
+    
+    // Mark to skip the partner change effect so we don't reset toll/location
+    setSkipPartnerChangeEffect(true);
     setFormData(mapProjectToFormData(project));
     setIsAddModalOpen(true);
 
+    // Load tolls for the project's partner if there's a toll_id
+    if (project.csr_partner_id) {
+      fetchTolls(project.csr_partner_id);
+    }
+
     try {
+      console.log('Fetching team members for project:', project.id);
       const members = await fetchProjectTeamMembers(project.id);
-      setFormData(mapProjectToFormData(project, members));
+      console.log('Fetched team members for edit:', members);
+      setFormData((prev) => ({
+        ...prev,
+        teamMembers: members.map((member) => ({
+          userId: member.user_id,
+          role: (member.role ?? 'team_member') as ProjectTeamRole,
+        })),
+      }));
     } catch (err) {
       console.error('Failed to prepare project for editing:', err);
       setFormError('Unable to load existing team assignments. You can still edit the project and reassign members.');
