@@ -8,7 +8,9 @@ import {
 } from 'lucide-react';
 import { PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { useFilter } from '../context/useFilter';
+import { useProjectContext } from '../context/useProjectContext';
 import FilterBar from '../components/FilterBar';
+import LockedFilterBar from '../components/LockedFilterBar';
 import type { Project } from '../services/filterService';
 import { expenseService } from '../services/expenseService';
 import { budgetService } from '../services/budgetService';
@@ -64,6 +66,8 @@ const AccountantDashboard = () => {
     isLoading,
     error,
   } = useFilter();
+
+  const { isProjectSelected } = useProjectContext();
 
   const [viewMode, setViewMode] = useState<'partners' | 'projects' | 'projectDetails'>('partners');
   const [selectedProjectData, setSelectedProjectData] = useState<ProjectWithBeneficiaries | null>(null);
@@ -586,8 +590,11 @@ const AccountantDashboard = () => {
       ) : (
         // HIERARCHY VIEW - All existing code
         <>
-          {/* Filter Bar */}
-          <FilterBar />
+          {/* Locked Filter Bar - Shows when project is pre-selected */}
+          {isProjectSelected && <LockedFilterBar />}
+          
+          {/* Regular Filter Bar - Shows when no project is pre-selected */}
+          {!isProjectSelected && <FilterBar />}
 
           {/* Back Button */}
           {viewMode !== 'partners' && (

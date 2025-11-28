@@ -21,8 +21,14 @@ const FilterContext = createContext<FilterContextType | undefined>(undefined);
 export { FilterContext, type FilterContextType };
 
 export const FilterProvider = ({ children }: { children: ReactNode }) => {
-  const [selectedPartner, setSelectedPartner] = useState<string | null>(null);
-  const [selectedProject, setSelectedProject] = useState<string | null>(null);
+  const [selectedPartner, setSelectedPartner] = useState<string | null>(() => {
+    const saved = localStorage.getItem('selectedCSRPartnerId');
+    return saved || null;
+  });
+  const [selectedProject, setSelectedProject] = useState<string | null>(() => {
+    const saved = localStorage.getItem('selectedProjectId');
+    return saved || null;
+  });
   const [csrPartners, setCSRPartners] = useState<CSRPartner[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [filteredProjects, setFilteredProjects] = useState<Project[]>([]);
@@ -64,20 +70,31 @@ export const FilterProvider = ({ children }: { children: ReactNode }) => {
     loadAllProjects();
   }, []);
 
-  // Filter projects based on selected partner
+  // Filter projects based on selected partner AND ensure when project is pre-selected, only that project is shown
   useEffect(() => {
     if (selectedPartner) {
       console.log('FilterContext - Filtering with selectedPartner:', selectedPartner);
       console.log('FilterContext - Total projects available:', projects.length);
       console.log('FilterContext - Sample project csr_partner_ids:', projects.slice(0, 3).map(p => ({ name: p.name, csr_partner_id: p.csr_partner_id })));
-      const filtered = projects.filter((p) => p.csr_partner_id === selectedPartner);
+      let filtered = projects.filter((p) => p.csr_partner_id === selectedPartner);
+      
+      // If a specific project is also selected, filter to just that project
+      if (selectedProject) {
+        filtered = filtered.filter(p => p.id === selectedProject);
+      }
+      
       console.log('FilterContext - Filtered projects:', filtered.length);
       setFilteredProjects(filtered);
+    } else if (selectedProject) {
+      // If only project is selected (no partner), show just that project
+      console.log('FilterContext - Filtering with selectedProject only:', selectedProject);
+      const filtered = projects.filter(p => p.id === selectedProject);
+      setFilteredProjects(filtered);
     } else {
-      console.log('FilterContext - No partner selected, showing all projects:', projects.length);
+      console.log('FilterContext - No partner/project selected, showing all projects:', projects.length);
       setFilteredProjects(projects);
     }
-  }, [selectedPartner, projects]);
+  }, [selectedPartner, selectedProject, projects]);
 
   const resetFilters = () => {
     setSelectedPartner(null);

@@ -1,8 +1,7 @@
 import { supabase } from './supabaseClient';
-import { verifyPassword, hashPassword } from '../utils/passwordUtils';
 
 export interface LoginCredentials {
-  username: string;
+  fullName: string;
   password: string;
 }
 
@@ -13,21 +12,23 @@ export interface AuthUser {
   full_name: string;
   role: 'admin' | 'accountant' | 'project_manager' | 'team_member' | 'client';
   is_active: boolean;
+  csr_partner_id?: string;
 }
 
 /**
- * Authenticate user with username and password
+ * Authenticate user with full_name and password
  * Returns user data if successful, null if failed
+ * Password is stored directly in database (no hashing)
  */
 export const authenticateUser = async (
-  username: string,
+  fullName: string,
   plainPassword: string
 ): Promise<AuthUser | null> => {
   try {
     const { data, error } = await supabase
       .from('users')
-      .select('id, username, email, full_name, role, is_active, password')
-      .eq('username', username)
+      .select('id, username, email, full_name, role, is_active, password, csr_partner_id')
+      .eq('full_name', fullName)
       .eq('is_active', true)
       .single();
 
@@ -36,10 +37,9 @@ export const authenticateUser = async (
       return null;
     }
 
-    // Verify password using bcrypt
-    const passwordMatch = await verifyPassword(plainPassword, data.password);
-    if (!passwordMatch) {
-      console.error('Password mismatch for user:', username);
+    // Direct password comparison (passwords stored as plain text)
+    if (plainPassword !== data.password) {
+      console.error('Password mismatch for user:', fullName);
       return null;
     }
 
@@ -106,6 +106,7 @@ export const getAllUsers = async (): Promise<AuthUser[]> => {
 
 /**
  * Create new user (admin only)
+ * Password stored as plain text in database
  */
 export const createUser = async (userData: {
   username: string;
@@ -116,15 +117,13 @@ export const createUser = async (userData: {
   is_active?: boolean;
 }): Promise<AuthUser | null> => {
   try {
-    // Hash password automatically
-    const hashedPassword = await hashPassword(userData.password);
-
+    // Store password as plain text
     const { data, error } = await supabase
       .from('users')
       .insert([
         {
           username: userData.username,
-          password: hashedPassword,
+          password: userData.password,
           email: userData.email,
           full_name: userData.full_name,
           role: userData.role,
@@ -163,10 +162,8 @@ export const updateUser = async (
   try {
     const updateData = { ...userData };
 
-    // Hash password if being updated
-    if (updateData.password) {
-      updateData.password = await hashPassword(updateData.password);
-    }
+    // Password stored as plain text (no hashing needed)
+    // Just pass the password as is if provided
 
     const { data, error } = await supabase
       .from('users')

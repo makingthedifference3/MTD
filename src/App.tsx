@@ -1,6 +1,7 @@
 ﻿import { AuthProvider } from './context/AuthContext';
 import { useAuth } from './context/useAuth';
 import { FilterProvider } from './context/FilterContext';
+import { ProjectProvider } from './context/ProjectContext';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from './components/LoginPage';
 import Sidebar from './components/Sidebar';
@@ -27,6 +28,7 @@ import ProjectsPage from './pages/ProjectsPage';
 import UserAssignmentPage from './pages/UserAssignmentPage';
 import UserManagementPage from './pages/UserManagementPage';
 import UtilizationCertificatePage from './pages/UtilizationCertificatePage';
+import ProjectsDashboardPage from './pages/ProjectsDashboardPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { currentUser } = useAuth();
@@ -125,6 +127,14 @@ function AppRoutes() {
       />
 
       {/* Common Routes */}
+      <Route
+        path="/projects-dashboard"
+        element={
+          <ProtectedRoute>
+            <ProjectsDashboardPage />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/csr-partners"
         element={
@@ -307,7 +317,7 @@ function AppRoutes() {
       />
       
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/" element={<Navigate to="/admin-dashboard" replace />} />
+      <Route path="/" element={<Navigate to="/projects-dashboard" replace />} />
     </Routes>
   );
 }
@@ -317,7 +327,9 @@ function App() {
     <Router>
       <AuthProvider>
         <FilterProvider>
-          <AppRoutes />
+          <ProjectProvider>
+            <AppRoutes />
+          </ProjectProvider>
         </FilterProvider>
       </AuthProvider>
     </Router>

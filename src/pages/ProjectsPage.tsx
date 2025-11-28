@@ -8,12 +8,14 @@ import FilterBar from '../components/FilterBar';
 import type { Project } from '../services/filterService';
 import { projectsService } from '../services/projectsService';
 import { getActiveCSRPartners, type CSRPartner } from '../services/csrPartnersService';
+import { csrPartnerService, type CSRPartnerToll } from '../services/csrPartnerService';
 
 const INITIAL_PROJECT_FORM = {
   name: '',
   projectCode: '',
   description: '',
   csrPartnerId: '',
+  tollId: '', // New field for toll selection (optional)
   location: '',
   state: '',
   category: '',
@@ -40,7 +42,29 @@ const ProjectsPage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [csrPartners, setCsrPartners] = useState<CSRPartner[]>([]);
+  const [tolls, setTolls] = useState<CSRPartnerToll[]>([]); // State for tolls based on selected partner
   const [partnersLoading, setPartnersLoading] = useState(false);
+
+  // Handle partner change - load tolls for selected partner
+  const handlePartnerChange = useCallback(async (partnerId: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      csrPartnerId: partnerId,
+      tollId: '', // Reset toll when partner changes
+    }));
+
+    if (partnerId) {
+      try {
+        const partnerTolls = await csrPartnerService.getTollsByPartner(partnerId);
+        setTolls(partnerTolls);
+      } catch (error) {
+        console.error('Failed to fetch tolls:', error);
+        setTolls([]);
+      }
+    } else {
+      setTolls([]);
+    }
+  }, []);
 
   // Fetch CSR partners when modal opens
   const fetchPartners = useCallback(async () => {
@@ -352,6 +376,7 @@ const ProjectsPage = () => {
           formError={formError}
           csrPartners={csrPartners}
           partnersLoading={partnersLoading}
+          tolls={tolls}
           onClose={() => {
             if (!isSubmitting) {
               setIsAddModalOpen(false);
@@ -360,6 +385,7 @@ const ProjectsPage = () => {
             }
           }}
           onSubmit={handleAddProject}
+          onPartnerChange={handlePartnerChange}
         />
       )}
     </div>
@@ -419,8 +445,10 @@ interface AddProjectModalProps {
   formError: string | null;
   csrPartners: CSRPartner[];
   partnersLoading: boolean;
+  tolls: CSRPartnerToll[];
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onPartnerChange: (partnerId: string) => void;
 }
 
 // Add Project Modal component
@@ -431,8 +459,10 @@ const AddProjectModal = ({
   formError,
   csrPartners,
   partnersLoading,
+  tolls,
   onClose,
   onSubmit,
+  onPartnerChange,
 }: AddProjectModalProps) => (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
     <motion.div
@@ -462,12 +492,7 @@ const AddProjectModal = ({
             ) : (
               <select
                 value={formData.csrPartnerId}
-                onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    csrPartnerId: e.target.value,
-                  }))
-                }
+                onChange={(e) => onPartnerChange(e.target.value)}
                 required
                 className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
               >
@@ -481,6 +506,32 @@ const AddProjectModal = ({
             )}
           </label>
         </div>
+
+        {/* Toll/Sub-office Selection (Optional - only if tolls exist) */}
+        {tolls.length > 0 && (
+          <div>
+            <label className="text-sm font-medium text-gray-700">
+              Toll/Sub-office (Optional)
+              <select
+                value={formData.tollId}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    tollId: e.target.value,
+                  }))
+                }
+                className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+              >
+                <option value="">Select a Toll/Sub-office (Optional)</option>
+                {tolls.map((toll) => (
+                  <option key={toll.id} value={toll.id}>
+                    {toll.poc_name} ({toll.city}, {toll.state})
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
 
         {/* Project Name and Code */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -8,7 +8,9 @@ import {
 } from 'lucide-react';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useFilter } from '../context/useFilter';
+import { useProjectContext } from '../context/useProjectContext';
 import FilterBar from '../components/FilterBar';
+import LockedFilterBar from '../components/LockedFilterBar';
 import type { Project } from '../services/filterService';
 
 // Helper function to map icon names to actual Lucide icons
@@ -54,7 +56,6 @@ const PMDashboardInner = () => {
     selectedPartner,
     selectedProject,
     filteredProjects,
-    projects,
     setSelectedPartner,
     setSelectedProject,
     resetFilters,
@@ -62,16 +63,30 @@ const PMDashboardInner = () => {
     error,
   } = useFilter();
 
+  const { isProjectSelected, csrPartnerId, projectId } = useProjectContext();
+
   const [viewMode, setViewMode] = useState<'partners' | 'projects' | 'projectDetails'>('partners');
   const [selectedProjectData, setSelectedProjectData] = useState<ProjectWithBeneficiaries | null>(null);
   const [dashboardView, setDashboardView] = useState<'hierarchy' | 'analytics'>('hierarchy');
 
+  // When project is pre-selected from ProjectsDashboard, sync it to FilterContext
+  useEffect(() => {
+    if (isProjectSelected && csrPartnerId && projectId) {
+      console.log('PMDashboard - Syncing pre-selected project to FilterContext');
+      console.log('PMDashboard - Setting selectedPartner to:', csrPartnerId);
+      console.log('PMDashboard - Setting selectedProject to:', projectId);
+      setSelectedPartner(csrPartnerId);
+      setSelectedProject(projectId);
+      setViewMode('projectDetails');
+    }
+  }, [isProjectSelected, csrPartnerId, projectId, setSelectedPartner, setSelectedProject]);
+
   // Auto-switch to projects view when a partner is selected via FilterBar
   useEffect(() => {
-    if (selectedPartner) {
+    if (selectedPartner && !isProjectSelected) {
       setViewMode('projects');
     }
-  }, [selectedPartner]);
+  }, [selectedPartner, isProjectSelected]);
 
   // Auto-switch to project details when a project is selected via FilterBar
   useEffect(() => {
@@ -213,7 +228,7 @@ const PMDashboardInner = () => {
                 </div>
                 <span className="text-xs font-bold text-emerald-700 bg-emerald-200 px-3 py-1 rounded-full">ACTIVE</span>
               </div>
-              <p className="text-3xl font-black text-emerald-900 mb-1">{projects.length}</p>
+              <p className="text-3xl font-black text-emerald-900 mb-1">{filteredProjects.length}</p>
               <p className="text-sm text-emerald-700 font-semibold">Active Projects</p>
             </motion.div>
 
@@ -231,7 +246,7 @@ const PMDashboardInner = () => {
                 <span className="text-xs font-bold text-blue-700 bg-blue-200 px-3 py-1 rounded-full">REACH</span>
               </div>
               <p className="text-3xl font-black text-blue-900 mb-1">
-                {(projects.reduce((sum: number, p: Project) => sum + (p.direct_beneficiaries || 0), 0) / 1000).toFixed(1)}K
+                {(filteredProjects.reduce((sum: number, p: Project) => sum + (p.direct_beneficiaries || 0), 0) / 1000).toFixed(1)}K
               </p>
               <p className="text-sm text-blue-700 font-semibold">Total Beneficiaries</p>
             </motion.div>
@@ -250,7 +265,7 @@ const PMDashboardInner = () => {
                 <span className="text-xs font-bold text-purple-700 bg-purple-200 px-3 py-1 rounded-full">BUDGET</span>
               </div>
               <p className="text-3xl font-black text-purple-900 mb-1">
-                ₹{(projects.reduce((sum: number, p: Project) => sum + (p.total_budget || 0), 0) / 10000000).toFixed(1)}Cr
+                ₹{(filteredProjects.reduce((sum: number, p: Project) => sum + (p.total_budget || 0), 0) / 10000000).toFixed(1)}Cr
               </p>
               <p className="text-sm text-purple-700 font-semibold">Total Budget</p>
             </motion.div>
@@ -269,7 +284,7 @@ const PMDashboardInner = () => {
                 <span className="text-xs font-bold text-orange-700 bg-orange-200 px-3 py-1 rounded-full">DONE</span>
               </div>
               <p className="text-3xl font-black text-orange-900 mb-1">
-                {projects.filter((p: Project) => p.status === 'completed').length}
+                {filteredProjects.filter((p: Project) => p.status === 'completed').length}
               </p>
               <p className="text-sm text-orange-700 font-semibold">Completed Projects</p>
             </motion.div>
@@ -286,7 +301,7 @@ const PMDashboardInner = () => {
             >
               <h3 className="text-xl font-bold text-gray-900 mb-6">Project Status Distribution</h3>
               <div className="flex items-center justify-center min-h-[300px]">
-                {projects.length === 0 ? (
+                {filteredProjects.length === 0 ? (
                   <div className="text-center py-12">
                     <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
                       <BarChart3 className="w-8 h-8 text-gray-400" />
@@ -299,8 +314,8 @@ const PMDashboardInner = () => {
                     <PieChart>
                       <Pie
                         data={[
-                          { name: 'Active', value: projects.filter((p: Project) => p.status === 'active').length, fill: '#10b981' },
-                          { name: 'Completed', value: projects.filter((p: Project) => p.status === 'completed').length, fill: '#f59e0b' }
+                          { name: 'Active', value: filteredProjects.filter((p: Project) => p.status === 'active').length, fill: '#10b981' },
+                          { name: 'Completed', value: filteredProjects.filter((p: Project) => p.status === 'completed').length, fill: '#f59e0b' }
                         ]}
                         cx="50%"
                         cy="50%"
@@ -330,7 +345,7 @@ const PMDashboardInner = () => {
             >
               <h3 className="text-xl font-bold text-gray-900 mb-6">Top Partners by Projects</h3>
               <div className="flex items-center justify-center min-h-[300px]">
-                {projects.length === 0 ? (
+                {filteredProjects.length === 0 ? (
                   <div className="text-center py-12">
                     <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
                       <BarChart3 className="w-8 h-8 text-gray-400" />
@@ -342,7 +357,7 @@ const PMDashboardInner = () => {
                   <ResponsiveContainer width="100%" height={300}>
                     <BarChart data={csrPartners.slice(0, 8).map(partner => ({
                       name: partner.name.substring(0, 12),
-                      projects: projects.filter((p: Project) => p.csr_partner_id === partner.id).length
+                      projects: filteredProjects.filter((p: Project) => p.csr_partner_id === partner.id).length
                     }))}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                       <XAxis dataKey="name" stroke="#6b7280" style={{ fontSize: '12px' }} />
@@ -374,7 +389,7 @@ const PMDashboardInner = () => {
                   <span className="text-sm font-bold text-emerald-700 uppercase">Total Beneficiaries</span>
                 </div>
                 <p className="text-3xl font-black text-emerald-900">
-                  {(projects.reduce((sum: number, p: Project) => sum + (p.direct_beneficiaries || 0), 0) / 1000).toFixed(1)}K
+                  {(filteredProjects.reduce((sum: number, p: Project) => sum + (p.direct_beneficiaries || 0), 0) / 1000).toFixed(1)}K
                 </p>
               </div>
 
@@ -387,7 +402,7 @@ const PMDashboardInner = () => {
                   <span className="text-sm font-bold text-orange-700 uppercase">Meals Served</span>
                 </div>
                 <p className="text-3xl font-black text-orange-900">
-                  {(projects.reduce((sum: number, p: Project) => sum + (p.meals_served || 0), 0) / 1000000).toFixed(1)}M
+                  {(filteredProjects.reduce((sum: number, p: Project) => sum + (p.meals_served || 0), 0) / 1000000).toFixed(1)}M
                 </p>
               </div>
 
@@ -400,7 +415,7 @@ const PMDashboardInner = () => {
                   <span className="text-sm font-bold text-pink-700 uppercase">Pads Distributed</span>
                 </div>
                 <p className="text-3xl font-black text-pink-900">
-                  {(projects.reduce((sum: number, p: Project) => sum + (p.pads_distributed || 0), 0) / 1000000).toFixed(1)}M
+                  {(filteredProjects.reduce((sum: number, p: Project) => sum + (p.pads_distributed || 0), 0) / 1000000).toFixed(1)}M
                 </p>
               </div>
 
@@ -413,7 +428,7 @@ const PMDashboardInner = () => {
                   <span className="text-sm font-bold text-blue-700 uppercase">Students Enrolled</span>
                 </div>
                 <p className="text-3xl font-black text-blue-900">
-                  {(projects.reduce((sum: number, p: Project) => sum + (p.students_enrolled || 0), 0) / 1000).toFixed(1)}K
+                  {(filteredProjects.reduce((sum: number, p: Project) => sum + (p.students_enrolled || 0), 0) / 1000).toFixed(1)}K
                 </p>
               </div>
 
@@ -426,7 +441,7 @@ const PMDashboardInner = () => {
                   <span className="text-sm font-bold text-green-700 uppercase">Trees Planted</span>
                 </div>
                 <p className="text-3xl font-black text-green-900">
-                  {(projects.reduce((sum: number, p: Project) => sum + (p.trees_planted || 0), 0) / 1000).toFixed(1)}K
+                  {(filteredProjects.reduce((sum: number, p: Project) => sum + (p.trees_planted || 0), 0) / 1000).toFixed(1)}K
                 </p>
               </div>
 
@@ -439,7 +454,7 @@ const PMDashboardInner = () => {
                   <span className="text-sm font-bold text-purple-700 uppercase">Schools Renovated</span>
                 </div>
                 <p className="text-3xl font-black text-purple-900">
-                  {projects.reduce((sum: number, p: Project) => sum + (p.schools_renovated || 0), 0)}
+                  {filteredProjects.reduce((sum: number, p: Project) => sum + (p.schools_renovated || 0), 0)}
                 </p>
               </div>
             </div>
@@ -448,8 +463,11 @@ const PMDashboardInner = () => {
       ) : (
         // HIERARCHY VIEW - All existing code
         <>
-          {/* Filter Bar */}
-          <FilterBar />
+          {/* Locked Filter Bar - Shows when project is pre-selected */}
+          {isProjectSelected && <LockedFilterBar />}
+          
+          {/* Regular Filter Bar - Shows when no project is pre-selected */}
+          {!isProjectSelected && <FilterBar />}
 
           {/* Back Button */}
           {viewMode !== 'partners' && (
@@ -490,7 +508,10 @@ const PMDashboardInner = () => {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {csrPartners.map((partner, index) => {
+              {csrPartners
+                // When project is pre-selected, only show the selected partner
+                .filter(partner => !isProjectSelected || partner.id === selectedPartner)
+                .map((partner, index) => {
                 // Count projects for this partner from filteredProjects
                 const partnerProjectCount = filteredProjects.filter((p: Project) => p.csr_partner_id === partner.id).length;
                 return (
