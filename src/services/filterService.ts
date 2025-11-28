@@ -16,6 +16,13 @@ export interface Project {
   project_code: string;
   csr_partner_id: string;
   toll_id?: string;
+  toll?: {
+    id: string;
+    toll_name?: string | null;
+    poc_name?: string | null;
+    city?: string | null;
+    state?: string | null;
+  } | null;
   description?: string;
   location?: string;
   state?: string;
@@ -71,7 +78,8 @@ export const fetchProjectsByPartner = async (
     const { data, error } = await supabase
       .from('projects')
       .select(
-        'id, name, project_code, csr_partner_id, description, location, state, status, is_active, total_beneficiaries, direct_beneficiaries, indirect_beneficiaries, male_beneficiaries, female_beneficiaries, children_beneficiaries, impact_metrics, display_color, display_icon'
+        `id, name, project_code, csr_partner_id, toll_id, description, location, state, status, is_active, total_beneficiaries, direct_beneficiaries, indirect_beneficiaries, male_beneficiaries, female_beneficiaries, children_beneficiaries, impact_metrics, display_color, display_icon,
+        toll:csr_partner_tolls!projects_toll_id_fkey(id, toll_name, poc_name, city, state)`
       )
       .eq('csr_partner_id', partnerId)
       .eq('is_active', true)
@@ -97,7 +105,8 @@ export const fetchAllProjects = async (): Promise<Project[]> => {
     const { data, error } = await supabase
       .from('projects')
       .select(
-        'id, name, project_code, csr_partner_id, description, location, state, status, is_active, total_budget, utilized_budget, total_beneficiaries, direct_beneficiaries, indirect_beneficiaries, male_beneficiaries, female_beneficiaries, children_beneficiaries, impact_metrics, display_color, display_icon'
+        `id, name, project_code, csr_partner_id, toll_id, description, location, state, status, is_active, total_budget, utilized_budget, total_beneficiaries, direct_beneficiaries, indirect_beneficiaries, male_beneficiaries, female_beneficiaries, children_beneficiaries, impact_metrics, display_color, display_icon,
+        toll:csr_partner_tolls!projects_toll_id_fkey(id, toll_name, poc_name, city, state)`
       )
       .order('name', { ascending: true });
 
@@ -124,7 +133,8 @@ export const fetchProjectById = async (projectId: string): Promise<Project | nul
     const { data, error } = await supabase
       .from('projects')
       .select(
-        'id, name, project_code, csr_partner_id, description, location, state, status, is_active, total_beneficiaries, direct_beneficiaries, indirect_beneficiaries, male_beneficiaries, female_beneficiaries, children_beneficiaries, impact_metrics'
+        `id, name, project_code, csr_partner_id, toll_id, description, location, state, status, is_active, total_beneficiaries, direct_beneficiaries, indirect_beneficiaries, male_beneficiaries, female_beneficiaries, children_beneficiaries, impact_metrics,
+        toll:csr_partner_tolls!projects_toll_id_fkey(id, toll_name, poc_name, city, state)`
       )
       .eq('id', projectId)
       .single();

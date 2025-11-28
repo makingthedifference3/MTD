@@ -1,18 +1,22 @@
 import { useFilter } from '../context/useFilter';
 import type { CSRPartner, Project } from '../services/filterService';
-import { Building2, FolderKanban, X, Loader } from 'lucide-react';
+import type { Toll } from '../services/tollsService';
+import { Building2, FolderKanban, X, Loader, MapPin } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const FilterBar = () => {
   const {
     selectedPartner,
     selectedProject,
+    selectedToll,
     csrPartners,
     filteredProjects,
+    tolls,
     isLoading,
     error,
     setSelectedPartner,
     setSelectedProject,
+    setSelectedToll,
     resetFilters,
   } = useFilter();
 
@@ -29,6 +33,9 @@ const FilterBar = () => {
   const selectedProjectName = selectedProject
     ? filteredProjects.find((p: Project) => p.id === selectedProject)?.name
     : null;
+
+  const selectedTollInfo = selectedToll ? tolls.find((toll: Toll) => toll.id === selectedToll) : null;
+  const selectedTollName = selectedTollInfo?.toll_name || selectedTollInfo?.poc_name || null;
 
   const handlePartnerChange = (partnerId: string) => {
     if (partnerId === 'all') {
@@ -48,7 +55,16 @@ const FilterBar = () => {
     }
   };
 
-  const hasActiveFilters = selectedPartner || selectedProject;
+  const handleTollChange = (tollId: string) => {
+    setSelectedProject(null);
+    if (tollId === 'all') {
+      setSelectedToll(null);
+    } else {
+      setSelectedToll(tollId);
+    }
+  };
+
+  const hasActiveFilters = selectedPartner || selectedProject || selectedToll;
 
   if (error) {
     console.error('FilterBar Error:', error);
@@ -129,6 +145,40 @@ const FilterBar = () => {
           </div>
         </div>
 
+        {/* Toll Dropdown */}
+        {selectedPartner && (
+          <div className="flex-1 min-w-[250px]">
+            <label className="block text-xs font-semibold text-emerald-700 mb-2">Toll / Subcompany</label>
+            <div className="relative">
+              <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-600" />
+              <select
+                value={selectedToll || 'all'}
+                onChange={(e) => handleTollChange(e.target.value)}
+                disabled={tolls.length === 0 || isLoading}
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl border-2 border-emerald-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all bg-white text-gray-900 font-medium text-sm appearance-none cursor-pointer hover:border-emerald-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-50"
+              >
+                <option value="all">{tolls.length ? 'All Tolls (Partner-wise)' : 'No tolls available'}</option>
+                {tolls.map((toll: Toll) => (
+                  <option key={toll.id} value={toll.id}>
+                    {toll.toll_name || toll.poc_name}
+                    {toll.city ? ` • ${toll.city}` : ''}
+                  </option>
+                ))}
+              </select>
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                <svg
+                  className="w-4 h-4 text-emerald-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Reset Button */}
         <AnimatePresence>
           {hasActiveFilters && (
@@ -170,6 +220,12 @@ const FilterBar = () => {
               <span className="px-3 py-1 rounded-lg bg-emerald-100 text-emerald-700 text-xs font-medium flex items-center gap-2">
                 <FolderKanban className="w-3 h-3" />
                 {selectedProjectName}
+              </span>
+            )}
+            {selectedTollName && (
+              <span className="px-3 py-1 rounded-lg bg-emerald-100 text-emerald-700 text-xs font-medium flex items-center gap-2">
+                <MapPin className="w-3 h-3" />
+                {selectedTollName}
               </span>
             )}
           </motion.div>

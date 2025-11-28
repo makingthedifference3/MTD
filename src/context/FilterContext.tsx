@@ -70,26 +70,27 @@ export const FilterProvider = ({ children }: { children: ReactNode }) => {
     loadAllProjects();
   }, []);
 
-  // Filter projects based on selected partner
+  // Filter projects based on selected partner and toll
   useEffect(() => {
+    let currentProjects = projects;
+
     if (selectedPartner) {
-      console.log('FilterContext - Filtering with selectedPartner:', selectedPartner);
-      console.log('FilterContext - Total projects available:', projects.length);
-      console.log('FilterContext - Sample project csr_partner_ids:', projects.slice(0, 3).map(p => ({ name: p.name, csr_partner_id: p.csr_partner_id })));
-      const filtered = projects.filter((p) => p.csr_partner_id === selectedPartner);
-      console.log('FilterContext - Filtered projects:', filtered.length);
-      setFilteredProjects(filtered);
-    } else {
-      console.log('FilterContext - No partner selected, showing all projects:', projects.length);
-      setFilteredProjects(projects);
+      currentProjects = currentProjects.filter((p) => p.csr_partner_id === selectedPartner);
     }
-  }, [selectedPartner, projects]);
+
+    if (selectedToll) {
+      currentProjects = currentProjects.filter((p) => p.toll_id === selectedToll);
+    }
+
+    setFilteredProjects(currentProjects);
+  }, [projects, selectedPartner, selectedToll]);
 
   // Fetch tolls when partner is selected
   useEffect(() => {
     const loadTolls = async () => {
       if (selectedPartner) {
         try {
+          setSelectedToll(null);
           const partnerTolls = await getTollsByPartnerId(selectedPartner);
           setTolls(partnerTolls);
         } catch (err) {
@@ -103,14 +104,6 @@ export const FilterProvider = ({ children }: { children: ReactNode }) => {
     };
     loadTolls();
   }, [selectedPartner]);
-
-  // Further filter projects by toll if selected
-  useEffect(() => {
-    if (selectedToll) {
-      const tollFiltered = filteredProjects.filter((p) => (p as unknown as { toll_id?: string }).toll_id === selectedToll);
-      setFilteredProjects(tollFiltered);
-    }
-  }, [selectedToll]);
 
   const resetFilters = () => {
     setSelectedPartner(null);

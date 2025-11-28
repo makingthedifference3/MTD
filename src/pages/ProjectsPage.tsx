@@ -188,6 +188,12 @@ const ProjectsPage = () => {
     }
   };
 
+  const showTollColumn = Boolean(selectedProjectDetails?.toll || selectedProjectDetails?.toll_id);
+  const selectedProjectTollName =
+    selectedProjectDetails?.toll?.toll_name ||
+    selectedProjectDetails?.toll?.poc_name ||
+    (selectedProjectDetails?.toll_id ? 'Linked Toll' : null);
+
   if (!projects || projects.length === 0) {
     return (
       <div className="min-h-screen bg-gray-50 p-8 flex items-center justify-center">
@@ -241,6 +247,9 @@ const ProjectsPage = () => {
                 <div>
                   <h3 className="font-bold text-gray-900 text-lg">{project.name}</h3>
                   <p className="text-sm text-gray-600">{project.project_code} • {project.location}</p>
+                  {project.toll?.toll_name && (
+                    <p className="text-xs text-emerald-600 mt-1">Toll: {project.toll.toll_name}</p>
+                  )}
                 </div>
               </div>
               <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(getProjectStatus(project))}`}>
@@ -328,7 +337,7 @@ const ProjectsPage = () => {
                 )}
 
                 {/* Location & State */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className={`grid grid-cols-1 ${showTollColumn ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-4`}>
                   {selectedProjectDetails.location && (
                     <div>
                       <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Location</p>
@@ -339,6 +348,18 @@ const ProjectsPage = () => {
                     <div>
                       <p className="text-xs font-semibold text-gray-500 uppercase mb-1">State</p>
                       <p className="text-gray-900 font-medium">{selectedProjectDetails.state}</p>
+                    </div>
+                  )}
+                  {showTollColumn && selectedProjectTollName && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Toll / Subcompany</p>
+                      <p className="text-gray-900 font-medium">{selectedProjectTollName}</p>
+                      {selectedProjectDetails.toll &&
+                        [selectedProjectDetails.toll.city, selectedProjectDetails.toll.state].some(Boolean) && (
+                        <p className="text-sm text-gray-500">
+                          {[selectedProjectDetails.toll.city, selectedProjectDetails.toll.state].filter(Boolean).join(', ')}
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -694,7 +715,8 @@ const AddProjectModal = ({
                   <option value="">No Toll (Direct Partner)</option>
                   {tolls.map((toll) => (
                     <option key={toll.id} value={toll.id}>
-                      {toll.poc_name} {toll.city ? `- ${toll.city}` : ''}
+                      {toll.toll_name || toll.poc_name}
+                      {toll.city ? ` • ${toll.city}` : ''}
                     </option>
                   ))}
                 </select>
