@@ -12,6 +12,15 @@ import { useProjectContext } from '../context/useProjectContext';
 import FilterBar from '../components/FilterBar';
 import LockedFilterBar from '../components/LockedFilterBar';
 import type { Project } from '../services/filterService';
+import {
+  getImpactMetricValue,
+  sumImpactMetricValue,
+} from '../utils/impactMetrics';
+import {
+  IMPACT_METRIC_ORDER,
+  IMPACT_METRIC_FORMATTERS,
+  renderImpactMetricCard,
+} from '../utils/impactMetricDisplay';
 
 // Helper function to map icon names to actual Lucide icons
 const getIconComponent = (iconName?: string): LucideIcon => {
@@ -685,70 +694,11 @@ const PMDashboardInner = () => {
                     </p>
                   </div>
 
-                  {/* Meals Served */}
-                  {(selectedProjectData.meals_served || 0) > 0 && (
-                    <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-4 hover:shadow-lg transition-all">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Activity className="w-5 h-5 text-orange-600" />
-                        <span className="text-xs font-bold text-orange-700 uppercase">Meals</span>
-                      </div>
-                      <p className="text-2xl font-black text-orange-900">
-                        {((selectedProjectData.meals_served || 0) / 1000).toFixed(1)}K
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Pads Distributed */}
-                  {(selectedProjectData.pads_distributed || 0) > 0 && (
-                    <div className="bg-pink-50 border-2 border-pink-200 rounded-xl p-4 hover:shadow-lg transition-all">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Award className="w-5 h-5 text-pink-600" />
-                        <span className="text-xs font-bold text-pink-700 uppercase">Pads</span>
-                      </div>
-                      <p className="text-2xl font-black text-pink-900">
-                        {((selectedProjectData.pads_distributed || 0) / 1000).toFixed(0)}K
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Students Enrolled */}
-                  {(selectedProjectData.students_enrolled || 0) > 0 && (
-                    <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4 hover:shadow-lg transition-all">
-                      <div className="flex items-center gap-2 mb-2">
-                        <GraduationCap className="w-5 h-5 text-blue-600" />
-                        <span className="text-xs font-bold text-blue-700 uppercase">Students</span>
-                      </div>
-                      <p className="text-2xl font-black text-blue-900">
-                        {(selectedProjectData.students_enrolled || 0).toLocaleString()}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Trees Planted */}
-                  {(selectedProjectData.trees_planted || 0) > 0 && (
-                    <div className="bg-green-50 border-2 border-green-200 rounded-xl p-4 hover:shadow-lg transition-all">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Leaf className="w-5 h-5 text-green-600" />
-                        <span className="text-xs font-bold text-green-700 uppercase">Trees</span>
-                      </div>
-                      <p className="text-2xl font-black text-green-900">
-                        {((selectedProjectData.trees_planted || 0) / 1000).toFixed(0)}K
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Schools Renovated */}
-                  {(selectedProjectData.schools_renovated || 0) > 0 && (
-                    <div className="bg-purple-50 border-2 border-purple-200 rounded-xl p-4 hover:shadow-lg transition-all">
-                      <div className="flex items-center gap-2 mb-2">
-                        <FolderKanban className="w-5 h-5 text-purple-600" />
-                        <span className="text-xs font-bold text-purple-700 uppercase">Schools</span>
-                      </div>
-                      <p className="text-2xl font-black text-purple-900">
-                        {selectedProjectData.schools_renovated || '0'}
-                      </p>
-                    </div>
-                  )}
+                  {IMPACT_METRIC_ORDER.map((key) => {
+                    const value = getImpactMetricValue(selectedProjectData.impact_metrics, key);
+                    if (value <= 0) return null;
+                    return renderImpactMetricCard(key, value.toLocaleString());
+                  })}
                 </div>
               </motion.div>
 

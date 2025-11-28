@@ -4,6 +4,7 @@ export interface CSRPartner {
   id: string;
   name: string;
   company_name: string;
+  has_toll: boolean;
   registration_number: string | null;
   pan_number: string | null;
   gst_number: string | null;
@@ -49,6 +50,7 @@ export interface CSRPartnerStats {
   activeProjects: number;
   totalBudget: number;
   status: 'active' | 'inactive';
+  hasToll: boolean;
 }
 
 export interface PartnerStats {
@@ -231,6 +233,8 @@ export const getCSRPartnersWithStats = async (): Promise<CSRPartnerStats[]> => {
         `
         id,
         name,
+        company_name,
+        has_toll,
         city,
         contact_person,
         phone,
@@ -248,7 +252,7 @@ export const getCSRPartnersWithStats = async (): Promise<CSRPartnerStats[]> => {
     // Transform the data
     const stats = (data || []).map((partner) => ({
       id: partner.id as string,
-      name: partner.name as string,
+      name: (partner.company_name as string) || (partner.name as string) || '—',
       location: (partner.city as string) || 'Unknown',
       contactPerson: (partner.contact_person as string) || 'N/A',
       phone: (partner.phone as string) || 'N/A',
@@ -256,6 +260,7 @@ export const getCSRPartnersWithStats = async (): Promise<CSRPartnerStats[]> => {
       activeProjects: (partner.projects as Array<{ id: string }>) ? (partner.projects as Array<{ id: string }>).length : 0,
       totalBudget: (partner.budget_allocated as number) || 0,
       status: 'active' as const,
+      hasToll: Boolean(partner.has_toll),
     }));
 
     return stats;

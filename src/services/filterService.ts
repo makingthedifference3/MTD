@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import type { ImpactMetricEntry } from '../utils/impactMetrics';
 
 export interface CSRPartner {
   id: string;
@@ -14,11 +15,27 @@ export interface Project {
   name: string;
   project_code: string;
   csr_partner_id: string;
+  toll_id?: string;
+  toll?: {
+    id: string;
+    toll_name?: string | null;
+    poc_name?: string | null;
+    city?: string | null;
+    state?: string | null;
+  } | null;
   description?: string;
   location?: string;
   state?: string;
+  category?: string;
+  work?: string;
+  start_date?: string;
+  expected_end_date?: string;
   status?: string;
   is_active: boolean;
+  // Sub-project support
+  parent_project_id?: string;
+  is_beneficiary_project?: boolean;
+  beneficiary_number?: number;
   // Budget data from database
   total_budget?: number;
   utilized_budget?: number;
@@ -30,11 +47,7 @@ export interface Project {
   female_beneficiaries?: number;
   children_beneficiaries?: number;
   // Impact metrics from database
-  meals_served?: number;
-  pads_distributed?: number;
-  students_enrolled?: number;
-  trees_planted?: number;
-  schools_renovated?: number;
+  impact_metrics?: ImpactMetricEntry[];
   // UI display properties from database
   display_color?: string;
   display_icon?: string;
@@ -77,6 +90,7 @@ export const fetchProjectsByPartner = async (
       )
       .eq('csr_partner_id', partnerId)
       .eq('is_active', true)
+      .is('parent_project_id', null)
       .order('name', { ascending: true });
 
     if (error) {
@@ -101,6 +115,7 @@ export const fetchAllProjects = async (): Promise<Project[]> => {
       .select(
         'id, name, project_code, csr_partner_id, description, status, is_active, total_budget, utilized_budget'
       )
+      .is('parent_project_id', null)
       .order('name', { ascending: true });
 
     if (error) {
@@ -126,7 +141,8 @@ export const fetchProjectById = async (projectId: string): Promise<Project | nul
     const { data, error } = await supabase
       .from('projects')
       .select(
-        'id, name, project_code, csr_partner_id, description, location, state, status, is_active, total_beneficiaries, direct_beneficiaries, indirect_beneficiaries, male_beneficiaries, female_beneficiaries, children_beneficiaries'
+        `id, name, project_code, csr_partner_id, toll_id, description, location, state, status, is_active, total_beneficiaries, direct_beneficiaries, indirect_beneficiaries, male_beneficiaries, female_beneficiaries, children_beneficiaries, impact_metrics,
+        toll:csr_partner_tolls!projects_toll_id_fkey(id, toll_name, poc_name, city, state)`
       )
       .eq('id', projectId)
       .single();

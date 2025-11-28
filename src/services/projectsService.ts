@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import type { ImpactMetricEntry } from '../utils/impactMetrics';
 
 /**
  * ProjectsService - Manages all database operations for projects
@@ -12,6 +13,7 @@ export interface Project {
   name: string;
   description?: string;
   csr_partner_id: string;
+  toll_id?: string;
   project_manager_id?: string;
   assistant_manager_id?: string;
   location?: string;
@@ -22,6 +24,7 @@ export interface Project {
   village?: string;
   pincode?: string;
   category?: string;
+  work?: string;
   sub_category?: string;
   project_type?: 'one_time' | 'ongoing' | 'recurring';
   focus_area?: string[];
@@ -37,12 +40,12 @@ export interface Project {
   total_beneficiaries?: number;
   direct_beneficiaries?: number;
   indirect_beneficiaries?: number;
+  // Sub-project support
+  parent_project_id?: string;
+  is_beneficiary_project?: boolean;
+  beneficiary_number?: number;
   // Impact metrics
-  meals_served?: number;
-  pads_distributed?: number;
-  students_enrolled?: number;
-  trees_planted?: number;
-  schools_renovated?: number;
+  impact_metrics?: ImpactMetricEntry[];
   male_beneficiaries?: number;
   female_beneficiaries?: number;
   children_beneficiaries?: number;
@@ -577,6 +580,116 @@ class ProjectsService {
       return count || 0;
     } catch {
       return 0;
+    }
+  }
+
+  /**
+   * Create beneficiary sub-projects for a parent project
+   */
+  async createBeneficiarySubProjects(
+    parentProject: Project,
+    count: number
+  ): Promise<Project[]> {
+    if (count <= 0) return [];
+
+    const subProjects: Omit<Project, 'id' | 'created_at' | 'updated_at'>[] = [];
+    
+    for (let i = 1; i <= count; i++) {
+      const subProjectCode = `${parentProject.project_code}-B${i.toString().padStart(3, '0')}`;
+      subProjects.push({
+        project_code: subProjectCode,
+        name: `${parentProject.name} - Beneficiary ${i}`,
+        description: `Beneficiary sub-project ${i} of ${count} for ${parentProject.name}`,
+        csr_partner_id: parentProject.csr_partner_id,
+        toll_id: parentProject.toll_id,
+        location: parentProject.location,
+        state: parentProject.state,
+        work: parentProject.work,
+        status: 'planning',
+        start_date: parentProject.start_date,
+        expected_end_date: parentProject.expected_end_date,
+        parent_project_id: parentProject.id,
+        is_beneficiary_project: true,
+        beneficiary_number: i,
+        is_active: true,
+        total_budget: 0,
+        direct_beneficiaries: 1,
+        total_beneficiaries: 1,
+        impact_metrics: [], // Initialize with empty impact metrics for individual tracking
+      });
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('projects')
+        .insert(subProjects)
+        .select();
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error creating beneficiary sub-projects:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get sub-projects for a parent project
+   */
+  async getSubProjects(parentProjectId: string): Promise<Project[]> {
+    try {
+      const { data, error } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('parent_project_id', parentProjectId)
+        .eq('is_active', true)
+        .order('beneficiary_number', { ascending: true });
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching sub-projects:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get sub-project count for a parent project
+   */
+  async getSubProjectCount(parentProjectId: string): Promise<number> {
+    try {
+      const { count } = await supabase
+        .from('projects')
+        .select('*', { count: 'exact' })
+        .eq('parent_project_id', parentProjectId)
+        .eq('is_active', true);
+
+      return count || 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
+   * Update a sub-project's impact metrics
+   */
+  async updateSubProjectImpactMetrics(
+    subProjectId: string,
+    impactMetrics: ImpactMetricEntry[]
+  ): Promise<Project> {
+    try {
+      const { data, error } = await supabase
+        .from('projects')
+        .update({ impact_metrics: impactMetrics, updated_at: new Date().toISOString() })
+        .eq('id', subProjectId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error updating sub-project impact metrics:', error);
+      throw error;
     }
   }
 }

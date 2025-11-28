@@ -1,16 +1,19 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Dispatch, SetStateAction, FormEvent, ReactNode } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Plus, Building2, MapPin, Phone, Mail, Loader, X, User2, Globe, Info } from 'lucide-react';
+import { Search, Plus, Building2, MapPin, Phone, Mail, Loader, X, User2, Globe, Info, Settings } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import {
   getCSRPartnersWithStats,
   getPartnerStats,
   getCSRPartnerById,
   createCSRPartner,
+  updateCSRPartner,
   type CSRPartner,
   type CSRPartnerStats,
   type PartnerStats,
 } from '@/services/csrPartnersService';
+import { getTollCountForPartner } from '@/services/tollsService';
 
 const INITIAL_FORM_STATE = {
   name: '',
@@ -23,12 +26,17 @@ const INITIAL_FORM_STATE = {
   budget: '',
   status: 'active',
   website: '',
+  hasToll: false,
 };
 
+type PartnerTextFieldKey = 'companyName' | 'contactPerson' | 'email' | 'phone' | 'website';
+
 const CSRPartnersPage = () => {
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [partners, setPartners] = useState<CSRPartnerStats[]>([]);
   const [allPartners, setAllPartners] = useState<CSRPartnerStats[]>([]);
+  const [tollCounts, setTollCounts] = useState<Record<string, number>>({});
   const [stats, setStats] = useState<PartnerStats>({
     totalPartners: 0,
     activePartners: 0,
@@ -45,6 +53,10 @@ const CSRPartnersPage = () => {
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [detailsError, setDetailsError] = useState<string | null>(null);
   const [formData, setFormData] = useState(INITIAL_FORM_STATE);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editFormData, setEditFormData] = useState(INITIAL_FORM_STATE);
+  const [isEditSubmitting, setIsEditSubmitting] = useState(false);
+  const [editFormError, setEditFormError] = useState<string | null>(null);
 
   const fetchPartnerData = useCallback(async () => {
     try {
@@ -55,6 +67,16 @@ const CSRPartnersPage = () => {
       setAllPartners(partnerList);
       setPartners(partnerList);
       setStats(partnerStats);
+      
+      // Fetch toll counts for each partner
+      const counts: Record<string, number> = {};
+      await Promise.all(
+        partnerList.map(async (partner) => {
+          const count = await getTollCountForPartner(partner.id);
+          counts[partner.id] = count;
+        })
+      );
+      setTollCounts(counts);
     } catch (err) {
       setError('Failed to load partner data');
       console.error('Error fetching partner data:', err);
@@ -108,8 +130,12 @@ const CSRPartnersPage = () => {
 
   const handleAddPartner = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!formData.name || !formData.contactPerson || !formData.email) {
-      setFormError('Please fill in partner name, contact person, and email.');
+    if (!formData.companyName.trim()) {
+      setFormError('Please fill in company name.');
+      return;
+    }
+    if (!formData.hasToll && (!formData.contactPerson.trim() || !formData.email.trim() || !formData.phone.trim())) {
+      setFormError('Please fill in contact person, email, and phone when tolls are not managed separately.');
       return;
     }
 
@@ -145,6 +171,63 @@ const CSRPartnersPage = () => {
       setDetailsError('Failed to load partner details.');
     } finally {
       setDetailsLoading(false);
+    }
+  };
+
+  const handleEditPartner = async (partnerId: string) => {
+    try {
+      const partnerDetails = await getCSRPartnerById(partnerId);
+      if (!partnerDetails) {
+        return;
+      }
+      const companyName = partnerDetails.company_name || partnerDetails.name || '';
+      setEditFormData({
+        name: companyName,
+        companyName,
+        contactPerson: partnerDetails.contact_person || '',
+        email: partnerDetails.email || '',
+        phone: partnerDetails.phone || '',
+        city: partnerDetails.city || '',
+        state: partnerDetails.state || '',
+        budget: String(partnerDetails.budget_allocated || ''),
+        status: partnerDetails.is_active ? 'active' : 'inactive',
+        website: partnerDetails.website || '',
+        hasToll: Boolean(partnerDetails.has_toll),
+      });
+      setSelectedPartner(partnerDetails);
+      setIsEditModalOpen(true);
+    } catch (err) {
+      console.error('Failed to load partner for edit:', err);
+    }
+  };
+
+  const handleUpdatePartner = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedPartner) return;
+    if (!editFormData.companyName.trim()) {
+      setEditFormError('Please fill in company name.');
+      return;
+    }
+    if (!editFormData.hasToll && (!editFormData.contactPerson.trim() || !editFormData.email.trim() || !editFormData.phone.trim())) {
+      setEditFormError('Please fill in contact person, email, and phone when tolls are not managed separately.');
+      return;
+    }
+
+    try {
+      setIsEditSubmitting(true);
+      setEditFormError(null);
+      const payload = buildPartnerPayload(editFormData);
+      await updateCSRPartner(selectedPartner.id, payload);
+      setIsEditModalOpen(false);
+      setEditFormData({ ...INITIAL_FORM_STATE });
+      setSelectedPartner(null);
+      await fetchPartnerData();
+    } catch (err) {
+      console.error('Failed to update partner:', err);
+      const message = err instanceof Error ? err.message : 'Unable to update partner. Please try again.';
+      setEditFormError(message);
+    } finally {
+      setIsEditSubmitting(false);
     }
   };
 
@@ -248,7 +331,7 @@ const CSRPartnersPage = () => {
             </div>
 
             <div className="border-t border-gray-100 pt-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div>
                   <p className="text-xs text-gray-600 mb-1">Active Projects</p>
                   <p className="text-xl font-bold text-gray-900">{partner.activeProjects}</p>
@@ -257,15 +340,36 @@ const CSRPartnersPage = () => {
                   <p className="text-xs text-gray-600 mb-1">Total Budget</p>
                   <p className="text-xl font-bold text-emerald-600">₹{(partner.totalBudget / 1000).toFixed(0)}K</p>
                 </div>
+                <div>
+                  <p className="text-xs text-gray-600 mb-1">Tolls</p>
+                  <p className="text-xl font-bold text-blue-600">{tollCounts[partner.id] || 0}</p>
+                </div>
               </div>
             </div>
 
-            <button
-              onClick={() => handleViewDetails(partner.id)}
-              className="w-full mt-4 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold py-2 rounded-lg transition-colors border border-emerald-100"
-            >
-              View Details
-            </button>
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={() => handleViewDetails(partner.id)}
+                className="flex-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold py-2 rounded-lg transition-colors border border-emerald-100"
+              >
+                View Details
+              </button>
+              <button
+                onClick={() => handleEditPartner(partner.id)}
+                className="bg-amber-50 hover:bg-amber-100 text-amber-700 font-semibold py-2 px-4 rounded-lg transition-colors border border-amber-100"
+              >
+                Edit
+              </button>
+              {partner.hasToll && (
+                <button
+                  onClick={() => navigate(`/csr-partners/${partner.id}/tolls`)}
+                  className="flex items-center justify-center gap-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold py-2 px-4 rounded-lg transition-colors border border-blue-100"
+                >
+                  <Settings className="w-4 h-4" />
+                  Tolls
+                </button>
+              )}
+            </div>
           </motion.div>
           ))
         ) : (
@@ -305,6 +409,24 @@ const CSRPartnersPage = () => {
           }}
         />
       )}
+
+      {isEditModalOpen && (
+        <EditPartnerModal
+          formData={editFormData}
+          setFormData={setEditFormData}
+          isSubmitting={isEditSubmitting}
+          formError={editFormError}
+          onClose={() => {
+            if (!isEditSubmitting) {
+              setIsEditModalOpen(false);
+              setEditFormError(null);
+              setEditFormData({ ...INITIAL_FORM_STATE });
+              setSelectedPartner(null);
+            }
+          }}
+          onSubmit={handleUpdatePartner}
+        />
+      )}
     </div>
   );
 };
@@ -316,10 +438,12 @@ const buildPartnerPayload = (values: typeof INITIAL_FORM_STATE): Omit<CSRPartner
   const fiscalYear = `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
   const budgetValue = Number(values.budget) || 0;
   const website = values.website.trim();
+  const companyName = values.companyName.trim() || values.name.trim();
 
   return {
-    name: values.name.trim(),
-    company_name: values.companyName.trim() || values.name.trim(),
+    name: companyName,
+    company_name: companyName,
+    has_toll: values.hasToll,
     registration_number: null,
     pan_number: null,
     gst_number: null,
@@ -372,7 +496,7 @@ const AddPartnerModal = ({ formData, setFormData, isSubmitting, formError, onClo
     <motion.div
       initial={{ opacity: 0, y: 40 }}
       animate={{ opacity: 1, y: 0 }}
-      className="w-full max-w-3xl bg-white rounded-3xl shadow-2xl border border-emerald-100"
+      className="w-full max-w-3xl bg-white rounded-3xl shadow-2xl border border-emerald-100 max-h-[90vh] overflow-y-auto"
     >
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
         <div>
@@ -384,29 +508,56 @@ const AddPartnerModal = ({ formData, setFormData, isSubmitting, formError, onClo
         </button>
       </div>
       <form onSubmit={onSubmit} className="p-6 space-y-6">
+        {/* Has Toll Toggle */}
+        <div className="flex items-center gap-3 p-4 bg-blue-50 rounded-xl border border-blue-100">
+          <input
+            type="checkbox"
+            id="hasToll"
+            checked={formData.hasToll}
+            onChange={(e) =>
+              setFormData((prev) => ({
+                ...prev,
+                hasToll: e.target.checked,
+              }))
+            }
+            className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+          />
+          <label htmlFor="hasToll" className="text-sm font-medium text-blue-700">
+            This partner has toll locations
+          </label>
+          {formData.hasToll && (
+            <span className="ml-auto text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
+              Manage tolls after creation
+            </span>
+          )}
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {[
-            { label: 'Partner Name', key: 'name', placeholder: 'Acme Foundation' },
-            { label: 'Company Name', key: 'companyName', placeholder: 'Acme Corp' },
-            { label: 'Contact Person', key: 'contactPerson', placeholder: 'Jane Doe' },
-            { label: 'Email', key: 'email', placeholder: 'jane@example.com', type: 'email' },
-            { label: 'Phone', key: 'phone', placeholder: '+91 98765 43210' },
-            { label: 'City', key: 'city', placeholder: 'Mumbai' },
-            { label: 'State', key: 'state', placeholder: 'Maharashtra' },
-            { label: 'Website', key: 'website', placeholder: 'https://acme.org' },
+            { label: 'Company Name', key: 'companyName' as PartnerTextFieldKey, placeholder: 'Acme Corp', syncName: true, required: true },
+            ...(formData.hasToll
+              ? []
+              : [
+                  { label: 'Contact Person', key: 'contactPerson' as PartnerTextFieldKey, placeholder: 'Jane Doe', required: true },
+                  { label: 'Email', key: 'email' as PartnerTextFieldKey, placeholder: 'jane@example.com', type: 'email', required: true },
+                  { label: 'Phone', key: 'phone' as PartnerTextFieldKey, placeholder: '+91 98765 43210', required: true },
+                ]),
+            { label: 'Website', key: 'website' as PartnerTextFieldKey, placeholder: 'https://acme.org', required: false },
           ].map((field) => (
             <label key={field.key} className="text-sm font-medium text-gray-700">
               {field.label}
               <input
                 type={field.type || 'text'}
-                value={(formData as Record<string, string>)[field.key]}
-                onChange={(e) =>
+                value={formData[field.key]}
+                onChange={(e) => {
+                  const value = e.target.value;
                   setFormData((prev) => ({
                     ...prev,
-                    [field.key]: e.target.value,
-                  }))
-                }
-                required={field.key !== 'companyName'}
+                    [field.key]: value,
+                    ...(field.syncName ? { name: value } : {}),
+                  }));
+                }}
+                required={field.required !== false}
                 className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                 placeholder={field.placeholder}
               />
@@ -414,22 +565,73 @@ const AddPartnerModal = ({ formData, setFormData, isSubmitting, formError, onClo
           ))}
         </div>
 
+        {/* Conditional City/State/Budget - only show if no toll */}
+        {!formData.hasToll && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-gray-50 rounded-xl border border-gray-100">
+            <p className="col-span-full text-sm text-gray-600 mb-2">
+              Since this partner has no tolls, specify location and budget here:
+            </p>
+            <label className="text-sm font-medium text-gray-700">
+              City
+              <input
+                type="text"
+                value={formData.city}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    city: e.target.value,
+                  }))
+                }
+                required
+                className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                placeholder="Mumbai"
+              />
+            </label>
+            <label className="text-sm font-medium text-gray-700">
+              State
+              <input
+                type="text"
+                value={formData.state}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    state: e.target.value,
+                  }))
+                }
+                required
+                className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                placeholder="Maharashtra"
+              />
+            </label>
+            <label className="text-sm font-medium text-gray-700">
+              Budget (₹)
+              <input
+                type="number"
+                value={formData.budget}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    budget: e.target.value,
+                  }))
+                }
+                required
+                className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                placeholder="5000000"
+              />
+            </label>
+          </div>
+        )}
+
+        {formData.hasToll && (
+          <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
+            <p className="text-sm text-blue-700">
+              <strong>Note:</strong> City, state, and budget will be managed through individual tolls. 
+              After creating this partner, use the "Tolls" button to add toll locations.
+            </p>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <label className="text-sm font-medium text-gray-700">
-            Budget (₹)
-            <input
-              type="number"
-              value={formData.budget}
-              onChange={(e) =>
-                setFormData((prev) => ({
-                  ...prev,
-                  budget: e.target.value,
-                }))
-              }
-              className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-              placeholder="5000000"
-            />
-          </label>
           <label className="text-sm font-medium text-gray-700">
             Status
             <select
@@ -465,6 +667,198 @@ const AddPartnerModal = ({ formData, setFormData, isSubmitting, formError, onClo
             className="px-6 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold shadow-lg shadow-emerald-500/20 disabled:opacity-60"
           >
             {isSubmitting ? 'Adding…' : 'Add Partner'}
+          </button>
+        </div>
+      </form>
+    </motion.div>
+  </div>
+);
+
+interface EditPartnerModalProps {
+  formData: typeof INITIAL_FORM_STATE;
+  setFormData: Dispatch<SetStateAction<typeof INITIAL_FORM_STATE>>;
+  isSubmitting: boolean;
+  formError: string | null;
+  onClose: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}
+
+const EditPartnerModal = ({ formData, setFormData, isSubmitting, formError, onClose, onSubmit }: EditPartnerModalProps) => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
+    <motion.div
+      initial={{ opacity: 0, y: 40 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="w-full max-w-3xl bg-white rounded-3xl shadow-2xl border border-amber-100 max-h-[90vh] overflow-y-auto"
+    >
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <div>
+          <p className="text-sm font-medium text-amber-600">Edit CSR Partner</p>
+          <h3 className="text-2xl font-bold text-gray-900">Update Partner Details</h3>
+        </div>
+        <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100" aria-label="Close modal">
+          <X className="w-5 h-5 text-gray-500" />
+        </button>
+      </div>
+      <form onSubmit={onSubmit} className="p-6 space-y-6">
+        {/* Has Toll Toggle */}
+        <div className="flex items-center gap-3 p-4 bg-blue-50 rounded-xl border border-blue-100">
+          <input
+            type="checkbox"
+            id="editHasToll"
+            checked={formData.hasToll}
+            onChange={(e) =>
+              setFormData((prev) => ({
+                ...prev,
+                hasToll: e.target.checked,
+              }))
+            }
+            className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+          />
+          <label htmlFor="editHasToll" className="text-sm font-medium text-blue-700">
+            This partner has toll locations
+          </label>
+          {formData.hasToll && (
+            <span className="ml-auto text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
+              Manage tolls separately
+            </span>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[
+            { label: 'Company Name', key: 'companyName' as PartnerTextFieldKey, placeholder: 'Acme Corp', syncName: true, required: true },
+            ...(formData.hasToll
+              ? []
+              : [
+                  { label: 'Contact Person', key: 'contactPerson' as PartnerTextFieldKey, placeholder: 'Jane Doe', required: true },
+                  { label: 'Email', key: 'email' as PartnerTextFieldKey, placeholder: 'jane@example.com', type: 'email', required: true },
+                  { label: 'Phone', key: 'phone' as PartnerTextFieldKey, placeholder: '+91 98765 43210', required: true },
+                ]),
+            { label: 'Website', key: 'website' as PartnerTextFieldKey, placeholder: 'https://acme.org', required: false },
+          ].map((field) => (
+            <label key={field.key} className="text-sm font-medium text-gray-700">
+              {field.label}
+              <input
+                type={field.type || 'text'}
+                value={formData[field.key]}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setFormData((prev) => ({
+                    ...prev,
+                    [field.key]: value,
+                    ...(field.syncName ? { name: value } : {}),
+                  }));
+                }}
+                required={field.required !== false}
+                className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                placeholder={field.placeholder}
+              />
+            </label>
+          ))}
+        </div>
+
+        {/* Conditional City/State/Budget - only show if no toll */}
+        {!formData.hasToll && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-gray-50 rounded-xl border border-gray-100">
+            <p className="col-span-full text-sm text-gray-600 mb-2">
+              Since this partner has no tolls, specify location and budget here:
+            </p>
+            <label className="text-sm font-medium text-gray-700">
+              City
+              <input
+                type="text"
+                value={formData.city}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    city: e.target.value,
+                  }))
+                }
+                required
+                className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                placeholder="Mumbai"
+              />
+            </label>
+            <label className="text-sm font-medium text-gray-700">
+              State
+              <input
+                type="text"
+                value={formData.state}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    state: e.target.value,
+                  }))
+                }
+                required
+                className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                placeholder="Maharashtra"
+              />
+            </label>
+            <label className="text-sm font-medium text-gray-700">
+              Budget (₹)
+              <input
+                type="number"
+                value={formData.budget}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    budget: e.target.value,
+                  }))
+                }
+                required
+                className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                placeholder="5000000"
+              />
+            </label>
+          </div>
+        )}
+
+        {formData.hasToll && (
+          <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
+            <p className="text-sm text-blue-700">
+              <strong>Note:</strong> City, state, and budget are managed through individual tolls. 
+              Use the "Tolls" button on the partner card to manage toll locations.
+            </p>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <label className="text-sm font-medium text-gray-700">
+            Status
+            <select
+              value={formData.status}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  status: e.target.value,
+                }))
+              }
+              className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+            >
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </label>
+        </div>
+
+        {formError && <p className="text-sm text-red-600">{formError}</p>}
+
+        <div className="flex items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-5 py-3 rounded-xl border border-gray-200 font-medium text-gray-700 hover:bg-gray-50"
+            disabled={isSubmitting}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="px-6 py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-semibold shadow-lg shadow-amber-500/20 disabled:opacity-60"
+          >
+            {isSubmitting ? 'Saving…' : 'Save Changes'}
           </button>
         </div>
       </form>
@@ -509,8 +903,7 @@ const PartnerDetailsModal = ({ partner, isLoading, error, onClose }: PartnerDeta
                 <Building2 className="w-6 h-6 text-emerald-600" />
               </div>
               <div>
-                <h4 className="text-xl font-bold text-gray-900">{partner.name}</h4>
-                <p className="text-sm text-gray-600">{partner.company_name}</p>
+                <h4 className="text-xl font-bold text-gray-900">{partner.company_name || partner.name}</h4>
               </div>
               <span
                 className={`ml-auto px-3 py-1 rounded-full text-xs font-semibold ${

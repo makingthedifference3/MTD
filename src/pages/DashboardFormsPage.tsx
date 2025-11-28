@@ -9,6 +9,12 @@ import { useFilter } from '../context/useFilter';
 import FilterBar from '../components/FilterBar';
 import type { Project } from '../services/filterService';
 import { projectsService } from '../services/projectsService';
+import {
+  buildImpactMetricsPayload,
+  createImpactMetricsRecord,
+  impactMetricsArrayToRecord,
+  type ImpactMetricKey,
+} from '../utils/impactMetrics';
 
 // Helper function to map icon names to actual Lucide icons
 const getIconComponent = (iconName?: string): LucideIcon => {
@@ -31,15 +37,6 @@ interface ProjectWithBeneficiaries extends Project {
   displayName?: string;
   total_budget?: number;
   utilized_budget?: number;
-}
-
-interface EditableMetrics {
-  direct_beneficiaries: number;
-  meals_served: number;
-  pads_distributed: number;
-  students_enrolled: number;
-  trees_planted: number;
-  schools_renovated: number;
 }
 
 interface EditableProjectInfo {
@@ -71,15 +68,8 @@ const DashboardFormsPage = () => {
   const [viewMode, setViewMode] = useState<'partners' | 'projects' | 'projectDetails'>('partners');
   const [selectedProjectData, setSelectedProjectData] = useState<ProjectWithBeneficiaries | null>(null);
   
-  // Editable metrics state
-  const [editableMetrics, setEditableMetrics] = useState<EditableMetrics>({
-    direct_beneficiaries: 0,
-    meals_served: 0,
-    pads_distributed: 0,
-    students_enrolled: 0,
-    trees_planted: 0,
-    schools_renovated: 0,
-  });
+  const [directBeneficiaries, setDirectBeneficiaries] = useState(0);
+  const [impactMetricAdjustments, setImpactMetricAdjustments] = useState(createImpactMetricsRecord());
   
   // Project info editing state
   const [isEditingInfo, setIsEditingInfo] = useState(false);
@@ -110,15 +100,8 @@ const DashboardFormsPage = () => {
       if (project) {
         setSelectedProjectData(project as ProjectWithBeneficiaries);
         setViewMode('projectDetails');
-        // Initialize editable metrics
-        setEditableMetrics({
-          direct_beneficiaries: project.direct_beneficiaries || 0,
-          meals_served: project.meals_served || 0,
-          pads_distributed: project.pads_distributed || 0,
-          students_enrolled: project.students_enrolled || 0,
-          trees_planted: project.trees_planted || 0,
-          schools_renovated: project.schools_renovated || 0,
-        });
+        setDirectBeneficiaries(project.direct_beneficiaries || 0);
+        setImpactMetricAdjustments(impactMetricsArrayToRecord(project.impact_metrics));
         // Initialize editable info
         setEditableInfo({
           name: project.name || '',
@@ -150,15 +133,8 @@ const DashboardFormsPage = () => {
     setSelectedProjectData(project as ProjectWithBeneficiaries);
     setSelectedProject(project.id);
     setViewMode('projectDetails');
-    // Initialize editable metrics
-    setEditableMetrics({
-      direct_beneficiaries: project.direct_beneficiaries || 0,
-      meals_served: project.meals_served || 0,
-      pads_distributed: project.pads_distributed || 0,
-      students_enrolled: project.students_enrolled || 0,
-      trees_planted: project.trees_planted || 0,
-      schools_renovated: project.schools_renovated || 0,
-    });
+    setDirectBeneficiaries(project.direct_beneficiaries || 0);
+    setImpactMetricAdjustments(impactMetricsArrayToRecord(project.impact_metrics));
     // Initialize editable info
     setEditableInfo({
       name: project.name || '',
@@ -185,26 +161,31 @@ const DashboardFormsPage = () => {
     }
   };
 
-  // Metric increment/decrement handlers
-  const incrementMetric = (key: keyof EditableMetrics) => {
-    setEditableMetrics(prev => ({
+  const incrementImpactMetric = (key: ImpactMetricKey) => {
+    setImpactMetricAdjustments((prev) => ({
       ...prev,
       [key]: prev[key] + 1,
     }));
   };
 
-  const decrementMetric = (key: keyof EditableMetrics) => {
-    setEditableMetrics(prev => ({
+  const decrementImpactMetric = (key: ImpactMetricKey) => {
+    setImpactMetricAdjustments((prev) => ({
       ...prev,
       [key]: Math.max(0, prev[key] - 1),
     }));
   };
 
-  const handleMetricInputChange = (key: keyof EditableMetrics, value: number) => {
-    setEditableMetrics(prev => ({
+  const handleImpactMetricInputChange = (key: ImpactMetricKey, value: number) => {
+    setImpactMetricAdjustments((prev) => ({
       ...prev,
       [key]: Math.max(0, Number.isNaN(value) ? 0 : value),
     }));
+  };
+
+  const incrementBeneficiaries = () => setDirectBeneficiaries((prev) => prev + 1);
+  const decrementBeneficiaries = () => setDirectBeneficiaries((prev) => Math.max(0, prev - 1));
+  const handleDirectBeneficiaryInputChange = (value: number) => {
+    setDirectBeneficiaries(Math.max(0, Number.isNaN(value) ? 0 : value));
   };
 
   // Save metrics to database
@@ -216,13 +197,9 @@ const DashboardFormsPage = () => {
       setSaveError(null);
       
       await projectsService.updateProject(selectedProjectData.id, {
-        direct_beneficiaries: editableMetrics.direct_beneficiaries,
-        total_beneficiaries: editableMetrics.direct_beneficiaries,
-        meals_served: editableMetrics.meals_served,
-        pads_distributed: editableMetrics.pads_distributed,
-        students_enrolled: editableMetrics.students_enrolled,
-        trees_planted: editableMetrics.trees_planted,
-        schools_renovated: editableMetrics.schools_renovated,
+        direct_beneficiaries: directBeneficiaries,
+        total_beneficiaries: directBeneficiaries,
+        impact_metrics: buildImpactMetricsPayload(impactMetricAdjustments),
       });
       
       // Refresh data
@@ -670,11 +647,11 @@ const DashboardFormsPage = () => {
                   {/* No. of Beneficiaries */}
                   <MetricCard
                     label="NO. OF BENEFICIARY"
-                    value={editableMetrics.direct_beneficiaries}
+                    value={directBeneficiaries}
                     target={5000}
-                    onIncrement={() => incrementMetric('direct_beneficiaries')}
-                    onDecrement={() => decrementMetric('direct_beneficiaries')}
-                    onValueChange={(value) => handleMetricInputChange('direct_beneficiaries', value)}
+                    onIncrement={incrementBeneficiaries}
+                    onDecrement={decrementBeneficiaries}
+                    onValueChange={handleDirectBeneficiaryInputChange}
                     color="emerald"
                     icon={Users}
                   />
@@ -682,11 +659,11 @@ const DashboardFormsPage = () => {
                   {/* Meals Served */}
                   <MetricCard
                     label="MEALS SERVED"
-                    value={editableMetrics.meals_served}
+                    value={impactMetricAdjustments.meals_served}
                     target={10000}
-                    onIncrement={() => incrementMetric('meals_served')}
-                    onDecrement={() => decrementMetric('meals_served')}
-                    onValueChange={(value) => handleMetricInputChange('meals_served', value)}
+                    onIncrement={() => incrementImpactMetric('meals_served')}
+                    onDecrement={() => decrementImpactMetric('meals_served')}
+                    onValueChange={(value) => handleImpactMetricInputChange('meals_served', value)}
                     color="orange"
                     icon={Activity}
                   />
@@ -694,11 +671,11 @@ const DashboardFormsPage = () => {
                   {/* Pads Distributed */}
                   <MetricCard
                     label="PADS DISTRIBUTED"
-                    value={editableMetrics.pads_distributed}
+                    value={impactMetricAdjustments.pads_distributed}
                     target={50000}
-                    onIncrement={() => incrementMetric('pads_distributed')}
-                    onDecrement={() => decrementMetric('pads_distributed')}
-                    onValueChange={(value) => handleMetricInputChange('pads_distributed', value)}
+                    onIncrement={() => incrementImpactMetric('pads_distributed')}
+                    onDecrement={() => decrementImpactMetric('pads_distributed')}
+                    onValueChange={(value) => handleImpactMetricInputChange('pads_distributed', value)}
                     color="pink"
                     icon={Heart}
                   />
@@ -706,11 +683,11 @@ const DashboardFormsPage = () => {
                   {/* Students Enrolled */}
                   <MetricCard
                     label="STUDENTS ENROLLED"
-                    value={editableMetrics.students_enrolled}
+                    value={impactMetricAdjustments.students_enrolled}
                     target={1000}
-                    onIncrement={() => incrementMetric('students_enrolled')}
-                    onDecrement={() => decrementMetric('students_enrolled')}
-                    onValueChange={(value) => handleMetricInputChange('students_enrolled', value)}
+                    onIncrement={() => incrementImpactMetric('students_enrolled')}
+                    onDecrement={() => decrementImpactMetric('students_enrolled')}
+                    onValueChange={(value) => handleImpactMetricInputChange('students_enrolled', value)}
                     color="blue"
                     icon={GraduationCap}
                   />
@@ -718,11 +695,11 @@ const DashboardFormsPage = () => {
                   {/* Schools Renovated */}
                   <MetricCard
                     label="SCHOOLS RENOVATED"
-                    value={editableMetrics.schools_renovated}
+                    value={impactMetricAdjustments.schools_renovated}
                     target={50}
-                    onIncrement={() => incrementMetric('schools_renovated')}
-                    onDecrement={() => decrementMetric('schools_renovated')}
-                    onValueChange={(value) => handleMetricInputChange('schools_renovated', value)}
+                    onIncrement={() => incrementImpactMetric('schools_renovated')}
+                    onDecrement={() => decrementImpactMetric('schools_renovated')}
+                    onValueChange={(value) => handleImpactMetricInputChange('schools_renovated', value)}
                     color="purple"
                     icon={FolderKanban}
                   />
@@ -730,11 +707,11 @@ const DashboardFormsPage = () => {
                   {/* Trees Planted */}
                   <MetricCard
                     label="TREES PLANTED"
-                    value={editableMetrics.trees_planted}
+                    value={impactMetricAdjustments.trees_planted}
                     target={10000}
-                    onIncrement={() => incrementMetric('trees_planted')}
-                    onDecrement={() => decrementMetric('trees_planted')}
-                    onValueChange={(value) => handleMetricInputChange('trees_planted', value)}
+                    onIncrement={() => incrementImpactMetric('trees_planted')}
+                    onDecrement={() => decrementImpactMetric('trees_planted')}
+                    onValueChange={(value) => handleImpactMetricInputChange('trees_planted', value)}
                     color="green"
                     icon={Leaf}
                   />

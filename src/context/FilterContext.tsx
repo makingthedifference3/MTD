@@ -1,17 +1,21 @@
 import { createContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import type { CSRPartner, Project } from '../services/filterService';
 import { fetchCSRPartners, fetchAllProjects } from '../services/filterService';
+import { getTollsByPartnerId, type Toll } from '../services/tollsService';
 
 interface FilterContextType {
   selectedPartner: string | null;
   selectedProject: string | null;
+  selectedToll: string | null;
   csrPartners: CSRPartner[];
   projects: Project[];
   filteredProjects: Project[];
+  tolls: Toll[];
   isLoading: boolean;
   error: string | null;
   setSelectedPartner: (partnerId: string | null) => void;
   setSelectedProject: (projectId: string | null) => void;
+  setSelectedToll: (tollId: string | null) => void;
   resetFilters: () => void;
   refreshData: () => Promise<void>;
 }
@@ -32,6 +36,7 @@ export const FilterProvider = ({ children }: { children: ReactNode }) => {
   const [csrPartners, setCSRPartners] = useState<CSRPartner[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [filteredProjects, setFilteredProjects] = useState<Project[]>([]);
+  const [tolls, setTolls] = useState<Toll[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -72,6 +77,8 @@ export const FilterProvider = ({ children }: { children: ReactNode }) => {
 
   // Filter projects based on selected partner AND ensure when project is pre-selected, only that project is shown
   useEffect(() => {
+    let currentProjects = projects;
+
     if (selectedPartner) {
       console.log('FilterContext - Filtering with selectedPartner:', selectedPartner);
       console.log('FilterContext - Total projects available:', projects.length);
@@ -99,6 +106,7 @@ export const FilterProvider = ({ children }: { children: ReactNode }) => {
   const resetFilters = () => {
     setSelectedPartner(null);
     setSelectedProject(null);
+    setSelectedToll(null);
   };
 
   // Refresh data from the server
@@ -125,13 +133,16 @@ export const FilterProvider = ({ children }: { children: ReactNode }) => {
       value={{
         selectedPartner,
         selectedProject,
+        selectedToll,
         csrPartners,
         projects,
         filteredProjects,
+        tolls,
         isLoading,
         error,
         setSelectedPartner,
         setSelectedProject,
+        setSelectedToll,
         resetFilters,
         refreshData,
       }}

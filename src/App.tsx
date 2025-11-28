@@ -146,6 +146,16 @@ function AppRoutes() {
         }
       />
       <Route
+        path="/csr-partners/:partnerId/tolls"
+        element={
+          <ProtectedRoute>
+            <Sidebar currentPage="csr-partners" onNavigate={() => {}}>
+              <TollManagementPage />
+            </Sidebar>
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/utilization-certificate"
         element={
           <ProtectedRoute>
