@@ -1,4 +1,5 @@
-﻿import { AuthProvider } from './context/AuthContext';
+// app.tsx (merged - Version2 + functionality from Version1)
+import { AuthProvider } from './context/AuthContext';
 import { useAuth } from './context/useAuth';
 import { FilterProvider } from './context/FilterContext';
 import { ProjectProvider } from './context/ProjectContext';
@@ -29,6 +30,7 @@ import UserAssignmentPage from './pages/UserAssignmentPage';
 import UserManagementPage from './pages/UserManagementPage';
 import UtilizationCertificatePage from './pages/UtilizationCertificatePage';
 import ProjectsDashboardPage from './pages/ProjectsDashboardPage';
+import TollManagementPage from './pages/TollManagementPage'; // <-- ADDED from Version1
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { currentUser } = useAuth();
@@ -145,6 +147,19 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
+      {/* ADDED: Toll management route from Version1 */}
+      <Route
+        path="/csr-partners/:partnerId/tolls"
+        element={
+          <ProtectedRoute>
+            <Sidebar currentPage="csr-partners" onNavigate={() => {}}>
+              <TollManagementPage />
+            </Sidebar>
+          </ProtectedRoute>
+        }
+      />
+
       <Route
         path="/utilization-certificate"
         element={
