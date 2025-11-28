@@ -10,6 +10,15 @@ import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Toolti
 import { useFilter } from '../context/useFilter';
 import FilterBar from '../components/FilterBar';
 import type { Project } from '../services/filterService';
+import {
+  getImpactMetricValue,
+  sumImpactMetricValue,
+} from '../utils/impactMetrics';
+import {
+  IMPACT_METRIC_ORDER,
+  IMPACT_METRIC_FORMATTERS,
+  renderImpactMetricCard,
+} from '../utils/impactMetricDisplay';
 
 // Helper function to map icon names to actual Lucide icons
 const getIconComponent = (iconName?: string): LucideIcon => {
@@ -378,70 +387,11 @@ const PMDashboardInner = () => {
                 </p>
               </div>
 
-              {/* Meals Served */}
-              <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-6 hover:shadow-lg transition-all">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-3 bg-orange-200 rounded-lg">
-                    <Activity className="w-5 h-5 text-orange-700" />
-                  </div>
-                  <span className="text-sm font-bold text-orange-700 uppercase">Meals Served</span>
-                </div>
-                <p className="text-3xl font-black text-orange-900">
-                  {(projects.reduce((sum: number, p: Project) => sum + (p.meals_served || 0), 0) / 1000000).toFixed(1)}M
-                </p>
-              </div>
-
-              {/* Pads Distributed */}
-              <div className="bg-pink-50 border-2 border-pink-200 rounded-xl p-6 hover:shadow-lg transition-all">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-3 bg-pink-200 rounded-lg">
-                    <Award className="w-5 h-5 text-pink-700" />
-                  </div>
-                  <span className="text-sm font-bold text-pink-700 uppercase">Pads Distributed</span>
-                </div>
-                <p className="text-3xl font-black text-pink-900">
-                  {(projects.reduce((sum: number, p: Project) => sum + (p.pads_distributed || 0), 0) / 1000000).toFixed(1)}M
-                </p>
-              </div>
-
-              {/* Students Enrolled */}
-              <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-6 hover:shadow-lg transition-all">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-3 bg-blue-200 rounded-lg">
-                    <GraduationCap className="w-5 h-5 text-blue-700" />
-                  </div>
-                  <span className="text-sm font-bold text-blue-700 uppercase">Students Enrolled</span>
-                </div>
-                <p className="text-3xl font-black text-blue-900">
-                  {(projects.reduce((sum: number, p: Project) => sum + (p.students_enrolled || 0), 0) / 1000).toFixed(1)}K
-                </p>
-              </div>
-
-              {/* Trees Planted */}
-              <div className="bg-green-50 border-2 border-green-200 rounded-xl p-6 hover:shadow-lg transition-all">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-3 bg-green-200 rounded-lg">
-                    <Leaf className="w-5 h-5 text-green-700" />
-                  </div>
-                  <span className="text-sm font-bold text-green-700 uppercase">Trees Planted</span>
-                </div>
-                <p className="text-3xl font-black text-green-900">
-                  {(projects.reduce((sum: number, p: Project) => sum + (p.trees_planted || 0), 0) / 1000).toFixed(1)}K
-                </p>
-              </div>
-
-              {/* Schools Renovated */}
-              <div className="bg-purple-50 border-2 border-purple-200 rounded-xl p-6 hover:shadow-lg transition-all">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-3 bg-purple-200 rounded-lg">
-                    <FolderKanban className="w-5 h-5 text-purple-700" />
-                  </div>
-                  <span className="text-sm font-bold text-purple-700 uppercase">Schools Renovated</span>
-                </div>
-                <p className="text-3xl font-black text-purple-900">
-                  {projects.reduce((sum: number, p: Project) => sum + (p.schools_renovated || 0), 0)}
-                </p>
-              </div>
+              {IMPACT_METRIC_ORDER.map((key) => {
+                const totalValue = sumImpactMetricValue(projects, key);
+                const formattedValue = IMPACT_METRIC_FORMATTERS[key](totalValue);
+                return renderImpactMetricCard(key, formattedValue);
+              })}
             </div>
           </motion.div>
         </motion.div>
@@ -664,70 +614,11 @@ const PMDashboardInner = () => {
                     </p>
                   </div>
 
-                  {/* Meals Served */}
-                  {(selectedProjectData.meals_served || 0) > 0 && (
-                    <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-4 hover:shadow-lg transition-all">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Activity className="w-5 h-5 text-orange-600" />
-                        <span className="text-xs font-bold text-orange-700 uppercase">Meals</span>
-                      </div>
-                      <p className="text-2xl font-black text-orange-900">
-                        {((selectedProjectData.meals_served || 0) / 1000).toFixed(1)}K
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Pads Distributed */}
-                  {(selectedProjectData.pads_distributed || 0) > 0 && (
-                    <div className="bg-pink-50 border-2 border-pink-200 rounded-xl p-4 hover:shadow-lg transition-all">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Award className="w-5 h-5 text-pink-600" />
-                        <span className="text-xs font-bold text-pink-700 uppercase">Pads</span>
-                      </div>
-                      <p className="text-2xl font-black text-pink-900">
-                        {((selectedProjectData.pads_distributed || 0) / 1000).toFixed(0)}K
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Students Enrolled */}
-                  {(selectedProjectData.students_enrolled || 0) > 0 && (
-                    <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4 hover:shadow-lg transition-all">
-                      <div className="flex items-center gap-2 mb-2">
-                        <GraduationCap className="w-5 h-5 text-blue-600" />
-                        <span className="text-xs font-bold text-blue-700 uppercase">Students</span>
-                      </div>
-                      <p className="text-2xl font-black text-blue-900">
-                        {(selectedProjectData.students_enrolled || 0).toLocaleString()}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Trees Planted */}
-                  {(selectedProjectData.trees_planted || 0) > 0 && (
-                    <div className="bg-green-50 border-2 border-green-200 rounded-xl p-4 hover:shadow-lg transition-all">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Leaf className="w-5 h-5 text-green-600" />
-                        <span className="text-xs font-bold text-green-700 uppercase">Trees</span>
-                      </div>
-                      <p className="text-2xl font-black text-green-900">
-                        {((selectedProjectData.trees_planted || 0) / 1000).toFixed(0)}K
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Schools Renovated */}
-                  {(selectedProjectData.schools_renovated || 0) > 0 && (
-                    <div className="bg-purple-50 border-2 border-purple-200 rounded-xl p-4 hover:shadow-lg transition-all">
-                      <div className="flex items-center gap-2 mb-2">
-                        <FolderKanban className="w-5 h-5 text-purple-600" />
-                        <span className="text-xs font-bold text-purple-700 uppercase">Schools</span>
-                      </div>
-                      <p className="text-2xl font-black text-purple-900">
-                        {selectedProjectData.schools_renovated || '0'}
-                      </p>
-                    </div>
-                  )}
+                  {IMPACT_METRIC_ORDER.map((key) => {
+                    const value = getImpactMetricValue(selectedProjectData.impact_metrics, key);
+                    if (value <= 0) return null;
+                    return renderImpactMetricCard(key, value.toLocaleString());
+                  })}
                 </div>
               </motion.div>
 

@@ -27,6 +27,7 @@ import ProjectsPage from './pages/ProjectsPage';
 import UserAssignmentPage from './pages/UserAssignmentPage';
 import UserManagementPage from './pages/UserManagementPage';
 import UtilizationCertificatePage from './pages/UtilizationCertificatePage';
+import TollManagementPage from './pages/TollManagementPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { currentUser } = useAuth();
@@ -131,6 +132,16 @@ function AppRoutes() {
           <ProtectedRoute>
             <Sidebar currentPage="csr-partners" onNavigate={() => {}}>
               <CSRPartnersPage />
+            </Sidebar>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/csr-partners/:partnerId/tolls"
+        element={
+          <ProtectedRoute>
+            <Sidebar currentPage="csr-partners" onNavigate={() => {}}>
+              <TollManagementPage />
             </Sidebar>
           </ProtectedRoute>
         }

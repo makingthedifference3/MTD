@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import type { ImpactMetricEntry } from '../utils/impactMetrics';
 
 /**
  * ProjectsService - Manages all database operations for projects
@@ -12,6 +13,7 @@ export interface Project {
   name: string;
   description?: string;
   csr_partner_id: string;
+  toll_id?: string;
   project_manager_id?: string;
   assistant_manager_id?: string;
   location?: string;
@@ -38,11 +40,7 @@ export interface Project {
   direct_beneficiaries?: number;
   indirect_beneficiaries?: number;
   // Impact metrics
-  meals_served?: number;
-  pads_distributed?: number;
-  students_enrolled?: number;
-  trees_planted?: number;
-  schools_renovated?: number;
+  impact_metrics?: ImpactMetricEntry[];
   male_beneficiaries?: number;
   female_beneficiaries?: number;
   children_beneficiaries?: number;

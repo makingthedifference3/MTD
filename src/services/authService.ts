@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import { verifyPassword, hashPassword } from '../utils/passwordUtils';
+import { hashPassword } from '../utils/passwordUtils';
 
 export interface LoginCredentials {
   username: string;
@@ -24,10 +24,13 @@ export const authenticateUser = async (
   plainPassword: string
 ): Promise<AuthUser | null> => {
   try {
+    const normalizedInput = username.trim();
+    const safeInput = normalizedInput.replace(/"/g, '\\"');
+    const orClause = `username.eq."${safeInput}",email.eq."${safeInput}"`;
     const { data, error } = await supabase
       .from('users')
       .select('id, username, email, full_name, role, is_active, password')
-      .eq('username', username)
+      .or(orClause)
       .eq('is_active', true)
       .single();
 
@@ -36,9 +39,8 @@ export const authenticateUser = async (
       return null;
     }
 
-    // Verify password using bcrypt
-    const passwordMatch = await verifyPassword(plainPassword, data.password);
-    if (!passwordMatch) {
+    // Verify password by comparing stored plaintext value
+    if (plainPassword !== data.password) {
       console.error('Password mismatch for user:', username);
       return null;
     }

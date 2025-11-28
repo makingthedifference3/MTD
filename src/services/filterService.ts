@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import type { ImpactMetricEntry } from '../utils/impactMetrics';
 
 export interface CSRPartner {
   id: string;
@@ -14,6 +15,7 @@ export interface Project {
   name: string;
   project_code: string;
   csr_partner_id: string;
+  toll_id?: string;
   description?: string;
   location?: string;
   state?: string;
@@ -30,11 +32,7 @@ export interface Project {
   female_beneficiaries?: number;
   children_beneficiaries?: number;
   // Impact metrics from database
-  meals_served?: number;
-  pads_distributed?: number;
-  students_enrolled?: number;
-  trees_planted?: number;
-  schools_renovated?: number;
+  impact_metrics?: ImpactMetricEntry[];
   // UI display properties from database
   display_color?: string;
   display_icon?: string;
@@ -73,7 +71,7 @@ export const fetchProjectsByPartner = async (
     const { data, error } = await supabase
       .from('projects')
       .select(
-        'id, name, project_code, csr_partner_id, description, location, state, status, is_active, total_beneficiaries, direct_beneficiaries, indirect_beneficiaries, male_beneficiaries, female_beneficiaries, children_beneficiaries, meals_served, pads_distributed, students_enrolled, trees_planted, schools_renovated, display_color, display_icon'
+        'id, name, project_code, csr_partner_id, description, location, state, status, is_active, total_beneficiaries, direct_beneficiaries, indirect_beneficiaries, male_beneficiaries, female_beneficiaries, children_beneficiaries, impact_metrics, display_color, display_icon'
       )
       .eq('csr_partner_id', partnerId)
       .eq('is_active', true)
@@ -99,7 +97,7 @@ export const fetchAllProjects = async (): Promise<Project[]> => {
     const { data, error } = await supabase
       .from('projects')
       .select(
-        'id, name, project_code, csr_partner_id, description, location, state, status, is_active, total_budget, utilized_budget, total_beneficiaries, direct_beneficiaries, indirect_beneficiaries, male_beneficiaries, female_beneficiaries, children_beneficiaries, meals_served, pads_distributed, students_enrolled, trees_planted, schools_renovated, display_color, display_icon'
+        'id, name, project_code, csr_partner_id, description, location, state, status, is_active, total_budget, utilized_budget, total_beneficiaries, direct_beneficiaries, indirect_beneficiaries, male_beneficiaries, female_beneficiaries, children_beneficiaries, impact_metrics, display_color, display_icon'
       )
       .order('name', { ascending: true });
 
@@ -126,7 +124,7 @@ export const fetchProjectById = async (projectId: string): Promise<Project | nul
     const { data, error } = await supabase
       .from('projects')
       .select(
-        'id, name, project_code, csr_partner_id, description, location, state, status, is_active, total_beneficiaries, direct_beneficiaries, indirect_beneficiaries, male_beneficiaries, female_beneficiaries, children_beneficiaries'
+        'id, name, project_code, csr_partner_id, description, location, state, status, is_active, total_beneficiaries, direct_beneficiaries, indirect_beneficiaries, male_beneficiaries, female_beneficiaries, children_beneficiaries, impact_metrics'
       )
       .eq('id', projectId)
       .single();
