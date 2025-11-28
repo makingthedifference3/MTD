@@ -1,3 +1,6 @@
+// src/pages/ProjectsPage.tsx (merged V1 + V2)
+// NOTE: This file intentionally merges V1's full modal/edit/team/metrics functionality
+// with V2's simplified partner->tolls fetching flow (tries csrPartnerService then fallback).
 import { useState, useEffect, useCallback } from 'react';
 import type { FormEvent, Dispatch, SetStateAction } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -6,67 +9,166 @@ import { useFilter } from '../context/useFilter';
 import { useAuth } from '../context/useAuth';
 import FilterBar from '../components/FilterBar';
 import type { Project } from '../services/filterService';
+import type { Project as ProjectServiceProject } from '../services/projectsService';
 import { projectsService } from '../services/projectsService';
 import { getActiveCSRPartners, type CSRPartner } from '../services/csrPartnersService';
-import { csrPartnerService, type CSRPartnerToll } from '../services/csrPartnerService';
+import { getTollsByPartnerId, type Toll } from '../services/tollsService';
+import {
+  addProjectTeamMembers,
+  replaceProjectTeamMembers,
+  fetchProjectTeamMembers,
+  type ProjectTeamMemberWithUser,
+  type ProjectTeamRole,
+} from '../services/projectTeamMembersService';
+import { getAllActiveUsers, type User } from '../services/usersService';
+import { IMPACT_METRIC_VISUALS } from '../constants/impactMetricVisuals';
+import {
+  getImpactMetricValue,
+  getMetricLabel,
+  IMPACT_METRIC_LABELS,
+  PREDEFINED_METRIC_KEYS,
+  type ImpactMetricEntry,
+  type ImpactMetricKey,
+} from '../utils/impactMetrics';
 
-const INITIAL_PROJECT_FORM = {
+// Optional newer csrPartnerService - used if present in your codebase (V2 style).
+// If not available, the merge will safely fall back to getTollsByPartnerId (V1).
+import { csrPartnerService } from '../services/csrPartnerService'; // if missing, ensure export exists or remove this import
+
+/* ----------------------------- Form / Helpers ---------------------------- */
+
+interface TeamMemberFormEntry {
+  userId: string;
+  role: ProjectTeamRole;
+}
+
+interface ProjectFormData {
+  name: string;
+  projectCode: string;
+  description: string;
+  csrPartnerId: string;
+  tollId: string;
+  location: string;
+  state: string;
+  category: string;
+  status: 'planning' | 'active' | 'on_hold' | 'completed';
+  totalBudget: string;
+  startDate: string;
+  expectedEndDate: string;
+  directBeneficiaries: string;
+  impactMetrics: ImpactMetricEntry[];
+  teamMembers: TeamMemberFormEntry[];
+}
+
+const createInitialProjectFormState = (): ProjectFormData => ({
   name: '',
   projectCode: '',
   description: '',
   csrPartnerId: '',
-  tollId: '', // New field for toll selection (optional)
+  tollId: '',
   location: '',
   state: '',
   category: '',
-  status: 'planning' as const,
+  status: 'planning',
   totalBudget: '',
   startDate: '',
   expectedEndDate: '',
   directBeneficiaries: '',
-  padsDistributed: '',
-  studentsEnrolled: '',
-  schoolsRenovated: '',
-  treesPlanted: '',
-  mealsServed: '',
+  impactMetrics: [],
+  teamMembers: [],
+});
+
+const formatRoleLabel = (role?: string | null) => {
+  if (!role) return 'No role';
+  const normalized = role.replace(/_/g, ' ');
+  return normalized.replace(/\b\w/g, (char) => char.toUpperCase());
 };
+
+const normalizeProjectStatusForForm = (
+  status?: string
+): ProjectFormData['status'] => {
+  const allowedStatuses: ProjectFormData['status'][] = ['planning', 'active', 'on_hold', 'completed'];
+  if (!status) return 'planning';
+  return allowedStatuses.includes(status as ProjectFormData['status'])
+    ? (status as ProjectFormData['status'])
+    : 'planning';
+};
+
+const mapProjectToFormData = (
+  project: Project,
+  teamMembers: ProjectTeamMemberWithUser[] = []
+): ProjectFormData => {
+  const budgetValue = project.total_budget ?? 0;
+  const beneficiaries = project.direct_beneficiaries ?? 0;
+
+  return {
+    name: project.name,
+    projectCode: project.project_code ?? '',
+    description: project.description ?? '',
+    csrPartnerId: project.csr_partner_id,
+    tollId: project.toll_id ?? '',
+    location: project.location ?? '',
+    state: project.state ?? '',
+    category: project.category ?? '',
+    status: normalizeProjectStatusForForm(project.status),
+    totalBudget: budgetValue ? budgetValue.toString() : '',
+    startDate: project.start_date ?? '',
+    expectedEndDate: project.expected_end_date ?? '',
+    directBeneficiaries: beneficiaries ? beneficiaries.toString() : '',
+    impactMetrics: project.impact_metrics ?? [],
+    teamMembers: teamMembers.map((member) => ({
+      userId: member.user_id,
+      role: (member.role ?? 'team_member') as ProjectTeamRole,
+    })),
+  };
+};
+
+const PRIMARY_IMPACT_METRICS: ImpactMetricKey[] = ['meals_served', 'pads_distributed', 'trees_planted'];
+const SECONDARY_IMPACT_METRICS: ImpactMetricKey[] = ['students_enrolled', 'schools_renovated'];
+
+/* ----------------------------- Main Component ---------------------------- */
 
 const ProjectsPage = () => {
   const { projects, filteredProjects, selectedPartner, selectedProject, refreshData } = useFilter();
   const { currentRole } = useAuth();
-  const [selectedProjectDetails, setSelectedProjectDetails] = useState<Project | null>(null);
 
-  // Add project modal state
+  // selected project details modal + team members state
+  const [selectedProjectDetails, setSelectedProjectDetails] = useState<Project | null>(null);
+  const [selectedProjectTeamMembers, setSelectedProjectTeamMembers] = useState<ProjectTeamMemberWithUser[]>([]);
+  const [teamMembersLoading, setTeamMembersLoading] = useState(false);
+  const [teamMembersError, setTeamMembersError] = useState<string | null>(null);
+
+  // add/edit modal state
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
+  const [isPreparingEdit, setIsPreparingEdit] = useState(false);
+
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [formData, setFormData] = useState(INITIAL_PROJECT_FORM);
+  const [formData, setFormData] = useState<ProjectFormData>(createInitialProjectFormState);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
   const [csrPartners, setCsrPartners] = useState<CSRPartner[]>([]);
-  const [tolls, setTolls] = useState<CSRPartnerToll[]>([]); // State for tolls based on selected partner
   const [partnersLoading, setPartnersLoading] = useState(false);
 
-  // Handle partner change - load tolls for selected partner
-  const handlePartnerChange = useCallback(async (partnerId: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      csrPartnerId: partnerId,
-      tollId: '', // Reset toll when partner changes
-    }));
+  // Tolls (use Toll type from old service for compatibility)
+  const [tolls, setTolls] = useState<Toll[]>([]);
+  const [tollsLoading, setTollsLoading] = useState(false);
 
-    if (partnerId) {
-      try {
-        const partnerTolls = await csrPartnerService.getTollsByPartner(partnerId);
-        setTolls(partnerTolls);
-      } catch (error) {
-        console.error('Failed to fetch tolls:', error);
-        setTolls([]);
-      }
-    } else {
-      setTolls([]);
-    }
-  }, []);
+  // Team users for assignment
+  const [teamUsers, setTeamUsers] = useState<User[]>([]);
+  const [teamUsersLoading, setTeamUsersLoading] = useState(false);
 
-  // Fetch CSR partners when modal opens
+  const [skipPartnerChangeEffect, setSkipPartnerChangeEffect] = useState(false);
+
+  const resetFormState = () => {
+    setFormData(createInitialProjectFormState());
+    setTolls([]);
+    setEditingProjectId(null);
+    setSkipPartnerChangeEffect(false);
+  };
+
+  /* ------------------------------ Data fetchers ------------------------------ */
+
   const fetchPartners = useCallback(async () => {
     try {
       setPartnersLoading(true);
@@ -79,13 +181,132 @@ const ProjectsPage = () => {
     }
   }, []);
 
-  useEffect(() => {
-    if (isAddModalOpen && csrPartners.length === 0) {
-      fetchPartners();
+  // Fetch tolls: try new csrPartnerService first (V2 style), fall back to old getTollsByPartnerId (V1)
+  const fetchTolls = useCallback(async (partnerId: string) => {
+    if (!partnerId) {
+      setTolls([]);
+      return;
     }
-  }, [isAddModalOpen, csrPartners.length, fetchPartners]);
+    try {
+      setTollsLoading(true);
+      // try newer service if available
+      if (csrPartnerService && typeof csrPartnerService.getTollsByPartner === 'function') {
+        try {
+          // The newer service might return a slightly different shape; normalize to Toll[]
+          // If your csrPartnerService returns CSRPartnerToll[] you'll need to adapt or adjust types.
+          // We'll attempt to coerce the result to the expected Toll type if possible.
+          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+          // @ts-ignore
+          const partnerTolls = await csrPartnerService.getTollsByPartner(partnerId);
+          // attempt normalization
+          const normalized = (partnerTolls || []).map((t: any) => ({
+            id: t.id,
+            toll_name: t.poc_name || t.toll_name || t.name,
+            poc_name: t.poc_name || t.toll_name || t.name,
+            city: t.city || t.city_name || '',
+            state: t.state || t.state_name || '',
+          })) as Toll[];
+          setTolls(normalized);
+          return;
+        } catch (err) {
+          console.warn('csrPartnerService.getTollsByPartner failed, falling back to getTollsByPartnerId:', err);
+        }
+      }
 
-  const handleAddProject = async (event: FormEvent<HTMLFormElement>) => {
+      // fallback
+      const partnerTolls = await getTollsByPartnerId(partnerId);
+      setTolls(partnerTolls);
+    } catch (err) {
+      console.error('Failed to fetch tolls:', err);
+      setTolls([]);
+    } finally {
+      setTollsLoading(false);
+    }
+  }, []);
+
+  const fetchTeamUsers = useCallback(async () => {
+    try {
+      setTeamUsersLoading(true);
+      const users = await getAllActiveUsers();
+      setTeamUsers(users);
+    } catch (err) {
+      console.error('Failed to fetch team users:', err);
+    } finally {
+      setTeamUsersLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isAddModalOpen && csrPartners.length === 0) fetchPartners();
+    if (isAddModalOpen && teamUsers.length === 0) fetchTeamUsers();
+  }, [isAddModalOpen, csrPartners.length, teamUsers.length, fetchPartners, fetchTeamUsers]);
+
+  /* Partner change / auto-fill logic (same UX as V1, with skip flag support) */
+  useEffect(() => {
+    if (skipPartnerChangeEffect) {
+      setSkipPartnerChangeEffect(false);
+      return;
+    }
+
+    if (formData.csrPartnerId) {
+      const selectedPartnerData = csrPartners.find((p) => p.id === formData.csrPartnerId);
+      const partnerHasToll = Boolean(selectedPartnerData?.has_toll);
+
+      if (partnerHasToll) {
+        fetchTolls(formData.csrPartnerId);
+      } else {
+        setTolls([]);
+      }
+
+      setFormData((prev) => ({
+        ...prev,
+        tollId: '',
+        location: selectedPartnerData?.city ?? '',
+        state: selectedPartnerData?.state ?? '',
+      }));
+    } else {
+      setTolls([]);
+    }
+  }, [formData.csrPartnerId, fetchTolls, csrPartners, skipPartnerChangeEffect]);
+
+  /* -------------------------- Selected project team loader ------------------------- */
+  useEffect(() => {
+    if (!selectedProjectDetails) {
+      setSelectedProjectTeamMembers([]);
+      setTeamMembersError(null);
+      setTeamMembersLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+    const loadTeamMembers = async () => {
+      if (isMounted) {
+        setTeamMembersLoading(true);
+        setTeamMembersError(null);
+      }
+      try {
+        const members = await fetchProjectTeamMembers(selectedProjectDetails.id);
+        if (isMounted) setSelectedProjectTeamMembers(members);
+      } catch (err) {
+        console.error('Failed to load project team members:', err);
+        if (isMounted) {
+          setSelectedProjectTeamMembers([]);
+          setTeamMembersError('Unable to load the project team at the moment.');
+        }
+      } finally {
+        if (isMounted) setTeamMembersLoading(false);
+      }
+    };
+
+    loadTeamMembers();
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedProjectDetails]);
+
+  /* --------------------------------- Form submit --------------------------------- */
+
+  const handleSaveProject = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!formData.name || !formData.csrPartnerId) {
       setFormError('Please fill in the project name and select a CSR partner.');
@@ -96,34 +317,108 @@ const ProjectsPage = () => {
       setIsSubmitting(true);
       setFormError(null);
 
-      const payload = buildProjectPayload(formData);
-      await projectsService.createProject(payload);
+      let projectId = editingProjectId;
+
+      if (editingProjectId) {
+        const updatePayload = buildProjectUpdatePayload(formData);
+        await projectsService.updateProject(editingProjectId, updatePayload);
+      } else {
+        const payload = buildProjectPayload(formData);
+        const newProject = await projectsService.createProject(payload);
+
+        if (!newProject?.id) {
+          throw new Error('Project created but missing identifier. Please try again.');
+        }
+
+        projectId = newProject.id;
+      }
+
+      const memberInputs = formData.teamMembers
+        .filter((member) => member.userId)
+        .map((member) => ({
+          project_id: projectId!,
+          user_id: member.userId,
+          role: member.role,
+        }));
+
+      if (editingProjectId) {
+        await replaceProjectTeamMembers(projectId!, memberInputs);
+      } else if (memberInputs.length) {
+        await addProjectTeamMembers(memberInputs);
+      }
 
       setIsAddModalOpen(false);
-      setFormData({ ...INITIAL_PROJECT_FORM });
-      // Refresh the projects list
+      setSelectedProjectDetails(null);
+      resetFormState();
       if (refreshData) {
         await refreshData();
       }
     } catch (err) {
-      console.error('Failed to create project:', err);
-      const message = err instanceof Error ? err.message : 'Unable to create project. Please try again.';
+      console.error('Failed to save project:', err);
+      const message = err instanceof Error ? err.message : 'Unable to save project. Please try again.';
       setFormError(message);
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const handleOpenCreateModal = () => {
+    resetFormState();
+    setFormError(null);
+    setSelectedProjectDetails(null);
+    setIsAddModalOpen(true);
+  };
+
+  const handleModalClose = () => {
+    if (isSubmitting) return;
+    setIsAddModalOpen(false);
+    setFormError(null);
+    resetFormState();
+  };
+
+  /* -------------------------------- Edit flow -------------------------------- */
+
+  const handleEditProject = async (project: Project) => {
+    console.log('Editing project:', project.id, project.name);
+    setFormError(null);
+    setIsPreparingEdit(true);
+    setEditingProjectId(project.id);
+    setSelectedProjectDetails(null);
+
+    // Skip the partner change effect so we don't reset toll/location while mapping
+    setSkipPartnerChangeEffect(true);
+    setFormData(mapProjectToFormData(project));
+    setIsAddModalOpen(true);
+
+    // Load tolls for the project's partner if there's a toll_id
+    if (project.csr_partner_id) {
+      fetchTolls(project.csr_partner_id);
+    }
+
+    try {
+      const members = await fetchProjectTeamMembers(project.id);
+      setFormData((prev) => ({
+        ...prev,
+        teamMembers: members.map((member) => ({
+          userId: member.user_id,
+          role: (member.role ?? 'team_member') as ProjectTeamRole,
+        })),
+      }));
+    } catch (err) {
+      console.error('Failed to prepare project for editing:', err);
+      setFormError('Unable to load existing team assignments. You can still edit the project and reassign members.');
+    } finally {
+      setIsPreparingEdit(false);
+    }
+  };
+
+  /* ------------------------------- Display helpers ------------------------------- */
+
   const getProjectStatus = (project: Project): 'on-track' | 'completed' => {
-    // Map database status values to display status
     if (project.status === 'completed') return 'completed';
     return 'on-track';
   };
 
-  // Use filtered projects: 
-  // 1. If a specific project is selected, show only that project
-  // 2. If a partner is selected, show projects for that partner
-  // 3. Otherwise show all projects
   const displayProjects = selectedProject 
     ? (projects.find(p => p.id === selectedProject) ? [projects.find(p => p.id === selectedProject)!] : [])
     : selectedPartner 
@@ -141,6 +436,14 @@ const ProjectsPage = () => {
     }
   };
 
+  const showTollColumn = Boolean(selectedProjectDetails?.toll || selectedProjectDetails?.toll_id);
+  const selectedProjectTollName =
+    selectedProjectDetails?.toll?.toll_name ||
+    selectedProjectDetails?.toll?.poc_name ||
+    (selectedProjectDetails?.toll_id ? 'Linked Toll' : null);
+
+  /* ------------------------------- Empty state loader ------------------------------- */
+
   if (!projects || projects.length === 0) {
     return (
       <div className="min-h-screen bg-gray-50 p-8 flex items-center justify-center">
@@ -151,6 +454,8 @@ const ProjectsPage = () => {
       </div>
     );
   }
+
+  /* ---------------------------------- Render ---------------------------------- */
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
@@ -163,7 +468,7 @@ const ProjectsPage = () => {
           </div>
           {currentRole === 'admin' && (
             <button
-              onClick={() => setIsAddModalOpen(true)}
+              onClick={handleOpenCreateModal}
               className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-lg font-medium flex items-center space-x-2 transition-colors"
             >
               <Plus className="w-5 h-5" />
@@ -194,6 +499,9 @@ const ProjectsPage = () => {
                 <div>
                   <h3 className="font-bold text-gray-900 text-lg">{project.name}</h3>
                   <p className="text-sm text-gray-600">{project.project_code} • {project.location}</p>
+                  {project.toll?.toll_name && (
+                    <p className="text-xs text-emerald-600 mt-1">Toll: {project.toll.toll_name}</p>
+                  )}
                 </div>
               </div>
               <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(getProjectStatus(project))}`}>
@@ -225,11 +533,23 @@ const ProjectsPage = () => {
               </div>
             </div>
 
-            <button 
-              onClick={() => setSelectedProjectDetails(project)}
-              className="w-full mt-4 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-medium py-2 rounded-lg transition-colors">
-              View Details
-            </button>
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setSelectedProjectDetails(project)}
+                className="flex-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-medium py-2 rounded-lg transition-colors"
+              >
+                View Details
+              </button>
+
+              {currentRole === 'admin' && (
+                <button
+                  onClick={() => handleEditProject(project)}
+                  className="px-4 py-2 rounded-lg bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
+                >
+                  Edit
+                </button>
+              )}
+            </div>
           </motion.div>
         ))}
       </div>
@@ -262,12 +582,24 @@ const ProjectsPage = () => {
                     <p className="text-gray-600 text-sm">{selectedProjectDetails.project_code}</p>
                   </div>
                 </div>
-                <button
-                  onClick={() => setSelectedProjectDetails(null)}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <X className="w-6 h-6 text-gray-500" />
-                </button>
+                <div className="flex items-center gap-3">
+                  {currentRole === 'admin' && (
+                    <button
+                      type="button"
+                      onClick={() => handleEditProject(selectedProjectDetails)}
+                      disabled={isPreparingEdit}
+                      className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold transition-colors disabled:bg-emerald-300"
+                    >
+                      {isPreparingEdit ? 'Preparing...' : 'Edit Project'}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setSelectedProjectDetails(null)}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    <X className="w-6 h-6 text-gray-500" />
+                  </button>
+                </div>
               </div>
 
               {/* Content */}
@@ -280,8 +612,8 @@ const ProjectsPage = () => {
                   </div>
                 )}
 
-                {/* Location & State */}
-                <div className="grid grid-cols-2 gap-4">
+                {/* Location & State & Toll */}
+                <div className={`grid grid-cols-1 ${showTollColumn ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-4`}>
                   {selectedProjectDetails.location && (
                     <div>
                       <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Location</p>
@@ -294,7 +626,52 @@ const ProjectsPage = () => {
                       <p className="text-gray-900 font-medium">{selectedProjectDetails.state}</p>
                     </div>
                   )}
+                  {showTollColumn && selectedProjectTollName && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Toll / Subcompany</p>
+                      <p className="text-gray-900 font-medium">{selectedProjectTollName}</p>
+                      {selectedProjectDetails.toll &&
+                        [selectedProjectDetails.toll.city, selectedProjectDetails.toll.state].some(Boolean) && (
+                        <p className="text-sm text-gray-500">
+                          {[selectedProjectDetails.toll.city, selectedProjectDetails.toll.state].filter(Boolean).join(', ')}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
+
+                {/* Team */}
+                {!teamMembersLoading && teamMembersError && <p className="text-sm text-red-500">{teamMembersError}</p>}
+                {teamMembersLoading && <p className="text-sm text-gray-500">Loading team members…</p>}
+                {!teamMembersLoading && !teamMembersError && (
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-semibold text-gray-900">Project Team</h3>
+                      <p className="text-xs text-gray-500">{selectedProjectTeamMembers.length || 0} member{selectedProjectTeamMembers.length === 1 ? '' : 's'}</p>
+                    </div>
+                    {selectedProjectTeamMembers.length === 0 ? (
+                      <p className="text-sm text-gray-500">No team members have been assigned yet.</p>
+                    ) : (
+                      <div className="grid grid-cols-1 gap-3">
+                        {selectedProjectTeamMembers.map((member) => (
+                          <div
+                            key={member.id}
+                            className="flex items-center justify-between gap-3 p-3 rounded-2xl border border-gray-100 bg-gray-50"
+                          >
+                            <div>
+                              <p className="text-sm font-semibold text-gray-900">
+                                {member.user?.full_name ?? 'Team Member'}
+                              </p>
+                              <p className="text-xs uppercase tracking-wide text-gray-500">
+                                {formatRoleLabel(member.role)}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Budget & Beneficiaries */}
                 <div className="grid grid-cols-3 gap-4 bg-linear-to-r from-emerald-50 to-blue-50 rounded-2xl p-4 border border-emerald-100">
@@ -312,45 +689,70 @@ const ProjectsPage = () => {
                   </div>
                 </div>
 
-                {/* Impact Metrics */}
-                {(selectedProjectDetails.meals_served || selectedProjectDetails.pads_distributed || selectedProjectDetails.trees_planted) && (
-                  <div className="grid grid-cols-3 gap-4">
-                    {selectedProjectDetails.meals_served !== undefined && selectedProjectDetails.meals_served > 0 && (
-                      <div className="bg-orange-50 rounded-xl p-4 border border-orange-100">
-                        <p className="text-xs font-semibold text-orange-700 uppercase mb-1">Meals Served</p>
-                        <p className="text-xl font-bold text-orange-900">{(selectedProjectDetails.meals_served).toLocaleString()}</p>
-                      </div>
-                    )}
-                    {selectedProjectDetails.pads_distributed !== undefined && selectedProjectDetails.pads_distributed > 0 && (
-                      <div className="bg-pink-50 rounded-xl p-4 border border-pink-100">
-                        <p className="text-xs font-semibold text-pink-700 uppercase mb-1">Pads Distributed</p>
-                        <p className="text-xl font-bold text-pink-900">{(selectedProjectDetails.pads_distributed).toLocaleString()}</p>
-                      </div>
-                    )}
-                    {selectedProjectDetails.trees_planted !== undefined && selectedProjectDetails.trees_planted > 0 && (
-                      <div className="bg-green-50 rounded-xl p-4 border border-green-100">
-                        <p className="text-xs font-semibold text-green-700 uppercase mb-1">Trees Planted</p>
-                        <p className="text-xl font-bold text-green-900">{(selectedProjectDetails.trees_planted).toLocaleString()}</p>
-                      </div>
-                    )}
+                {/* Impact Metrics: Primary */}
+                {PRIMARY_IMPACT_METRICS.some((key) => getImpactMetricValue(selectedProjectDetails.impact_metrics, key) > 0) && (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {PRIMARY_IMPACT_METRICS.map((key) => {
+                      const value = getImpactMetricValue(selectedProjectDetails.impact_metrics, key);
+                      if (value <= 0) return null;
+                      const visual = IMPACT_METRIC_VISUALS[key];
+                      const Icon = visual.icon;
+                      return (
+                        <div key={key} className={`rounded-xl p-4 border ${visual.wrapperClasses}`}>
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className={`${visual.iconWrapperClasses} rounded-xl`}>
+                              <Icon className={`w-5 h-5 ${visual.iconClasses}`} />
+                            </div>
+                            <span className={visual.labelClasses}>{IMPACT_METRIC_LABELS[key]}</span>
+                          </div>
+                          <p className={visual.valueClasses}>{value.toLocaleString()}</p>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 
-                {/* Other Metrics */}
-                <div className="grid grid-cols-2 gap-4">
-                  {selectedProjectDetails.students_enrolled !== undefined && selectedProjectDetails.students_enrolled > 0 && (
-                    <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
-                      <p className="text-xs font-semibold text-blue-700 uppercase mb-1">Students Enrolled</p>
-                      <p className="text-lg font-bold text-blue-900">{(selectedProjectDetails.students_enrolled).toLocaleString()}</p>
-                    </div>
-                  )}
-                  {selectedProjectDetails.schools_renovated !== undefined && selectedProjectDetails.schools_renovated > 0 && (
-                    <div className="bg-indigo-50 rounded-xl p-4 border border-indigo-100">
-                      <p className="text-xs font-semibold text-indigo-700 uppercase mb-1">Schools Renovated</p>
-                      <p className="text-lg font-bold text-indigo-900">{(selectedProjectDetails.schools_renovated).toLocaleString()}</p>
-                    </div>
-                  )}
-                </div>
+                {/* Impact Metrics: Secondary */}
+                {SECONDARY_IMPACT_METRICS.some((key) => getImpactMetricValue(selectedProjectDetails.impact_metrics, key) > 0) && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {SECONDARY_IMPACT_METRICS.map((key) => {
+                      const value = getImpactMetricValue(selectedProjectDetails.impact_metrics, key);
+                      if (value <= 0) return null;
+                      const visual = IMPACT_METRIC_VISUALS[key];
+                      const Icon = visual.icon;
+                      return (
+                        <div key={key} className={`rounded-xl p-4 border ${visual.wrapperClasses}`}>
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className={`${visual.iconWrapperClasses} rounded-xl`}>
+                              <Icon className={`w-5 h-5 ${visual.iconClasses}`} />
+                            </div>
+                            <span className={visual.labelClasses}>{IMPACT_METRIC_LABELS[key]}</span>
+                          </div>
+                          <p className={visual.valueClasses}>{value.toLocaleString()}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Custom Metrics */}
+                {selectedProjectDetails.impact_metrics?.some((m) => m.key === 'custom' && m.value > 0) && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {selectedProjectDetails.impact_metrics
+                      .filter((m) => m.key === 'custom' && m.value > 0)
+                      .map((metric, idx) => (
+                        <div key={`custom-${idx}`} className="rounded-xl p-4 border bg-purple-50 border-purple-100">
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="p-2 bg-purple-100 rounded-xl">
+                              <FolderKanban className="w-5 h-5 text-purple-600" />
+                            </div>
+                            <span className="text-sm font-semibold text-purple-700">{getMetricLabel(metric)}</span>
+                          </div>
+                          <p className="text-2xl font-bold text-purple-900">{metric.value.toLocaleString()}</p>
+                        </div>
+                      ))}
+                  </div>
+                )}
               </div>
 
               {/* Footer */}
@@ -367,7 +769,7 @@ const ProjectsPage = () => {
         )}
       </AnimatePresence>
 
-      {/* Add Project Modal */}
+      {/* Add / Edit Project Modal (full-form from V1) */}
       {isAddModalOpen && (
         <AddProjectModal
           formData={formData}
@@ -377,15 +779,25 @@ const ProjectsPage = () => {
           csrPartners={csrPartners}
           partnersLoading={partnersLoading}
           tolls={tolls}
-          onClose={() => {
-            if (!isSubmitting) {
-              setIsAddModalOpen(false);
-              setFormError(null);
-              setFormData({ ...INITIAL_PROJECT_FORM });
-            }
+          tollsLoading={tollsLoading}
+          teamUsers={teamUsers}
+          teamUsersLoading={teamUsersLoading}
+          onClose={handleModalClose}
+          onSubmit={handleSaveProject}
+          isEditing={Boolean(editingProjectId)}
+          onPartnerChange={(partnerId: string) => {
+            // Provide a single entry to change partner from modal (keeps old V1 behavior)
+            setFormData((prev) => ({
+              ...prev,
+              csrPartnerId: partnerId,
+              tollId: '',
+              location: csrPartners.find(p => p.id === partnerId)?.city ?? prev.location,
+              state: csrPartners.find(p => p.id === partnerId)?.state ?? prev.state,
+            }));
+            // load tolls
+            if (partnerId) fetchTolls(partnerId);
+            else setTolls([]);
           }}
-          onSubmit={handleAddProject}
-          onPartnerChange={handlePartnerChange}
         />
       )}
     </div>
@@ -393,6 +805,8 @@ const ProjectsPage = () => {
 };
 
 export default ProjectsPage;
+
+/* -------------------------- Payload builders & helpers ------------------------- */
 
 // Helper to generate a unique project code
 const generateProjectCode = () => {
@@ -402,17 +816,26 @@ const generateProjectCode = () => {
   return `${prefix}-${timestamp}-${random}`;
 };
 
-// Build payload for creating a new project
-const buildProjectPayload = (values: typeof INITIAL_PROJECT_FORM) => {
+// Build payload for creating a new project (uses impactMetrics array + other fields)
+const buildProjectPayload = (values: ProjectFormData) => {
   const now = new Date().toISOString();
   const budgetValue = Number(values.totalBudget) || 0;
   const beneficiaries = Number(values.directBeneficiaries) || 0;
+
+  const cleanedMetrics = values.impactMetrics
+    .map((metric) => ({
+      key: metric.key,
+      value: Math.max(0, metric.value || 0),
+      customLabel: metric.customLabel,
+    }))
+    .filter((metric) => metric.key !== 'custom' || metric.customLabel?.trim());
 
   return {
     project_code: values.projectCode.trim() || generateProjectCode(),
     name: values.name.trim(),
     description: values.description.trim() || undefined,
     csr_partner_id: values.csrPartnerId,
+    toll_id: values.tollId || undefined,
     location: values.location.trim() || undefined,
     state: values.state.trim() || undefined,
     category: values.category.trim() || undefined,
@@ -427,31 +850,68 @@ const buildProjectPayload = (values: typeof INITIAL_PROJECT_FORM) => {
     total_beneficiaries: beneficiaries,
     completion_percentage: 0,
     is_active: true,
-    pads_distributed: Number(values.padsDistributed) || 0,
-    students_enrolled: Number(values.studentsEnrolled) || 0,
-    schools_renovated: Number(values.schoolsRenovated) || 0,
-    trees_planted: Number(values.treesPlanted) || 0,
-    meals_served: Number(values.mealsServed) || 0,
+    impact_metrics: cleanedMetrics,
     created_by: undefined,
     updated_by: undefined,
   };
 };
 
-// Modal props interface
+const buildProjectUpdatePayload = (values: ProjectFormData): Partial<ProjectServiceProject> => {
+  const budgetValue = values.totalBudget ? Number(values.totalBudget) : undefined;
+  const beneficiaries = values.directBeneficiaries ? Number(values.directBeneficiaries) : undefined;
+
+  const cleanedMetrics = values.impactMetrics
+    .map((metric) => ({
+      key: metric.key,
+      value: Math.max(0, metric.value || 0),
+      customLabel: metric.customLabel,
+    }))
+    .filter((metric) => metric.key !== 'custom' || metric.customLabel?.trim());
+
+  const payload: Partial<ProjectServiceProject> = {
+    project_code: values.projectCode.trim() || undefined,
+    name: values.name.trim(),
+    description: values.description.trim() || undefined,
+    csr_partner_id: values.csrPartnerId,
+    toll_id: values.tollId || undefined,
+    location: values.location.trim() || undefined,
+    state: values.state.trim() || undefined,
+    category: values.category.trim() || undefined,
+    status: values.status,
+    start_date: values.startDate || undefined,
+    expected_end_date: values.expectedEndDate || undefined,
+    impact_metrics: cleanedMetrics,
+  };
+
+  if (budgetValue !== undefined) {
+    payload.total_budget = budgetValue;
+  }
+  if (beneficiaries !== undefined) {
+    payload.direct_beneficiaries = beneficiaries;
+  }
+
+  return payload;
+};
+
+/* -------------------------------- AddProjectModal -------------------------------- */
+
 interface AddProjectModalProps {
-  formData: typeof INITIAL_PROJECT_FORM;
-  setFormData: Dispatch<SetStateAction<typeof INITIAL_PROJECT_FORM>>;
+  formData: ProjectFormData;
+  setFormData: Dispatch<SetStateAction<ProjectFormData>>;
   isSubmitting: boolean;
   formError: string | null;
   csrPartners: CSRPartner[];
   partnersLoading: boolean;
-  tolls: CSRPartnerToll[];
+  tolls: Toll[];
+  tollsLoading: boolean;
+  teamUsers: User[];
+  teamUsersLoading: boolean;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  onPartnerChange: (partnerId: string) => void;
+  isEditing: boolean;
+  onPartnerChange?: (partnerId: string) => void;
 }
 
-// Add Project Modal component
 const AddProjectModal = ({
   formData,
   setFormData,
@@ -460,11 +920,122 @@ const AddProjectModal = ({
   csrPartners,
   partnersLoading,
   tolls,
+  tollsLoading,
+  teamUsers,
+  teamUsersLoading,
   onClose,
   onSubmit,
+  isEditing,
   onPartnerChange,
-}: AddProjectModalProps) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
+}: AddProjectModalProps) => {
+  const [metricNameInput, setMetricNameInput] = useState('');
+  const [metricError, setMetricError] = useState('');
+  const selectedPartner = csrPartners.find((partner) => partner.id === formData.csrPartnerId);
+  const partnerHasTolls = Boolean(selectedPartner?.has_toll);
+  const TEAM_ROLE_OPTIONS: Array<{ value: ProjectTeamRole; label: string }> = [
+    { value: 'project_manager', label: 'Project Manager' },
+    { value: 'accountant', label: 'Accountant' },
+    { value: 'team_member', label: 'Team Member' },
+  ];
+
+  const handleAddTeamMemberRow = () => {
+    setFormData((prev) => ({
+      ...prev,
+      teamMembers: [...prev.teamMembers, { userId: '', role: 'team_member' }],
+    }));
+  };
+
+  const handleTeamMemberChange = (index: number, updates: Partial<TeamMemberFormEntry>) => {
+    setFormData((prev) => ({
+      ...prev,
+      teamMembers: prev.teamMembers.map((member, i) => (i === index ? { ...member, ...updates } : member)),
+    }));
+  };
+
+  const handleRemoveTeamMember = (index: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      teamMembers: prev.teamMembers.filter((_, i) => i !== index),
+    }));
+  };
+
+  const deriveImpactMetricKey = (candidate: string): { key: ImpactMetricKey; customLabel?: string } | null => {
+    const normalized = candidate.trim().toLowerCase();
+    if (!normalized) return null;
+    // Try to match predefined labels
+    const matchLabel = PREDEFINED_METRIC_KEYS.find(
+      (key) => IMPACT_METRIC_LABELS[key].toLowerCase() === normalized
+    );
+    if (matchLabel) return { key: matchLabel };
+    // Try to match predefined keys
+    const matchKey = PREDEFINED_METRIC_KEYS.find((key) => key === normalized.replace(/\s+/g, '_'));
+    if (matchKey) return { key: matchKey };
+    // Allow custom metric with any name
+    return { key: 'custom', customLabel: candidate.trim() };
+  };
+
+  const handleAddMetricField = () => {
+    const result = deriveImpactMetricKey(metricNameInput);
+    if (!metricNameInput.trim()) {
+      setMetricError('Type a metric name before adding');
+      return;
+    }
+    if (!result) {
+      setMetricError('Please enter a valid metric name');
+      return;
+    }
+    // For custom metrics, check if the same custom label already exists
+    if (result.key === 'custom') {
+      const alreadyExists = formData.impactMetrics.some(
+        (metric) => metric.key === 'custom' && metric.customLabel === result.customLabel
+      );
+      if (alreadyExists) {
+        setMetricError('This custom metric is already added');
+        return;
+      }
+    } else {
+      // For predefined metrics, check if key already exists
+      if (formData.impactMetrics.some((metric) => metric.key === result.key)) {
+        setMetricError('Metric already added');
+        return;
+      }
+    }
+    setFormData((prev) => ({
+      ...prev,
+      impactMetrics: [...prev.impactMetrics, { key: result.key, value: 0, customLabel: result.customLabel }],
+    }));
+    setMetricNameInput('');
+    setMetricError('');
+  };
+
+  const handleMetricValueChange = (index: number, value: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      impactMetrics: prev.impactMetrics.map((metric, i) =>
+        i === index ? { ...metric, value: Math.max(0, value) } : metric
+      ),
+    }));
+  };
+
+  const handleRemoveMetric = (index: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      impactMetrics: prev.impactMetrics.filter((_, i) => i !== index),
+    }));
+  };
+
+  const handleTollSelection = (tollId: string) => {
+    const selectedToll = tolls.find((toll) => toll.id === tollId);
+    setFormData((prev) => ({
+      ...prev,
+      tollId,
+      location: selectedToll?.city ?? prev.location,
+      state: selectedToll?.state ?? prev.state,
+    }));
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
     <motion.div
       initial={{ opacity: 0, y: 40 }}
       animate={{ opacity: 1, y: 0 }}
@@ -472,8 +1043,8 @@ const AddProjectModal = ({
     >
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white rounded-t-3xl">
         <div>
-          <p className="text-sm font-medium text-emerald-600">Create New Project</p>
-          <h3 className="text-2xl font-bold text-gray-900">Add Project</h3>
+          <p className="text-sm font-medium text-emerald-600">{isEditing ? 'Edit Project' : 'Create New Project'}</p>
+          <h3 className="text-2xl font-bold text-gray-900">{isEditing ? 'Update Project' : 'Add Project'}</h3>
         </div>
         <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100" aria-label="Close modal">
           <X className="w-5 h-5 text-gray-500" />
@@ -481,7 +1052,7 @@ const AddProjectModal = ({
       </div>
       <form onSubmit={onSubmit} className="p-6 space-y-6">
         {/* CSR Partner Selection */}
-        <div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <label className="text-sm font-medium text-gray-700">
             CSR Partner *
             {partnersLoading ? (
@@ -492,46 +1063,75 @@ const AddProjectModal = ({
             ) : (
               <select
                 value={formData.csrPartnerId}
-                onChange={(e) => onPartnerChange(e.target.value)}
+                onChange={(e) => {
+                  const partnerId = e.target.value;
+                  if (onPartnerChange) {
+                    onPartnerChange(partnerId);
+                  } else {
+                    const partner = csrPartners.find(p => p.id === partnerId);
+                    setFormData((prev) => ({
+                      ...prev,
+                      csrPartnerId: partnerId,
+                      tollId: '', // Reset toll when partner changes
+                      // Auto-fill location from CSR partner when no toll
+                      location: partner?.city ?? '',
+                      state: partner?.state ?? '',
+                    }));
+                    if (partnerId) {
+                      // attempt to fetch tolls using same fetch logic - but AddProjectModal does not have fetchTolls reference.
+                      // The parent ProjectsPage triggers fetchTolls when formData.csrPartnerId changes
+                    }
+                  }
+                }}
                 required
                 className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
               >
                 <option value="">Select a CSR Partner</option>
                 {csrPartners.map((partner) => (
                   <option key={partner.id} value={partner.id}>
-                    {partner.name}
+                    {partner.company_name || partner.name}
                   </option>
                 ))}
               </select>
             )}
           </label>
-        </div>
 
-        {/* Toll/Sub-office Selection (Optional - only if tolls exist) */}
-        {tolls.length > 0 && (
-          <div>
+          {/* Toll Selection - Only show if partner has tolls */}
+          {formData.csrPartnerId && partnerHasTolls && (
             <label className="text-sm font-medium text-gray-700">
-              Toll/Sub-office (Optional)
-              <select
-                value={formData.tollId}
-                onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    tollId: e.target.value,
-                  }))
-                }
-                className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-              >
-                <option value="">Select a Toll/Sub-office (Optional)</option>
-                {tolls.map((toll) => (
-                  <option key={toll.id} value={toll.id}>
-                    {toll.poc_name} ({toll.city}, {toll.state})
-                  </option>
-                ))}
-              </select>
+              Toll / Subcompany
+              {tollsLoading ? (
+                <div className="mt-1 flex items-center gap-2 text-gray-500">
+                  <Loader className="w-4 h-4 animate-spin" />
+                  <span>Loading tolls...</span>
+                </div>
+              ) : tolls.length > 0 ? (
+                <select
+                  value={formData.tollId}
+                  onChange={(e) => handleTollSelection(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                >
+                  <option value="">No Toll (Direct Partner)</option>
+                  {tolls.map((toll) => (
+                    <option key={toll.id} value={toll.id}>
+                      {toll.toll_name || toll.poc_name}
+                      {toll.city ? ` • ${toll.city}` : ''}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="mt-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-500 text-sm">
+                  No tolls available for this partner
+                </div>
+              )}
             </label>
-          </div>
-        )}
+          )}
+          {formData.csrPartnerId && !partnerHasTolls && (
+            <div className="p-3 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-600">
+              This partner does not manage tolls separately. Project location will use the CSR partner's city/state.
+            </div>
+          )}
+        </div>
 
         {/* Project Name and Code */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -645,7 +1245,7 @@ const AddProjectModal = ({
               onChange={(e) =>
                 setFormData((prev) => ({
                   ...prev,
-                  status: e.target.value as typeof INITIAL_PROJECT_FORM.status,
+                    status: e.target.value as ProjectFormData['status'],
                 }))
               }
               className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
@@ -656,6 +1256,95 @@ const AddProjectModal = ({
               <option value="completed">Completed</option>
             </select>
           </label>
+        </div>
+
+        {/* Team Members Assignment */}
+        <div className="rounded-2xl border border-gray-100 p-4 bg-white shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Project Team</p>
+              <p className="text-xs text-gray-500">Assign accountants, project managers, and team members</p>
+            </div>
+            <button
+              type="button"
+              onClick={handleAddTeamMemberRow}
+              disabled={teamUsersLoading || teamUsers.length === 0}
+              className="px-3 py-1.5 rounded-lg border border-emerald-200 text-emerald-700 text-sm font-medium hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              + Add Member
+            </button>
+          </div>
+
+          {teamUsersLoading ? (
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <Loader className="w-4 h-4 animate-spin" />
+              Loading team members...
+            </div>
+          ) : formData.teamMembers.length === 0 ? (
+            teamUsers.length === 0 ? (
+              <p className="text-sm text-gray-500">No active users available to assign.</p>
+            ) : (
+              <p className="text-sm text-gray-500">No members added yet. Click "Add Member" to start building the project team.</p>
+            )
+          ) : (
+            <div className="space-y-3">
+              {formData.teamMembers.map((member, index) => (
+                <div
+                  key={`team-member-${index}`}
+                  className="grid grid-cols-1 md:grid-cols-[1.5fr_1fr_auto] gap-3 items-end p-3 bg-gray-50 rounded-2xl border border-gray-100"
+                >
+                  <label className="text-sm font-medium text-gray-700">
+                    Team Member
+                    <select
+                      value={member.userId}
+                      onChange={(e) => handleTeamMemberChange(index, { userId: e.target.value })}
+                      className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
+                    >
+                      <option value="">Select team member</option>
+                      {teamUsers.map((user) => {
+                        const disabled = formData.teamMembers.some(
+                          (assigned, assignedIndex) => assignedIndex !== index && assigned.userId === user.id
+                        );
+                        return (
+                          <option key={user.id} value={user.id} disabled={disabled}>
+                            {user.full_name}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </label>
+                  <label className="text-sm font-medium text-gray-700">
+                    Role
+                    <select
+                      value={member.role}
+                      onChange={(e) =>
+                        handleTeamMemberChange(index, { role: e.target.value as ProjectTeamRole })
+                      }
+                      className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
+                    >
+                      {TEAM_ROLE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveTeamMember(index)}
+                    className="h-10 w-full md:w-10 flex items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-100"
+                    aria-label="Remove team member"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <p className="mt-3 text-xs text-gray-500">
+            Allowed roles: Project Manager, Accountant, Team Member. Add as many members as needed for this project.
+          </p>
         </div>
 
         {/* Dates */}
@@ -730,85 +1419,91 @@ const AddProjectModal = ({
           </label>
         </div>
 
-        {/* Impact Metrics */}
-        <div className="bg-emerald-50 rounded-2xl p-4 border border-emerald-100">
-          <p className="text-sm font-semibold text-emerald-700 mb-4">Impact Metrics (Optional)</p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <label className="text-sm font-medium text-gray-700">
-              Meals Served
+        {/* Impact Metrics (dynamic list) */}
+        <div className="bg-emerald-50 rounded-2xl p-4 border border-emerald-100 space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-emerald-700">Impact Metrics (Optional)</p>
+            <p className="text-xs text-gray-500">
+              {formData.impactMetrics.length} selected
+            </p>
+          </div>
+
+          {formData.impactMetrics.length === 0 ? (
+            <p className="text-sm text-gray-500">
+              Select the metrics that matter most for this project and record the values.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {formData.impactMetrics.map((metric, index) => (
+                <div
+                  key={metric.key === 'custom' ? `custom-${index}` : metric.key}
+                  className="bg-white border border-gray-200 rounded-2xl p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
+                >
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">
+                      {getMetricLabel(metric)}
+                    </p>
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">
+                      {metric.key === 'custom' ? 'Custom Metric' : metric.key.replace(/_/g, ' ')}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="number"
+                      min={0}
+                      value={metric.value}
+                      onChange={(event) =>
+                        handleMetricValueChange(
+                          index,
+                          Number.isNaN(Number(event.target.value))
+                            ? 0
+                            : Number(event.target.value)
+                        )
+                      }
+                      className="w-32 rounded-xl border border-gray-200 px-3 py-2 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveMetric(index)}
+                      className="text-xs font-semibold text-red-500 px-3 py-2 rounded-full border border-red-200 hover:bg-red-50 transition-colors"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex flex-col gap-3 md:flex-row md:items-center">
+            <div className="flex-1 relative">
+              <label htmlFor="impact-metric-input" className="sr-only">Metric name</label>
               <input
-                type="number"
-                value={formData.mealsServed}
-                onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    mealsServed: e.target.value,
-                  }))
-                }
-                className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
-                placeholder="0"
+                type="text"
+                id="impact-metric-input"
+                list="impact-metric-suggestions"
+                placeholder="Type any metric name (e.g., Meals Served, Water Bottles, etc.)"
+                value={metricNameInput}
+                onChange={(event) => setMetricNameInput(event.target.value)}
+                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500"
               />
-            </label>
-            <label className="text-sm font-medium text-gray-700">
-              Pads Distributed
-              <input
-                type="number"
-                value={formData.padsDistributed}
-                onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    padsDistributed: e.target.value,
-                  }))
-                }
-                className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
-                placeholder="0"
-              />
-            </label>
-            <label className="text-sm font-medium text-gray-700">
-              Students Enrolled
-              <input
-                type="number"
-                value={formData.studentsEnrolled}
-                onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    studentsEnrolled: e.target.value,
-                  }))
-                }
-                className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
-                placeholder="0"
-              />
-            </label>
-            <label className="text-sm font-medium text-gray-700">
-              Schools Renovated
-              <input
-                type="number"
-                value={formData.schoolsRenovated}
-                onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    schoolsRenovated: e.target.value,
-                  }))
-                }
-                className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
-                placeholder="0"
-              />
-            </label>
-            <label className="text-sm font-medium text-gray-700">
-              Trees Planted
-              <input
-                type="number"
-                value={formData.treesPlanted}
-                onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    treesPlanted: e.target.value,
-                  }))
-                }
-                className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
-                placeholder="0"
-              />
-            </label>
+              <datalist id="impact-metric-suggestions">
+                {PREDEFINED_METRIC_KEYS.map((key) => (
+                  <option key={key} value={IMPACT_METRIC_LABELS[key]} />
+                ))}
+              </datalist>
+              <p className="text-xs text-gray-500 mt-1">
+                Choose from suggestions or type any custom metric name
+              </p>
+              {metricError && <p className="text-xs text-red-500 mt-1">{metricError}</p>}
+            </div>
+            <button
+              type="button"
+              onClick={handleAddMetricField}
+              className="w-full md:w-auto rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold px-4 py-3 transition-colors disabled:opacity-60"
+            >
+              Add Metric
+            </button>
           </div>
         </div>
 
@@ -831,8 +1526,10 @@ const AddProjectModal = ({
             {isSubmitting ? (
               <>
                 <Loader className="w-4 h-4 animate-spin" />
-                Creating...
+                {isEditing ? 'Saving...' : 'Creating...'}
               </>
+            ) : isEditing ? (
+              'Save Changes'
             ) : (
               'Create Project'
             )}
@@ -841,5 +1538,5 @@ const AddProjectModal = ({
       </form>
     </motion.div>
   </div>
-);
-
+  );
+};
