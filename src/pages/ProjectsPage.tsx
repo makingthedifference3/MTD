@@ -6,9 +6,18 @@ import { useFilter } from '../context/useFilter';
 import { useAuth } from '../context/useAuth';
 import FilterBar from '../components/FilterBar';
 import type { Project } from '../services/filterService';
+import type { Project as ProjectServiceProject } from '../services/projectsService';
 import { projectsService } from '../services/projectsService';
 import { getActiveCSRPartners, type CSRPartner } from '../services/csrPartnersService';
 import { getTollsByPartnerId, type Toll } from '../services/tollsService';
+import {
+  addProjectTeamMembers,
+  replaceProjectTeamMembers,
+  fetchProjectTeamMembers,
+  type ProjectTeamMemberWithUser,
+  type ProjectTeamRole,
+} from '../services/projectTeamMembersService';
+import { getAllActiveUsers, type User } from '../services/usersService';
 import { IMPACT_METRIC_VISUALS } from '../constants/impactMetricVisuals';
 import {
   getImpactMetricValue,
@@ -18,6 +27,11 @@ import {
   type ImpactMetricEntry,
   type ImpactMetricKey,
 } from '../utils/impactMetrics';
+
+interface TeamMemberFormEntry {
+  userId: string;
+  role: ProjectTeamRole;
+}
 
 interface ProjectFormData {
   name: string;
@@ -34,6 +48,7 @@ interface ProjectFormData {
   expectedEndDate: string;
   directBeneficiaries: string;
   impactMetrics: ImpactMetricEntry[];
+  teamMembers: TeamMemberFormEntry[];
 }
 
 const createInitialProjectFormState = (): ProjectFormData => ({
@@ -51,7 +66,53 @@ const createInitialProjectFormState = (): ProjectFormData => ({
   expectedEndDate: '',
   directBeneficiaries: '',
   impactMetrics: [],
+  teamMembers: [],
 });
+
+const formatRoleLabel = (role?: string | null) => {
+  if (!role) return 'No role';
+  const normalized = role.replace(/_/g, ' ');
+  return normalized.replace(/\b\w/g, (char) => char.toUpperCase());
+};
+
+const normalizeProjectStatusForForm = (
+  status?: string
+): ProjectFormData['status'] => {
+  const allowedStatuses: ProjectFormData['status'][] = ['planning', 'active', 'on_hold', 'completed'];
+  if (!status) return 'planning';
+  return allowedStatuses.includes(status as ProjectFormData['status'])
+    ? (status as ProjectFormData['status'])
+    : 'planning';
+};
+
+const mapProjectToFormData = (
+  project: Project,
+  teamMembers: ProjectTeamMemberWithUser[] = []
+): ProjectFormData => {
+  const budgetValue = project.total_budget ?? 0;
+  const beneficiaries = project.direct_beneficiaries ?? 0;
+
+  return {
+    name: project.name,
+    projectCode: project.project_code ?? '',
+    description: project.description ?? '',
+    csrPartnerId: project.csr_partner_id,
+    tollId: project.toll_id ?? '',
+    location: project.location ?? '',
+    state: project.state ?? '',
+    category: project.category ?? '',
+    status: normalizeProjectStatusForForm(project.status),
+    totalBudget: budgetValue ? budgetValue.toString() : '',
+    startDate: project.start_date ?? '',
+    expectedEndDate: project.expected_end_date ?? '',
+    directBeneficiaries: beneficiaries ? beneficiaries.toString() : '',
+    impactMetrics: project.impact_metrics ?? [],
+    teamMembers: teamMembers.map((member) => ({
+      userId: member.user_id,
+      role: (member.role ?? 'team_member') as ProjectTeamRole,
+    })),
+  };
+};
 
 const PRIMARY_IMPACT_METRICS: ImpactMetricKey[] = ['meals_served', 'pads_distributed', 'trees_planted'];
 const SECONDARY_IMPACT_METRICS: ImpactMetricKey[] = ['students_enrolled', 'schools_renovated'];
@@ -60,6 +121,11 @@ const ProjectsPage = () => {
   const { projects, filteredProjects, selectedPartner, selectedProject, refreshData } = useFilter();
   const { currentRole } = useAuth();
   const [selectedProjectDetails, setSelectedProjectDetails] = useState<Project | null>(null);
+  const [selectedProjectTeamMembers, setSelectedProjectTeamMembers] = useState<ProjectTeamMemberWithUser[]>([]);
+  const [teamMembersLoading, setTeamMembersLoading] = useState(false);
+  const [teamMembersError, setTeamMembersError] = useState<string | null>(null);
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
+  const [isPreparingEdit, setIsPreparingEdit] = useState(false);
 
   // Add project modal state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -70,6 +136,13 @@ const ProjectsPage = () => {
   const [partnersLoading, setPartnersLoading] = useState(false);
   const [tolls, setTolls] = useState<Toll[]>([]);
   const [tollsLoading, setTollsLoading] = useState(false);
+  const [teamUsers, setTeamUsers] = useState<User[]>([]);
+  const [teamUsersLoading, setTeamUsersLoading] = useState(false);
+  const resetFormState = () => {
+    setFormData(createInitialProjectFormState());
+    setTolls([]);
+    setEditingProjectId(null);
+  };
 
   // Fetch CSR partners when modal opens
   const fetchPartners = useCallback(async () => {
@@ -102,11 +175,26 @@ const ProjectsPage = () => {
     }
   }, []);
 
+  const fetchTeamUsers = useCallback(async () => {
+    try {
+      setTeamUsersLoading(true);
+      const users = await getAllActiveUsers();
+      setTeamUsers(users);
+    } catch (err) {
+      console.error('Failed to fetch team users:', err);
+    } finally {
+      setTeamUsersLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (isAddModalOpen && csrPartners.length === 0) {
       fetchPartners();
     }
-  }, [isAddModalOpen, csrPartners.length, fetchPartners]);
+    if (isAddModalOpen && teamUsers.length === 0) {
+      fetchTeamUsers();
+    }
+  }, [isAddModalOpen, csrPartners.length, teamUsers.length, fetchPartners, fetchTeamUsers]);
 
   // Fetch tolls when partner changes and auto-fill location from partner
   useEffect(() => {
@@ -132,7 +220,48 @@ const ProjectsPage = () => {
     }
   }, [formData.csrPartnerId, fetchTolls, csrPartners]);
 
-  const handleAddProject = async (event: FormEvent<HTMLFormElement>) => {
+  useEffect(() => {
+    if (!selectedProjectDetails) {
+      setSelectedProjectTeamMembers([]);
+      setTeamMembersError(null);
+      setTeamMembersLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadTeamMembers = async () => {
+      if (isMounted) {
+        setTeamMembersLoading(true);
+        setTeamMembersError(null);
+      }
+
+      try {
+        const members = await fetchProjectTeamMembers(selectedProjectDetails.id);
+        if (isMounted) {
+          setSelectedProjectTeamMembers(members);
+        }
+      } catch (err) {
+        console.error('Failed to load project team members:', err);
+        if (isMounted) {
+          setSelectedProjectTeamMembers([]);
+          setTeamMembersError('Unable to load the project team at the moment.');
+        }
+      } finally {
+        if (isMounted) {
+          setTeamMembersLoading(false);
+        }
+      }
+    };
+
+    loadTeamMembers();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedProjectDetails]);
+
+  const handleSaveProject = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!formData.name || !formData.csrPartnerId) {
       setFormError('Please fill in the project name and select a CSR partner.');
@@ -143,21 +272,81 @@ const ProjectsPage = () => {
       setIsSubmitting(true);
       setFormError(null);
 
-      const payload = buildProjectPayload(formData);
-      await projectsService.createProject(payload);
+      let projectId = editingProjectId;
+
+      if (editingProjectId) {
+        const updatePayload = buildProjectUpdatePayload(formData);
+        await projectsService.updateProject(editingProjectId, updatePayload);
+      } else {
+        const payload = buildProjectPayload(formData);
+        const newProject = await projectsService.createProject(payload);
+
+        if (!newProject?.id) {
+          throw new Error('Project created but missing identifier. Please try again.');
+        }
+
+        projectId = newProject.id;
+      }
+
+      const memberInputs = formData.teamMembers
+        .filter((member) => member.userId)
+        .map((member) => ({
+          project_id: projectId!,
+          user_id: member.userId,
+          role: member.role,
+        }));
+
+      if (editingProjectId) {
+        await replaceProjectTeamMembers(projectId!, memberInputs);
+      } else if (memberInputs.length) {
+        await addProjectTeamMembers(memberInputs);
+      }
 
       setIsAddModalOpen(false);
-      setFormData(createInitialProjectFormState());
-      // Refresh the projects list
+      setSelectedProjectDetails(null);
+      resetFormState();
       if (refreshData) {
         await refreshData();
       }
     } catch (err) {
-      console.error('Failed to create project:', err);
-      const message = err instanceof Error ? err.message : 'Unable to create project. Please try again.';
+      console.error('Failed to save project:', err);
+      const message = err instanceof Error ? err.message : 'Unable to save project. Please try again.';
       setFormError(message);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleOpenCreateModal = () => {
+    resetFormState();
+    setFormError(null);
+    setSelectedProjectDetails(null);
+    setIsAddModalOpen(true);
+  };
+
+  const handleModalClose = () => {
+    if (isSubmitting) return;
+    setIsAddModalOpen(false);
+    setFormError(null);
+    resetFormState();
+  };
+
+  const handleEditProject = async (project: Project) => {
+    setFormError(null);
+    setIsPreparingEdit(true);
+    setEditingProjectId(project.id);
+    setSelectedProjectDetails(null);
+    setFormData(mapProjectToFormData(project));
+    setIsAddModalOpen(true);
+
+    try {
+      const members = await fetchProjectTeamMembers(project.id);
+      setFormData(mapProjectToFormData(project, members));
+    } catch (err) {
+      console.error('Failed to prepare project for editing:', err);
+      setFormError('Unable to load existing team assignments. You can still edit the project and reassign members.');
+    } finally {
+      setIsPreparingEdit(false);
     }
   };
 
@@ -216,7 +405,7 @@ const ProjectsPage = () => {
           </div>
           {currentRole === 'admin' && (
             <button
-              onClick={() => setIsAddModalOpen(true)}
+              onClick={handleOpenCreateModal}
               className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-lg font-medium flex items-center space-x-2 transition-colors"
             >
               <Plus className="w-5 h-5" />
@@ -318,12 +507,24 @@ const ProjectsPage = () => {
                     <p className="text-gray-600 text-sm">{selectedProjectDetails.project_code}</p>
                   </div>
                 </div>
-                <button
-                  onClick={() => setSelectedProjectDetails(null)}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <X className="w-6 h-6 text-gray-500" />
-                </button>
+                <div className="flex items-center gap-3">
+                  {currentRole === 'admin' && (
+                    <button
+                      type="button"
+                      onClick={() => handleEditProject(selectedProjectDetails)}
+                      disabled={isPreparingEdit}
+                      className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold transition-colors disabled:bg-emerald-300"
+                    >
+                      {isPreparingEdit ? 'Preparing...' : 'Edit Project'}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setSelectedProjectDetails(null)}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    <X className="w-6 h-6 text-gray-500" />
+                  </button>
+                </div>
               </div>
 
               {/* Content */}
@@ -363,6 +564,42 @@ const ProjectsPage = () => {
                     </div>
                   )}
                 </div>
+
+                {!teamMembersLoading && teamMembersError && (
+                  <p className="text-sm text-red-500">{teamMembersError}</p>
+                )}
+                {teamMembersLoading && (
+                  <p className="text-sm text-gray-500">Loading team members…</p>
+                )}
+                {!teamMembersLoading && !teamMembersError && (
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-semibold text-gray-900">Project Team</h3>
+                      <p className="text-xs text-gray-500">{selectedProjectTeamMembers.length || 0} member{selectedProjectTeamMembers.length === 1 ? '' : 's'}</p>
+                    </div>
+                    {selectedProjectTeamMembers.length === 0 ? (
+                      <p className="text-sm text-gray-500">No team members have been assigned yet.</p>
+                    ) : (
+                      <div className="grid grid-cols-1 gap-3">
+                        {selectedProjectTeamMembers.map((member) => (
+                          <div
+                            key={member.id}
+                            className="flex items-center justify-between gap-3 p-3 rounded-2xl border border-gray-100 bg-gray-50"
+                          >
+                            <div>
+                              <p className="text-sm font-semibold text-gray-900">
+                                {member.user?.full_name ?? 'Team Member'}
+                              </p>
+                              <p className="text-xs uppercase tracking-wide text-gray-500">
+                                {formatRoleLabel(member.role)}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Budget & Beneficiaries */}
                 <div className="grid grid-cols-3 gap-4 bg-linear-to-r from-emerald-50 to-blue-50 rounded-2xl p-4 border border-emerald-100">
@@ -471,15 +708,11 @@ const ProjectsPage = () => {
           partnersLoading={partnersLoading}
           tolls={tolls}
           tollsLoading={tollsLoading}
-          onClose={() => {
-            if (!isSubmitting) {
-              setIsAddModalOpen(false);
-              setFormError(null);
-              setFormData(createInitialProjectFormState());
-              setTolls([]);
-            }
-          }}
-          onSubmit={handleAddProject}
+          teamUsers={teamUsers}
+          teamUsersLoading={teamUsersLoading}
+          onClose={handleModalClose}
+          onSubmit={handleSaveProject}
+          isEditing={Boolean(editingProjectId)}
         />
       )}
     </div>
@@ -536,6 +769,43 @@ const buildProjectPayload = (values: ProjectFormData) => {
   };
 };
 
+const buildProjectUpdatePayload = (values: ProjectFormData): Partial<ProjectServiceProject> => {
+  const budgetValue = values.totalBudget ? Number(values.totalBudget) : undefined;
+  const beneficiaries = values.directBeneficiaries ? Number(values.directBeneficiaries) : undefined;
+
+  const cleanedMetrics = values.impactMetrics
+    .map((metric) => ({
+      key: metric.key,
+      value: Math.max(0, metric.value || 0),
+      customLabel: metric.customLabel,
+    }))
+    .filter((metric) => metric.key !== 'custom' || metric.customLabel?.trim());
+
+  const payload: Partial<ProjectServiceProject> = {
+    project_code: values.projectCode.trim() || undefined,
+    name: values.name.trim(),
+    description: values.description.trim() || undefined,
+    csr_partner_id: values.csrPartnerId,
+    toll_id: values.tollId || undefined,
+    location: values.location.trim() || undefined,
+    state: values.state.trim() || undefined,
+    category: values.category.trim() || undefined,
+    status: values.status,
+    start_date: values.startDate || undefined,
+    expected_end_date: values.expectedEndDate || undefined,
+    impact_metrics: cleanedMetrics,
+  };
+
+  if (budgetValue !== undefined) {
+    payload.total_budget = budgetValue;
+  }
+  if (beneficiaries !== undefined) {
+    payload.direct_beneficiaries = beneficiaries;
+  }
+
+  return payload;
+};
+
 // Modal props interface
 interface AddProjectModalProps {
   formData: ProjectFormData;
@@ -546,8 +816,11 @@ interface AddProjectModalProps {
   partnersLoading: boolean;
   tolls: Toll[];
   tollsLoading: boolean;
+  teamUsers: User[];
+  teamUsersLoading: boolean;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  isEditing: boolean;
 }
 
 // Add Project Modal component
@@ -560,13 +833,42 @@ const AddProjectModal = ({
   partnersLoading,
   tolls,
   tollsLoading,
+  teamUsers,
+  teamUsersLoading,
   onClose,
   onSubmit,
+  isEditing,
 }: AddProjectModalProps) => {
   const [metricNameInput, setMetricNameInput] = useState('');
   const [metricError, setMetricError] = useState('');
   const selectedPartner = csrPartners.find((partner) => partner.id === formData.csrPartnerId);
   const partnerHasTolls = Boolean(selectedPartner?.has_toll);
+  const TEAM_ROLE_OPTIONS: Array<{ value: ProjectTeamRole; label: string }> = [
+    { value: 'project_manager', label: 'Project Manager' },
+    { value: 'accountant', label: 'Accountant' },
+    { value: 'team_member', label: 'Team Member' },
+  ];
+
+  const handleAddTeamMemberRow = () => {
+    setFormData((prev) => ({
+      ...prev,
+      teamMembers: [...prev.teamMembers, { userId: '', role: 'team_member' }],
+    }));
+  };
+
+  const handleTeamMemberChange = (index: number, updates: Partial<TeamMemberFormEntry>) => {
+    setFormData((prev) => ({
+      ...prev,
+      teamMembers: prev.teamMembers.map((member, i) => (i === index ? { ...member, ...updates } : member)),
+    }));
+  };
+
+  const handleRemoveTeamMember = (index: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      teamMembers: prev.teamMembers.filter((_, i) => i !== index),
+    }));
+  };
 
   const deriveImpactMetricKey = (candidate: string): { key: ImpactMetricKey; customLabel?: string } | null => {
     const normalized = candidate.trim().toLowerCase();
@@ -652,8 +954,8 @@ const AddProjectModal = ({
     >
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white rounded-t-3xl">
         <div>
-          <p className="text-sm font-medium text-emerald-600">Create New Project</p>
-          <h3 className="text-2xl font-bold text-gray-900">Add Project</h3>
+          <p className="text-sm font-medium text-emerald-600">{isEditing ? 'Edit Project' : 'Create New Project'}</p>
+          <h3 className="text-2xl font-bold text-gray-900">{isEditing ? 'Update Project' : 'Add Project'}</h3>
         </div>
         <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100" aria-label="Close modal">
           <X className="w-5 h-5 text-gray-500" />
@@ -859,6 +1161,95 @@ const AddProjectModal = ({
           </label>
         </div>
 
+        {/* Team Members Assignment */}
+        <div className="rounded-2xl border border-gray-100 p-4 bg-white shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Project Team</p>
+              <p className="text-xs text-gray-500">Assign accountants, project managers, and team members</p>
+            </div>
+            <button
+              type="button"
+              onClick={handleAddTeamMemberRow}
+              disabled={teamUsersLoading || teamUsers.length === 0}
+              className="px-3 py-1.5 rounded-lg border border-emerald-200 text-emerald-700 text-sm font-medium hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              + Add Member
+            </button>
+          </div>
+
+          {teamUsersLoading ? (
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <Loader className="w-4 h-4 animate-spin" />
+              Loading team members...
+            </div>
+          ) : formData.teamMembers.length === 0 ? (
+            teamUsers.length === 0 ? (
+              <p className="text-sm text-gray-500">No active users available to assign.</p>
+            ) : (
+              <p className="text-sm text-gray-500">No members added yet. Click "Add Member" to start building the project team.</p>
+            )
+          ) : (
+            <div className="space-y-3">
+              {formData.teamMembers.map((member, index) => (
+                <div
+                  key={`team-member-${index}`}
+                  className="grid grid-cols-1 md:grid-cols-[1.5fr_1fr_auto] gap-3 items-end p-3 bg-gray-50 rounded-2xl border border-gray-100"
+                >
+                  <label className="text-sm font-medium text-gray-700">
+                    Team Member
+                    <select
+                      value={member.userId}
+                      onChange={(e) => handleTeamMemberChange(index, { userId: e.target.value })}
+                      className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
+                    >
+                      <option value="">Select team member</option>
+                      {teamUsers.map((user) => {
+                        const disabled = formData.teamMembers.some(
+                          (assigned, assignedIndex) => assignedIndex !== index && assigned.userId === user.id
+                        );
+                        return (
+                          <option key={user.id} value={user.id} disabled={disabled}>
+                            {user.full_name}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </label>
+                  <label className="text-sm font-medium text-gray-700">
+                    Role
+                    <select
+                      value={member.role}
+                      onChange={(e) =>
+                        handleTeamMemberChange(index, { role: e.target.value as ProjectTeamRole })
+                      }
+                      className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
+                    >
+                      {TEAM_ROLE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveTeamMember(index)}
+                    className="h-10 w-full md:w-10 flex items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-100"
+                    aria-label="Remove team member"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <p className="mt-3 text-xs text-gray-500">
+            Allowed roles: Project Manager, Accountant, Team Member. Add as many members as needed for this project.
+          </p>
+        </div>
+
         {/* Dates */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <label className="text-sm font-medium text-gray-700">
@@ -1042,8 +1433,10 @@ const AddProjectModal = ({
             {isSubmitting ? (
               <>
                 <Loader className="w-4 h-4 animate-spin" />
-                Creating...
+                {isEditing ? 'Saving...' : 'Creating...'}
               </>
+            ) : isEditing ? (
+              'Save Changes'
             ) : (
               'Create Project'
             )}

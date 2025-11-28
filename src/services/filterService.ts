@@ -26,6 +26,9 @@ export interface Project {
   description?: string;
   location?: string;
   state?: string;
+  category?: string;
+  start_date?: string;
+  expected_end_date?: string;
   status?: string;
   is_active: boolean;
   // Budget data from database
