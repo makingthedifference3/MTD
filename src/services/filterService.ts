@@ -27,10 +27,15 @@ export interface Project {
   location?: string;
   state?: string;
   category?: string;
+  work?: string;
   start_date?: string;
   expected_end_date?: string;
   status?: string;
   is_active: boolean;
+  // Sub-project support
+  parent_project_id?: string;
+  is_beneficiary_project?: boolean;
+  beneficiary_number?: number;
   // Budget data from database
   total_budget?: number;
   utilized_budget?: number;
@@ -81,11 +86,12 @@ export const fetchProjectsByPartner = async (
     const { data, error } = await supabase
       .from('projects')
       .select(
-        `id, name, project_code, csr_partner_id, toll_id, description, location, state, status, is_active, total_beneficiaries, direct_beneficiaries, indirect_beneficiaries, male_beneficiaries, female_beneficiaries, children_beneficiaries, impact_metrics, display_color, display_icon,
+        `id, name, project_code, csr_partner_id, toll_id, description, location, state, work, category, status, is_active, total_beneficiaries, direct_beneficiaries, indirect_beneficiaries, male_beneficiaries, female_beneficiaries, children_beneficiaries, impact_metrics, display_color, display_icon, parent_project_id, is_beneficiary_project, beneficiary_number,
         toll:csr_partner_tolls!projects_toll_id_fkey(id, toll_name, poc_name, city, state)`
       )
       .eq('csr_partner_id', partnerId)
       .eq('is_active', true)
+      .is('parent_project_id', null)
       .order('name', { ascending: true });
 
     if (error) {
@@ -108,9 +114,10 @@ export const fetchAllProjects = async (): Promise<Project[]> => {
     const { data, error } = await supabase
       .from('projects')
       .select(
-        `id, name, project_code, csr_partner_id, toll_id, description, location, state, status, is_active, total_budget, utilized_budget, total_beneficiaries, direct_beneficiaries, indirect_beneficiaries, male_beneficiaries, female_beneficiaries, children_beneficiaries, impact_metrics, display_color, display_icon,
+        `id, name, project_code, csr_partner_id, toll_id, description, location, state, work, category, status, is_active, total_budget, utilized_budget, total_beneficiaries, direct_beneficiaries, indirect_beneficiaries, male_beneficiaries, female_beneficiaries, children_beneficiaries, impact_metrics, display_color, display_icon, parent_project_id, is_beneficiary_project, beneficiary_number,
         toll:csr_partner_tolls!projects_toll_id_fkey(id, toll_name, poc_name, city, state)`
       )
+      .is('parent_project_id', null)
       .order('name', { ascending: true });
 
     if (error) {

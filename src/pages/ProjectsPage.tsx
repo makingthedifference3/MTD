@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { FormEvent, Dispatch, SetStateAction } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, FolderKanban, DollarSign, X, MapPin, Calendar, Loader } from 'lucide-react';
@@ -41,12 +41,13 @@ interface ProjectFormData {
   tollId: string;
   location: string;
   state: string;
-  category: string;
+  work: string;
   status: 'planning' | 'active' | 'on_hold' | 'completed';
   totalBudget: string;
   startDate: string;
   expectedEndDate: string;
   directBeneficiaries: string;
+  createBeneficiaryProjects: boolean;
   impactMetrics: ImpactMetricEntry[];
   teamMembers: TeamMemberFormEntry[];
 }
@@ -59,12 +60,13 @@ const createInitialProjectFormState = (): ProjectFormData => ({
   tollId: '',
   location: '',
   state: '',
-  category: '',
+  work: '',
   status: 'planning',
   totalBudget: '',
   startDate: '',
   expectedEndDate: '',
   directBeneficiaries: '',
+  createBeneficiaryProjects: false,
   impactMetrics: [],
   teamMembers: [],
 });
@@ -100,12 +102,13 @@ const mapProjectToFormData = (
     tollId: project.toll_id ?? '',
     location: project.location ?? '',
     state: project.state ?? '',
-    category: project.category ?? '',
+    work: project.work ?? project.category ?? '',
     status: normalizeProjectStatusForForm(project.status),
     totalBudget: budgetValue ? budgetValue.toString() : '',
     startDate: project.start_date ?? '',
     expectedEndDate: project.expected_end_date ?? '',
     directBeneficiaries: beneficiaries ? beneficiaries.toString() : '',
+    createBeneficiaryProjects: false,
     impactMetrics: project.impact_metrics ?? [],
     teamMembers: teamMembers.map((member) => ({
       userId: member.user_id,
@@ -117,6 +120,9 @@ const mapProjectToFormData = (
 const PRIMARY_IMPACT_METRICS: ImpactMetricKey[] = ['meals_served', 'pads_distributed', 'trees_planted'];
 const SECONDARY_IMPACT_METRICS: ImpactMetricKey[] = ['students_enrolled', 'schools_renovated'];
 
+// Import Project type from projectsService for sub-projects
+import type { Project as ServiceProject } from '../services/projectsService';
+
 const ProjectsPage = () => {
   const { projects, filteredProjects, selectedPartner, selectedProject, refreshData } = useFilter();
   const { currentRole } = useAuth();
@@ -124,8 +130,18 @@ const ProjectsPage = () => {
   const [selectedProjectTeamMembers, setSelectedProjectTeamMembers] = useState<ProjectTeamMemberWithUser[]>([]);
   const [teamMembersLoading, setTeamMembersLoading] = useState(false);
   const [teamMembersError, setTeamMembersError] = useState<string | null>(null);
+  const [subProjects, setSubProjects] = useState<ServiceProject[]>([]);
+  const [subProjectsLoading, setSubProjectsLoading] = useState(false);
+  const [selectedSubProject, setSelectedSubProject] = useState<ServiceProject | null>(null);
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [isPreparingEdit, setIsPreparingEdit] = useState(false);
+  const [workFilter, setWorkFilter] = useState<string>('');
+
+  // Sub-project impact metrics editing state
+  const [isEditingSubProjectMetrics, setIsEditingSubProjectMetrics] = useState(false);
+  const [subProjectMetricsForm, setSubProjectMetricsForm] = useState<ImpactMetricEntry[]>([]);
+  const [isSubmittingSubProjectMetrics, setIsSubmittingSubProjectMetrics] = useState(false);
+  const [customMetricName, setCustomMetricName] = useState('');
 
   // Add project modal state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -272,6 +288,42 @@ const ProjectsPage = () => {
     };
   }, [selectedProjectDetails]);
 
+  // Load sub-projects when viewing project details
+  useEffect(() => {
+    if (!selectedProjectDetails) {
+      setSubProjects([]);
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadSubProjects = async () => {
+      try {
+        setSubProjectsLoading(true);
+        const projectSubProjects = await projectsService.getSubProjects(selectedProjectDetails.id);
+        if (isMounted) {
+          setSubProjects(projectSubProjects);
+          console.log('Sub-projects loaded:', projectSubProjects);
+        }
+      } catch (error) {
+        console.error('Error loading sub-projects:', error);
+        if (isMounted) {
+          setSubProjects([]);
+        }
+      } finally {
+        if (isMounted) {
+          setSubProjectsLoading(false);
+        }
+      }
+    };
+
+    loadSubProjects();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedProjectDetails]);
+
   const handleSaveProject = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!formData.name || !formData.csrPartnerId) {
@@ -311,6 +363,18 @@ const ProjectsPage = () => {
         await replaceProjectTeamMembers(projectId!, memberInputs);
       } else if (memberInputs.length) {
         await addProjectTeamMembers(memberInputs);
+      }
+
+      // Create beneficiary sub-projects if checkbox was checked
+      if (!editingProjectId && formData.createBeneficiaryProjects && projectId) {
+        const beneficiaryCount = Number(formData.directBeneficiaries) || 0;
+        if (beneficiaryCount > 0) {
+          // Fetch the created project to pass to sub-project creation
+          const createdProject = await projectsService.getProjectById(projectId);
+          if (createdProject) {
+            await projectsService.createBeneficiarySubProjects(createdProject, beneficiaryCount);
+          }
+        }
       }
 
       setIsAddModalOpen(false);
@@ -384,15 +448,135 @@ const ProjectsPage = () => {
     return 'on-track';
   };
 
+  // Handler to start editing sub-project impact metrics
+  const handleStartEditSubProjectMetrics = () => {
+    if (!selectedSubProject) return;
+    setSubProjectMetricsForm(selectedSubProject.impact_metrics || []);
+    setIsEditingSubProjectMetrics(true);
+  };
+
+  // Handler to save sub-project impact metrics
+  const handleSaveSubProjectMetrics = async () => {
+    if (!selectedSubProject) return;
+    
+    try {
+      setIsSubmittingSubProjectMetrics(true);
+      const updatedProject = await projectsService.updateSubProjectImpactMetrics(
+        selectedSubProject.id,
+        subProjectMetricsForm
+      );
+      
+      // Update the selectedSubProject with new data
+      setSelectedSubProject(updatedProject);
+      
+      // Also update in the subProjects list
+      setSubProjects(prev => prev.map(sp => 
+        sp.id === updatedProject.id ? updatedProject : sp
+      ));
+      
+      setIsEditingSubProjectMetrics(false);
+    } catch (error) {
+      console.error('Failed to save sub-project metrics:', error);
+    } finally {
+      setIsSubmittingSubProjectMetrics(false);
+    }
+  };
+
+  // Handler to add a new metric to sub-project form
+  const handleAddSubProjectMetric = (key: string) => {
+    if (key === 'custom') return; // Custom metrics are added via handleAddCustomMetric
+    const existingMetric = subProjectMetricsForm.find(m => m.key === key);
+    if (!existingMetric) {
+      setSubProjectMetricsForm(prev => [...prev, { key: key as ImpactMetricKey, value: 0 }]);
+    }
+  };
+
+  // Handler to add a custom metric with custom label
+  const handleAddCustomMetric = () => {
+    if (!customMetricName.trim()) return;
+    setSubProjectMetricsForm(prev => [...prev, { 
+      key: 'custom' as ImpactMetricKey, 
+      value: 0, 
+      customLabel: customMetricName.trim() 
+    }]);
+    setCustomMetricName('');
+  };
+
+  // Handler to update a metric value in sub-project form
+  const handleUpdateSubProjectMetricValue = (key: string, value: number, customLabel?: string) => {
+    setSubProjectMetricsForm(prev => 
+      prev.map(m => {
+        // For custom metrics, match by customLabel too
+        if (key === 'custom' && customLabel) {
+          return (m.key === 'custom' && m.customLabel === customLabel) ? { ...m, value } : m;
+        }
+        return m.key === key ? { ...m, value } : m;
+      })
+    );
+  };
+
+  // Handler to remove a metric from sub-project form
+  const handleRemoveSubProjectMetric = (key: string, customLabel?: string) => {
+    setSubProjectMetricsForm(prev => prev.filter(m => {
+      // For custom metrics, match by customLabel too
+      if (key === 'custom' && customLabel) {
+        return !(m.key === 'custom' && m.customLabel === customLabel);
+      }
+      return m.key !== key;
+    }));
+  };
+
+  // Get unique work values for filter dropdown
+  const uniqueWorkValues = useMemo(() => {
+    const workSet = new Set<string>();
+    projects.forEach(project => {
+      if (project.work) {
+        workSet.add(project.work);
+      }
+    });
+    return Array.from(workSet).sort();
+  }, [projects]);
+
+  // Compose aggregated custom metrics (main + beneficiary sub-projects)
+  const aggregatedCustomMetrics = useMemo(() => {
+    const totals = new Map<string, number>();
+
+    const addMetrics = (metrics?: ImpactMetricEntry[]) => {
+      metrics
+        ?.filter((metric) => metric.key === 'custom' && metric.customLabel && metric.value > 0)
+        .forEach((metric) => {
+          const label = metric.customLabel!.trim();
+          if (!label) return;
+          const existing = totals.get(label) ?? 0;
+          totals.set(label, existing + metric.value);
+        });
+    };
+
+    addMetrics(selectedProjectDetails?.impact_metrics);
+    subProjects.forEach((sub) => addMetrics(sub.impact_metrics));
+
+    return Array.from(totals.entries()).map(([label, value]) => ({ label, value }));
+  }, [selectedProjectDetails?.impact_metrics, subProjects]);
+
   // Use filtered projects: 
   // 1. If a specific project is selected, show only that project
   // 2. If a partner is selected, show projects for that partner
   // 3. Otherwise show all projects
-  const displayProjects = selectedProject 
-    ? (projects.find(p => p.id === selectedProject) ? [projects.find(p => p.id === selectedProject)!] : [])
-    : selectedPartner 
-    ? filteredProjects 
-    : projects;
+  // 4. Apply work filter if set
+  const displayProjects: Project[] = useMemo(() => {
+    let projectList: Project[] = selectedProject 
+      ? (projects.find(p => p.id === selectedProject) ? [projects.find(p => p.id === selectedProject)!] : [])
+      : selectedPartner 
+      ? filteredProjects 
+      : projects;
+    
+    // Apply work filter
+    if (workFilter) {
+      projectList = projectList.filter(p => p.work === workFilter);
+    }
+    
+    return projectList;
+  }, [selectedProject, selectedPartner, filteredProjects, projects, workFilter]);
 
   const getStatusColor = (status: 'on-track' | 'completed') => {
     switch (status) {
@@ -445,6 +629,33 @@ const ProjectsPage = () => {
 
       {/* Filter Bar */}
       <FilterBar />
+
+      {/* Work Filter */}
+      {uniqueWorkValues.length > 0 && (
+        <div className="mt-4 flex items-center space-x-3">
+          <label className="text-sm font-medium text-gray-700">Filter by Work:</label>
+          <select
+            value={workFilter}
+            onChange={(e) => setWorkFilter(e.target.value)}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+          >
+            <option value="">All Work Types</option>
+            {uniqueWorkValues.map((work) => (
+              <option key={work} value={work}>
+                {work}
+              </option>
+            ))}
+          </select>
+          {workFilter && (
+            <button
+              onClick={() => setWorkFilter('')}
+              className="text-sm text-emerald-600 hover:text-emerald-700"
+            >
+              Clear Filter
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Projects Grid */}
       <div className="grid grid-cols-1 gap-6 mt-6">
@@ -522,7 +733,7 @@ const ProjectsPage = () => {
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-white rounded-3xl p-8 max-w-2xl w-full shadow-2xl border border-gray-100"
+              className="bg-white rounded-3xl p-8 max-w-2xl w-full shadow-2xl border border-gray-100 max-h-[90vh] overflow-y-auto"
             >
               {/* Header */}
               <div className="flex items-start justify-between mb-6">
@@ -645,6 +856,57 @@ const ProjectsPage = () => {
                   </div>
                 </div>
 
+                {/* Sub-Projects (Beneficiary Projects) */}
+                {(subProjects.length > 0 || subProjectsLoading) && (
+                  <div className="border border-amber-200 bg-amber-50 rounded-2xl p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="font-semibold text-amber-900">Beneficiary Sub-Projects</h3>
+                      <span className="text-xs bg-amber-200 text-amber-800 px-2 py-1 rounded-full">
+                        {subProjects.length} sub-project{subProjects.length !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                    {subProjectsLoading ? (
+                      <p className="text-sm text-amber-700">Loading sub-projects...</p>
+                    ) : (
+                      <div className="space-y-2 max-h-60 overflow-y-auto">
+                        {subProjects.map((subProject) => (
+                          <div
+                            key={subProject.id}
+                            className="flex items-center justify-between p-3 bg-white rounded-xl border border-amber-100 hover:border-amber-300 cursor-pointer transition-colors"
+                            onClick={() => setSelectedSubProject(subProject)}
+                          >
+                            <div className="flex items-center space-x-3">
+                              <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 font-bold text-sm">
+                                {subProject.beneficiary_number || '?'}
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">{subProject.name}</p>
+                                <p className="text-xs text-gray-500">
+                                  {subProject.status === 'active' ? 'Active' : 
+                                   subProject.status === 'completed' ? 'Completed' : 
+                                   subProject.status === 'planning' ? 'Planning' :
+                                   subProject.status === 'on_hold' ? 'On Hold' :
+                                   subProject.status === 'cancelled' ? 'Cancelled' :
+                                   subProject.status === 'archived' ? 'Archived' : subProject.status}
+                                </p>
+                              </div>
+                            </div>
+                            <button
+                              className="text-xs text-amber-600 hover:text-amber-800 font-medium"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedSubProject(subProject);
+                              }}
+                            >
+                              View Details
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Impact Metrics */}
                 {PRIMARY_IMPACT_METRICS.some((key) => getImpactMetricValue(selectedProjectDetails.impact_metrics, key) > 0) && (
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -692,21 +954,25 @@ const ProjectsPage = () => {
                 )}
 
                 {/* Custom Metrics */}
-                {selectedProjectDetails.impact_metrics?.some((m) => m.key === 'custom' && m.value > 0) && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {selectedProjectDetails.impact_metrics
-                      .filter((m) => m.key === 'custom' && m.value > 0)
-                      .map((metric, idx) => (
-                        <div key={`custom-${idx}`} className="rounded-xl p-4 border bg-purple-50 border-purple-100">
+                {aggregatedCustomMetrics.length > 0 && (
+                  <div className="mt-6">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm font-semibold text-purple-700">Custom Metrics</p>
+                      <span className="text-xs text-purple-500">Includes beneficiary sub-project values</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {aggregatedCustomMetrics.map((metric) => (
+                        <div key={metric.label} className="rounded-xl p-4 border bg-purple-50 border-purple-100">
                           <div className="flex items-center gap-2 mb-2">
                             <div className="p-2 bg-purple-100 rounded-xl">
                               <FolderKanban className="w-5 h-5 text-purple-600" />
                             </div>
-                            <span className="text-sm font-semibold text-purple-700">{getMetricLabel(metric)}</span>
+                            <span className="text-sm font-semibold text-purple-700">{metric.label}</span>
                           </div>
                           <p className="text-2xl font-bold text-purple-900">{metric.value.toLocaleString()}</p>
                         </div>
                       ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -716,6 +982,311 @@ const ProjectsPage = () => {
                 <button
                   onClick={() => setSelectedProjectDetails(null)}
                   className="flex-1 px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-900 font-medium rounded-xl transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Sub-Project Details Modal */}
+      <AnimatePresence>
+        {selectedSubProject && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-60 flex items-center justify-center p-4"
+            onClick={() => setSelectedSubProject(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-3xl max-w-md w-full p-6 shadow-xl max-h-[85vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-start justify-between mb-6">
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 font-bold">
+                      {selectedSubProject.beneficiary_number || '?'}
+                    </div>
+                    <span className="text-xs bg-amber-200 text-amber-800 px-2 py-1 rounded-full">
+                      Beneficiary Sub-Project
+                    </span>
+                  </div>
+                  <h2 className="text-xl font-bold text-gray-900">{selectedSubProject.name}</h2>
+                </div>
+                <button
+                  onClick={() => setSelectedSubProject(null)}
+                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                >
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+
+              {/* Details */}
+              <div className="space-y-4">
+                {selectedSubProject.description && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Description</p>
+                    <p className="text-gray-700">{selectedSubProject.description}</p>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Status</p>
+                    <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
+                      selectedSubProject.status === 'completed' ? 'bg-blue-100 text-blue-700' :
+                      selectedSubProject.status === 'active' ? 'bg-emerald-100 text-emerald-700' :
+                      selectedSubProject.status === 'planning' ? 'bg-yellow-100 text-yellow-700' :
+                      'bg-gray-100 text-gray-700'
+                    }`}>
+                      {selectedSubProject.status === 'active' ? 'Active' : 
+                       selectedSubProject.status === 'completed' ? 'Completed' : 
+                       selectedSubProject.status === 'planning' ? 'Planning' :
+                       selectedSubProject.status === 'on_hold' ? 'On Hold' :
+                       selectedSubProject.status === 'cancelled' ? 'Cancelled' :
+                       selectedSubProject.status === 'archived' ? 'Archived' : selectedSubProject.status}
+                    </span>
+                  </div>
+                  {selectedSubProject.work && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Work Type</p>
+                      <p className="text-gray-700">{selectedSubProject.work}</p>
+                    </div>
+                  )}
+                </div>
+
+                {(selectedSubProject.location || selectedSubProject.state) && (
+                  <div className="flex items-center gap-2 text-gray-600">
+                    <MapPin className="w-4 h-4" />
+                    <span>
+                      {selectedSubProject.location}
+                      {selectedSubProject.location && selectedSubProject.state && ', '}
+                      {selectedSubProject.state}
+                    </span>
+                  </div>
+                )}
+
+                {(selectedSubProject.start_date || selectedSubProject.expected_end_date) && (
+                  <div className="flex items-center gap-2 text-gray-600">
+                    <Calendar className="w-4 h-4" />
+                    <span>
+                      {selectedSubProject.start_date && new Date(selectedSubProject.start_date).toLocaleDateString()}
+                      {selectedSubProject.start_date && selectedSubProject.expected_end_date && ' - '}
+                      {selectedSubProject.expected_end_date && new Date(selectedSubProject.expected_end_date).toLocaleDateString()}
+                    </span>
+                  </div>
+                )}
+
+                {/* Impact Metrics Section */}
+                <div className="border border-gray-200 rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold text-gray-900">Impact Metrics</h3>
+                    {currentRole === 'admin' && !isEditingSubProjectMetrics && (
+                      <button
+                        onClick={handleStartEditSubProjectMetrics}
+                        className="text-xs text-emerald-600 hover:text-emerald-700 font-medium"
+                      >
+                        Edit Metrics
+                      </button>
+                    )}
+                  </div>
+
+                  {isEditingSubProjectMetrics ? (
+                    // Edit Mode
+                    <div className="space-y-3">
+                      {/* Existing metrics */}
+                      {subProjectMetricsForm.map((metric, index) => (
+                        <div key={metric.key === 'custom' ? `custom-${index}` : metric.key} className="flex items-center gap-2">
+                          <span className="text-sm text-gray-700 flex-1">
+                            {metric.key === 'custom' && metric.customLabel 
+                              ? metric.customLabel 
+                              : IMPACT_METRIC_LABELS[metric.key as keyof typeof IMPACT_METRIC_LABELS] || metric.key}
+                          </span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={metric.value}
+                            onChange={(e) => handleUpdateSubProjectMetricValue(metric.key, Number(e.target.value), metric.customLabel)}
+                            className="w-24 px-2 py-1 border border-gray-300 rounded-lg text-sm"
+                          />
+                          <button
+                            onClick={() => handleRemoveSubProjectMetric(metric.key, metric.customLabel)}
+                            className="text-red-500 hover:text-red-600 p-1"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+
+                      {/* Add new metric dropdown */}
+                      <div className="pt-2 border-t border-gray-100">
+                        <select
+                          onChange={(e) => {
+                            if (e.target.value) {
+                              handleAddSubProjectMetric(e.target.value);
+                              e.target.value = '';
+                            }
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                          defaultValue=""
+                        >
+                          <option value="" disabled>Add predefined metric...</option>
+                          {PREDEFINED_METRIC_KEYS.filter(
+                            key => !subProjectMetricsForm.find(m => m.key === key)
+                          ).map((key) => (
+                            <option key={key} value={key}>
+                              {IMPACT_METRIC_LABELS[key]}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Add custom metric */}
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          placeholder="Custom metric name..."
+                          value={customMetricName}
+                          onChange={(e) => setCustomMetricName(e.target.value)}
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddCustomMetric();
+                            }
+                          }}
+                        />
+                        <button
+                          onClick={handleAddCustomMetric}
+                          disabled={!customMetricName.trim()}
+                          className="px-3 py-2 text-sm text-white bg-emerald-500 hover:bg-emerald-600 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Add
+                        </button>
+                      </div>
+
+                      {/* Save/Cancel buttons */}
+                      <div className="flex gap-2 pt-2">
+                        <button
+                          onClick={() => setIsEditingSubProjectMetrics(false)}
+                          className="flex-1 px-3 py-2 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg"
+                          disabled={isSubmittingSubProjectMetrics}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={handleSaveSubProjectMetrics}
+                          disabled={isSubmittingSubProjectMetrics}
+                          className="flex-1 px-3 py-2 text-sm text-white bg-emerald-500 hover:bg-emerald-600 rounded-lg disabled:opacity-50"
+                        >
+                          {isSubmittingSubProjectMetrics ? 'Saving...' : 'Save'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    // View Mode
+                    <>
+                      {selectedSubProject.impact_metrics && selectedSubProject.impact_metrics.length > 0 ? (
+                        <div className="space-y-3">
+                          {/* Primary metrics */}
+                          {PRIMARY_IMPACT_METRICS.some((key) => getImpactMetricValue(selectedSubProject.impact_metrics, key) > 0) && (
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                              {PRIMARY_IMPACT_METRICS.map((key) => {
+                                const value = getImpactMetricValue(selectedSubProject.impact_metrics as ImpactMetricEntry[], key);
+                                if (value <= 0) return null;
+                                const visual = IMPACT_METRIC_VISUALS[key];
+                                const Icon = visual.icon;
+                                return (
+                                  <div key={`sub-${key}`} className={`rounded-xl p-3 border ${visual.wrapperClasses}`}>
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <div className={`${visual.iconWrapperClasses} rounded-xl`}>
+                                        <Icon className={`w-5 h-5 ${visual.iconClasses}`} />
+                                      </div>
+                                      <span className={visual.labelClasses}>{IMPACT_METRIC_LABELS[key]}</span>
+                                    </div>
+                                    <p className={visual.valueClasses}>{value.toLocaleString()}</p>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {/* Secondary metrics */}
+                          {SECONDARY_IMPACT_METRICS.some((key) => getImpactMetricValue(selectedSubProject.impact_metrics, key) > 0) && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {SECONDARY_IMPACT_METRICS.map((key) => {
+                                const value = getImpactMetricValue(selectedSubProject.impact_metrics as ImpactMetricEntry[], key);
+                                if (value <= 0) return null;
+                                const visual = IMPACT_METRIC_VISUALS[key];
+                                const Icon = visual.icon;
+                                return (
+                                  <div key={`sub-secondary-${key}`} className={`rounded-xl p-3 border ${visual.wrapperClasses}`}>
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <div className={`${visual.iconWrapperClasses} rounded-xl`}>
+                                        <Icon className={`w-5 h-5 ${visual.iconClasses}`} />
+                                      </div>
+                                      <span className={visual.labelClasses}>{IMPACT_METRIC_LABELS[key]}</span>
+                                    </div>
+                                    <p className={visual.valueClasses}>{value.toLocaleString()}</p>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {/* Custom metrics */}
+                          {(selectedSubProject.impact_metrics as ImpactMetricEntry[])?.filter(m => m.key === 'custom' && m.value > 0).length > 0 && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {(selectedSubProject.impact_metrics as ImpactMetricEntry[])
+                                .filter(m => m.key === 'custom' && m.value > 0)
+                                .map((metric, idx) => (
+                                  <div key={`sub-custom-${idx}`} className="rounded-xl p-3 border bg-purple-50 border-purple-100">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <div className="p-2 bg-purple-100 rounded-xl">
+                                        <FolderKanban className="w-5 h-5 text-purple-600" />
+                                      </div>
+                                      <span className="text-sm font-semibold text-purple-700">
+                                        {metric.customLabel || 'Custom Metric'}
+                                      </span>
+                                    </div>
+                                    <p className="text-2xl font-bold text-purple-900">{metric.value.toLocaleString()}</p>
+                                  </div>
+                                ))}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-500 text-center py-2">
+                          No impact metrics recorded yet.
+                          {currentRole === 'admin' && ' Click "Edit Metrics" to add.'}
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* Budget Info */}
+                <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100">
+                  <p className="text-xs font-semibold text-emerald-700 uppercase mb-1">Beneficiaries</p>
+                  <p className="text-lg font-bold text-emerald-900">
+                    {(selectedSubProject.direct_beneficiaries || 0).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="mt-6">
+                <button
+                  onClick={() => setSelectedSubProject(null)}
+                  className="w-full px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-900 font-medium rounded-xl transition-colors"
                 >
                   Close
                 </button>
@@ -779,7 +1350,7 @@ const buildProjectPayload = (values: ProjectFormData) => {
     toll_id: values.tollId || undefined,
     location: values.location.trim() || undefined,
     state: values.state.trim() || undefined,
-    category: values.category.trim() || undefined,
+    work: values.work.trim() || undefined,
     status: values.status,
     start_date: values.startDate || now,
     expected_end_date: values.expectedEndDate || undefined,
@@ -817,7 +1388,7 @@ const buildProjectUpdatePayload = (values: ProjectFormData): Partial<ProjectServ
     toll_id: values.tollId || undefined,
     location: values.location.trim() || undefined,
     state: values.state.trim() || undefined,
-    category: values.category.trim() || undefined,
+    work: values.work.trim() || undefined,
     status: values.status,
     start_date: values.startDate || undefined,
     expected_end_date: values.expectedEndDate || undefined,
@@ -1152,17 +1723,17 @@ const AddProjectModal = ({
           </label>
         </div>
 
-        {/* Category and Status */}
+        {/* Work and Status */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <label className="text-sm font-medium text-gray-700">
-            Category
+            Work Type
             <input
               type="text"
-              value={formData.category}
+              value={formData.work}
               onChange={(e) =>
                 setFormData((prev) => ({
                   ...prev,
-                  category: e.target.value,
+                  work: e.target.value,
                 }))
               }
               className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
@@ -1349,6 +1920,34 @@ const AddProjectModal = ({
             />
           </label>
         </div>
+
+        {/* Create Beneficiary Sub-Projects Checkbox */}
+        {!isEditing && Number(formData.directBeneficiaries) > 0 && (
+          <div className="bg-blue-50 rounded-2xl p-4 border border-blue-100">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formData.createBeneficiaryProjects}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    createBeneficiaryProjects: e.target.checked,
+                  }))
+                }
+                className="mt-1 w-5 h-5 rounded border-blue-300 text-blue-600 focus:ring-blue-500"
+              />
+              <div>
+                <p className="text-sm font-semibold text-blue-900">
+                  Create individual beneficiary sub-projects
+                </p>
+                <p className="text-xs text-blue-700 mt-1">
+                  This will create {formData.directBeneficiaries} sub-projects under this main project, 
+                  one for each direct beneficiary. Each sub-project can be tracked individually.
+                </p>
+              </div>
+            </label>
+          </div>
+        )}
 
         {/* Impact Metrics */}
         <div className="bg-emerald-50 rounded-2xl p-4 border border-emerald-100 space-y-4">
