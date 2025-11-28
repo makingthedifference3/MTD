@@ -18,6 +18,7 @@ import {
 } from '@/services/tollsService';
 
 const INITIAL_TOLL_FORM = {
+  toll_name: '',
   poc_name: '',
   contact_number: '',
   email_id: '',
@@ -76,8 +77,8 @@ const TollManagementPage = () => {
 
   const handleAddToll = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!formData.poc_name || !partnerId) {
-      setFormError('Please fill in the POC name.');
+    if (!formData.toll_name.trim() || !formData.poc_name.trim() || !partnerId) {
+      setFormError('Please fill in both the toll name and POC name.');
       return;
     }
 
@@ -87,6 +88,7 @@ const TollManagementPage = () => {
 
       const payload: CreateTollInput = {
         csr_partner_id: partnerId,
+        toll_name: formData.toll_name.trim(),
         poc_name: formData.poc_name.trim(),
         contact_number: formData.contact_number.trim() || undefined,
         email_id: formData.email_id.trim() || undefined,
@@ -111,8 +113,8 @@ const TollManagementPage = () => {
 
   const handleEditToll = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!formData.poc_name || !selectedToll) {
-      setFormError('Please fill in the POC name.');
+    if (!formData.toll_name.trim() || !formData.poc_name.trim() || !selectedToll) {
+      setFormError('Please fill in both the toll name and POC name.');
       return;
     }
 
@@ -121,6 +123,7 @@ const TollManagementPage = () => {
       setFormError(null);
 
       const payload: UpdateTollInput = {
+        toll_name: formData.toll_name.trim(),
         poc_name: formData.poc_name.trim(),
         contact_number: formData.contact_number.trim() || undefined,
         email_id: formData.email_id.trim() || undefined,
@@ -162,6 +165,7 @@ const TollManagementPage = () => {
   const openEditModal = (toll: Toll) => {
     setSelectedToll(toll);
     setFormData({
+      toll_name: toll.toll_name || '',
       poc_name: toll.poc_name,
       contact_number: toll.contact_number || '',
       email_id: toll.email_id || '',
@@ -337,7 +341,8 @@ const TollManagementPage = () => {
                     <Building2 className="w-6 h-6 text-blue-600" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-gray-900 text-lg">{toll.poc_name}</h3>
+                    <h3 className="font-bold text-gray-900 text-lg">{toll.toll_name || toll.poc_name}</h3>
+                    <p className="text-sm text-gray-600">POC: {toll.poc_name}</p>
                     <p className="text-sm text-gray-600">{[toll.city, toll.state].filter(Boolean).join(', ') || 'No location'}</p>
                   </div>
                 </div>
@@ -534,6 +539,22 @@ const TollFormModal = ({
       </div>
       <form onSubmit={onSubmit} className="p-6 space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <label className="text-sm font-medium text-gray-700 md:col-span-2">
+            Toll / Subcompany Name *
+            <input
+              type="text"
+              value={formData.toll_name}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  toll_name: e.target.value,
+                }))
+              }
+              required
+              className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="North South Tollways"
+            />
+          </label>
           <label className="text-sm font-medium text-gray-700 md:col-span-2">
             POC Name (Point of Contact) *
             <input

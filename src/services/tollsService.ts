@@ -6,6 +6,7 @@ import { supabase } from './supabaseClient';
 export interface Toll {
   id: string;
   csr_partner_id: string;
+  toll_name: string | null;
   poc_name: string;
   contact_number: string | null;
   email_id: string | null;
@@ -29,6 +30,7 @@ export interface TollWithPartner extends Toll {
 
 export interface CreateTollInput {
   csr_partner_id: string;
+  toll_name: string;
   poc_name: string;
   contact_number?: string;
   email_id?: string;
@@ -40,6 +42,7 @@ export interface CreateTollInput {
 }
 
 export interface UpdateTollInput {
+  toll_name?: string;
   poc_name?: string;
   contact_number?: string;
   email_id?: string;
@@ -138,6 +141,7 @@ export const createToll = async (input: CreateTollInput): Promise<Toll | null> =
       .from('csr_partner_tolls')
       .insert({
         csr_partner_id: input.csr_partner_id,
+        toll_name: input.toll_name,
         poc_name: input.poc_name,
         contact_number: input.contact_number || null,
         email_id: input.email_id || null,
@@ -167,6 +171,7 @@ export const updateToll = async (id: string, input: UpdateTollInput): Promise<To
       updated_at: new Date().toISOString(),
     };
 
+    if (input.toll_name !== undefined) updateData.toll_name = input.toll_name;
     if (input.poc_name !== undefined) updateData.poc_name = input.poc_name;
     if (input.contact_number !== undefined) updateData.contact_number = input.contact_number || null;
     if (input.email_id !== undefined) updateData.email_id = input.email_id || null;
