@@ -1,3 +1,4 @@
+// src/pages/PMDashboard.tsx (merged V1 -> V2)
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -13,7 +14,19 @@ import FilterBar from '../components/FilterBar';
 import LockedFilterBar from '../components/LockedFilterBar';
 import type { Project } from '../services/filterService';
 
-// Helper function to map icon names to actual Lucide icons
+// --- Restored imports from Version 1 for impact metrics ---
+import {
+  getImpactMetricValue,
+  sumImpactMetricValue,
+} from '../utils/impactMetrics';
+import {
+  IMPACT_METRIC_ORDER,
+  IMPACT_METRIC_FORMATTERS,
+  renderImpactMetricCard,
+} from '../utils/impactMetricDisplay';
+// ----------------------------------------------------------------
+
+/** Helper function to map icon names to actual Lucide icons */
 const getIconComponent = (iconName?: string): LucideIcon => {
   const iconMap: Record<string, LucideIcon> = {
     'Leaf': Leaf,
@@ -380,7 +393,7 @@ const PMDashboardInner = () => {
           >
             <h3 className="text-xl font-bold text-gray-900 mb-6">Overall Impact Metrics</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* Total Beneficiaries */}
+              {/* Keep the explicit tiles from Version 2 */}
               <div className="bg-emerald-50 border-2 border-emerald-200 rounded-xl p-6 hover:shadow-lg transition-all">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="p-3 bg-emerald-200 rounded-lg">
@@ -457,11 +470,18 @@ const PMDashboardInner = () => {
                   {filteredProjects.reduce((sum: number, p: Project) => sum + (p.schools_renovated || 0), 0)}
                 </p>
               </div>
+
+              {/* --- Restored: render generic impact metric cards (from Version 1) --- */}
+              {IMPACT_METRIC_ORDER.map((key) => {
+                const totalValue = sumImpactMetricValue(filteredProjects, key);
+                const formattedValue = IMPACT_METRIC_FORMATTERS[key](totalValue);
+                return renderImpactMetricCard(key, formattedValue);
+              })}
             </div>
           </motion.div>
         </motion.div>
       ) : (
-        // HIERARCHY VIEW - All existing code
+        // HIERARCHY VIEW
         <>
           {/* Locked Filter Bar - Shows when project is pre-selected */}
           {isProjectSelected && <LockedFilterBar />}
@@ -671,7 +691,7 @@ const PMDashboardInner = () => {
                   <p className="text-gray-700 leading-relaxed">{selectedProjectData.description}</p>
                 </div>
 
-                {/* Impact Metrics - ALL FROM DATABASE */}
+                {/* Impact Metrics - ALL FROM DATABASE (restored generic cards + keep conditional tiles) */}
                 <h3 className="font-bold text-gray-900 mb-4 text-lg">Impact Metrics</h3>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   {/* Total Beneficiaries */}
@@ -685,7 +705,7 @@ const PMDashboardInner = () => {
                     </p>
                   </div>
 
-                  {/* Meals Served */}
+                  {/* Keep the explicit conditional metrics from Version 2 */}
                   {(selectedProjectData.meals_served || 0) > 0 && (
                     <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-4 hover:shadow-lg transition-all">
                       <div className="flex items-center gap-2 mb-2">
@@ -698,7 +718,6 @@ const PMDashboardInner = () => {
                     </div>
                   )}
 
-                  {/* Pads Distributed */}
                   {(selectedProjectData.pads_distributed || 0) > 0 && (
                     <div className="bg-pink-50 border-2 border-pink-200 rounded-xl p-4 hover:shadow-lg transition-all">
                       <div className="flex items-center gap-2 mb-2">
@@ -711,7 +730,6 @@ const PMDashboardInner = () => {
                     </div>
                   )}
 
-                  {/* Students Enrolled */}
                   {(selectedProjectData.students_enrolled || 0) > 0 && (
                     <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4 hover:shadow-lg transition-all">
                       <div className="flex items-center gap-2 mb-2">
@@ -724,7 +742,6 @@ const PMDashboardInner = () => {
                     </div>
                   )}
 
-                  {/* Trees Planted */}
                   {(selectedProjectData.trees_planted || 0) > 0 && (
                     <div className="bg-green-50 border-2 border-green-200 rounded-xl p-4 hover:shadow-lg transition-all">
                       <div className="flex items-center gap-2 mb-2">
@@ -737,7 +754,6 @@ const PMDashboardInner = () => {
                     </div>
                   )}
 
-                  {/* Schools Renovated */}
                   {(selectedProjectData.schools_renovated || 0) > 0 && (
                     <div className="bg-purple-50 border-2 border-purple-200 rounded-xl p-4 hover:shadow-lg transition-all">
                       <div className="flex items-center gap-2 mb-2">
@@ -749,6 +765,13 @@ const PMDashboardInner = () => {
                       </p>
                     </div>
                   )}
+
+                  {/* --- Restored: render any other impact metric cards from IMPACT_METRIC_ORDER for this project --- */}
+                  {IMPACT_METRIC_ORDER.map((key) => {
+                    const value = getImpactMetricValue(selectedProjectData.impact_metrics, key);
+                    if (value <= 0) return null;
+                    return renderImpactMetricCard(key, value.toLocaleString());
+                  })}
                 </div>
               </motion.div>
 
