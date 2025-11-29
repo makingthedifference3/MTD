@@ -4,6 +4,7 @@ export interface Task {
   id: string;
   task_code: string;
   project_id: string;
+  toll_id?: string;
   title: string;
   description?: string;
   assigned_to: string;

@@ -1,15 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, CheckCircle2, Clock, AlertCircle, Trash2, Loader } from 'lucide-react';
 import * as taskService from '../services/taskService';
 import { type Task, type TaskStats } from '../services/taskService';
 import { supabase } from '../services/supabaseClient';
-
-interface TeamMember {
-  id: string;
-  full_name: string;
-  department: string;
-}
+import { AuthContext } from '../context/AuthContext';
 
 const ToDoList = () => {
   const [loading, setLoading] = useState(true);
@@ -19,8 +14,6 @@ const ToDoList = () => {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterDepartment, setFilterDepartment] = useState<string>('all');
   const [departments, setDepartments] = useState<string[]>([]);
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
-  const [projects, setProjects] = useState<Array<{id: string; name: string; project_code: string}>>([]);
   const [showModal, setShowModal] = useState(false);
   const [newTask, setNewTask] = useState({
     title: '',
@@ -33,26 +26,68 @@ const ToDoList = () => {
     due_date: '',
     task_type: 'Development',
   });
+  const [projectTeamMembers, setProjectTeamMembers] = useState<Array<{user_id: string; role: string; full_name: string}> | null>(null);
+  const [csrPartners, setCsrPartners] = useState<Array<{id: string; name: string; has_toll: boolean}>>([]);
+  const [selectedCsrPartner, setSelectedCsrPartner] = useState('');
+  const [hasToll, setHasToll] = useState(false);
+  const [filteredProjects, setFilteredProjects] = useState<Array<{id: string; name: string}>>([]);
+  const [selectedProject, setSelectedProject] = useState('');
+  const [tolls, setTolls] = useState<Array<{id: string; toll_name: string}>>([]);
+  const [selectedToll, setSelectedToll] = useState('');
+  const { currentRole } = useContext(AuthContext) || {};
 
   useEffect(() => {
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Fix CSR Partner Dropdown
+  useEffect(() => {
+    fetchCsrPartners();
+  }, []);
+
+  // Fix Project Dropdown
+  useEffect(() => {
+    if (selectedCsrPartner) {
+      const partner = csrPartners.find(p => p.id === selectedCsrPartner);
+      const partnerHasToll = partner?.has_toll || false;
+      setHasToll(partnerHasToll);
+      
+      fetchProjectsForPartner(selectedCsrPartner);
+      
+      if (partnerHasToll) {
+        fetchTollsForPartner(selectedCsrPartner); // Fetch tolls only if partner has tolls
+      } else {
+        setTolls([]);
+        setSelectedToll('');
+      }
+    } else {
+      setHasToll(false);
+      setFilteredProjects([]);
+      setTolls([]);
+      setSelectedToll('');
+    }
+  }, [selectedCsrPartner, csrPartners]);
+
+  // Fix Assigned To Dropdown
+  useEffect(() => {
+    if (selectedProject) {
+      fetchProjectTeamMembers(selectedProject);
+    } else {
+      setProjectTeamMembers(null);
+    }
+  }, [selectedProject]);
+
   const loadData = async () => {
     try {
       setLoading(true);
-      const [allTasks, allDepartments, members, allProjects] = await Promise.all([
+      const [allTasks, allDepartments] = await Promise.all([
         taskService.getAllTasks(),
         taskService.getAllDepartments(),
-        fetchTeamMembers(),
-        fetchProjects(),
       ]);
 
       setTasks(allTasks);
       setDepartments(allDepartments);
-      setTeamMembers(members);
-      setProjects(allProjects);
 
       // Calculate stats from all tasks
       const taskStats: TaskStats = {
@@ -71,34 +106,91 @@ const ToDoList = () => {
     }
   };
 
-  const fetchTeamMembers = async (): Promise<TeamMember[]> => {
+  // Fetch CSR Partners
+  const fetchCsrPartners = async () => {
     try {
       const { data, error } = await supabase
-        .from('users')
-        .select('id, full_name, department')
-        .eq('role', 'team_member')
-        .order('full_name');
-
+        .from('csr_partners')
+        .select('id, name, has_toll')
+        .eq('is_active', true);
       if (error) throw error;
-      return data || [];
+      setCsrPartners(data || []);
     } catch (error) {
-      console.error('Error fetching team members:', error);
-      return [];
+      console.error('Error fetching CSR partners:', error);
+      setCsrPartners([]);
     }
   };
 
-  const fetchProjects = async () => {
+  // Fetch Projects for selected CSR Partner
+  const fetchProjectsForPartner = async (partnerId: string) => {
     try {
       const { data, error } = await supabase
         .from('projects')
-        .select('id, name, project_code')
-        .order('name');
-
+        .select('id, name')
+        .eq('csr_partner_id', partnerId)
+        .eq('is_active', true);
       if (error) throw error;
-      return data || [];
+      setFilteredProjects(data || []);
     } catch (error) {
       console.error('Error fetching projects:', error);
-      return [];
+      setFilteredProjects([]);
+    }
+  };
+
+  // Fetch Tolls for selected CSR Partner
+  const fetchTollsForPartner = async (partnerId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('csr_partner_tolls')
+        .select('id, toll_name')
+        .eq('csr_partner_id', partnerId)
+        .eq('is_active', true);
+      if (error) throw error;
+      setTolls(data || []);
+    } catch (error) {
+      console.error('Error fetching tolls:', error);
+      setTolls([]);
+    }
+  };
+
+  // Fetch team members for selected project
+  const fetchProjectTeamMembers = async (projectId: string) => {
+    if (!projectId) {
+      setProjectTeamMembers(null);
+      return;
+    }
+    try {
+      // Get all project_team_members for the project
+      const { data: ptmData, error: ptmError } = await supabase
+        .from('project_team_members')
+        .select('user_id, role')
+        .eq('project_id', projectId)
+        .eq('is_active', true);
+      if (ptmError) throw ptmError;
+      if (!ptmData || ptmData.length === 0) {
+        setProjectTeamMembers([]);
+        return;
+      }
+      // Get user details for those user_ids
+      const userIds = ptmData.map((ptm: any) => ptm.user_id);
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('id, full_name')
+        .in('id', userIds);
+      if (userError) throw userError;
+      // Merge role and full_name
+      const members = ptmData.map((ptm: any) => {
+        const user = userData.find((u: any) => u.id === ptm.user_id);
+        return {
+          user_id: ptm.user_id,
+          role: ptm.role,
+          full_name: user ? user.full_name : '',
+        };
+      });
+      setProjectTeamMembers(members);
+    } catch (error) {
+      console.error('Error fetching project team members:', error);
+      setProjectTeamMembers([]);
     }
   };
 
@@ -112,15 +204,21 @@ const ToDoList = () => {
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!newTask.title || !newTask.assigned_to || !newTask.project_id) {
+    if (!newTask.title || !newTask.assigned_to || !selectedProject) {
       alert('Title, Project, and Assignee are required');
+      return;
+    }
+
+    if (hasToll && !selectedToll) {
+      alert('Toll is required for this CSR Partner');
       return;
     }
 
     try {
       const taskData: Omit<Task, 'id' | 'created_at' | 'updated_at'> = {
         task_code: `TASK-${Date.now()}`,
-        project_id: newTask.project_id,
+        project_id: selectedProject,
+        toll_id: hasToll ? selectedToll : undefined, // Include toll_id only if hasToll is true
         title: newTask.title,
         description: newTask.description,
         assigned_to: newTask.assigned_to,
@@ -146,6 +244,9 @@ const ToDoList = () => {
           due_date: '',
           task_type: 'Development',
         });
+        setSelectedCsrPartner('');
+        setSelectedProject('');
+        setSelectedToll('');
         await loadData();
       }
     } catch (error) {
@@ -432,20 +533,52 @@ const ToDoList = () => {
 
             <form onSubmit={handleCreateTask} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Project */}
+                {/* CSR Partner Dropdown */}
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">CSR Partner *</label>
+                  <select
+                    value={selectedCsrPartner}
+                    onChange={e => setSelectedCsrPartner(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    required
+                  >
+                    <option value="">Select CSR Partner</option>
+                    {csrPartners.map(partner => (
+                      <option key={partner.id} value={partner.id}>{partner.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Toll Dropdown - Conditional */}
+                {hasToll && (
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Toll *</label>
+                    <select
+                      value={selectedToll}
+                      onChange={(e) => setSelectedToll(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      required
+                    >
+                      <option value="">Select Toll</option>
+                      {tolls.map((toll) => (
+                        <option key={toll.id} value={toll.id}>{toll.toll_name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Project Dropdown */}
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Project *</label>
                   <select
-                    value={newTask.project_id}
-                    onChange={(e) => setNewTask({ ...newTask, project_id: e.target.value })}
+                    value={selectedProject}
+                    onChange={e => setSelectedProject(e.target.value)}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     required
                   >
                     <option value="">Select Project</option>
-                    {projects.map((project) => (
-                      <option key={project.id} value={project.id}>
-                        {project.project_code} - {project.name}
-                      </option>
+                    {filteredProjects.map(project => (
+                      <option key={project.id} value={project.id}>{project.name}</option>
                     ))}
                   </select>
                 </div>
@@ -562,11 +695,26 @@ const ToDoList = () => {
                     required
                   >
                     <option value="">Select Team Member</option>
-                    {teamMembers.map((member) => (
-                      <option key={member.id} value={member.id}>
-                        {member.full_name} - {member.department}
-                      </option>
-                    ))}
+                    {projectTeamMembers && projectTeamMembers
+                      .filter((member) => {
+                        // Filtering logic based on logged-in user's role
+                        if (!currentRole) return true;
+                        if (currentRole === 'admin') {
+                          // Admin sees all roles
+                          return true;
+                        }
+                        if (currentRole === 'project_manager' || currentRole === 'accountant') {
+                          // Project manager/accountant sees only team_member
+                          return member.role === 'team_member';
+                        }
+                        // Default: show all
+                        return true;
+                      })
+                      .map((member) => (
+                        <option key={member.user_id} value={member.user_id}>
+                          {member.full_name} - {member.role}
+                        </option>
+                      ))}
                   </select>
                 </div>
               </div>
