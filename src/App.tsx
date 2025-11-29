@@ -30,7 +30,11 @@ import UserAssignmentPage from './pages/UserAssignmentPage';
 import UserManagementPage from './pages/UserManagementPage';
 import UtilizationCertificatePage from './pages/UtilizationCertificatePage';
 import ProjectsDashboardPage from './pages/ProjectsDashboardPage';
+<<<<<<< Updated upstream
 import TollManagementPage from './pages/TollManagementPage'; // <-- ADDED from Version1
+=======
+import TollManagementPage from '.TollManagementPage/pages/TollManagementPage';
+>>>>>>> Stashed changes
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { currentUser } = useAuth();
@@ -160,6 +164,16 @@ function AppRoutes() {
         }
       />
 
+      <Route
+        path="/csr-partners/:partnerId/tolls"
+        element={
+          <ProtectedRoute>
+            <Sidebar currentPage="csr-partners" onNavigate={() => {}}>
+              <TollManagementPage />
+            </Sidebar>
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/utilization-certificate"
         element={
