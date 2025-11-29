@@ -225,6 +225,11 @@ const PMDashboardInner = () => {
           transition={{ duration: 0.3 }}
           className="space-y-6"
         >
+          {/* Filter Bar for Analytics */}
+          <div className="mb-4">
+            <FilterBar />
+          </div>
+
           {/* Summary Stats */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Active Projects Card */}
@@ -686,20 +691,21 @@ const PMDashboardInner = () => {
                 {/* Impact Metrics - ALL FROM DATABASE */}
                 <h3 className="font-bold text-gray-900 mb-4 text-lg">Impact Metrics</h3>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  {/* Total Beneficiaries */}
-                  <div className="bg-emerald-50 border-2 border-emerald-200 rounded-xl p-4 hover:shadow-lg transition-all">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Users className="w-5 h-5 text-emerald-600" />
-                      <span className="text-xs font-bold text-emerald-700 uppercase">Total Reach</span>
+                  {selectedProjectData.direct_beneficiaries !== undefined && selectedProjectData.direct_beneficiaries > 0 && (
+                    <div className="bg-emerald-50 border-2 border-emerald-200 rounded-xl p-4 hover:shadow-lg transition-all">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Users className="w-5 h-5 text-emerald-600" />
+                        <span className="text-xs font-bold text-emerald-700 uppercase">Total Reach</span>
+                      </div>
+                      <p className="text-2xl font-black text-emerald-900">
+                        {selectedProjectData.direct_beneficiaries.toLocaleString()}
+                      </p>
                     </div>
-                    <p className="text-2xl font-black text-emerald-900">
-                      {(selectedProjectData.direct_beneficiaries || 0).toLocaleString()}
-                    </p>
-                  </div>
+                  )}
 
                   {IMPACT_METRIC_ORDER.map((key) => {
                     const value = getImpactMetricValue(selectedProjectData.impact_metrics, key);
-                    if (value <= 0) return null;
+                    if (typeof value !== 'number' || value <= 0) return null;
                     return renderImpactMetricCard(key, value.toLocaleString());
                   })}
                 </div>

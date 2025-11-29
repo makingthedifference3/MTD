@@ -40,6 +40,8 @@ export interface Project {
   total_beneficiaries?: number;
   direct_beneficiaries?: number;
   indirect_beneficiaries?: number;
+  beneficiary_type?: string;
+  beneficiary_name?: string;
   // Sub-project support
   parent_project_id?: string;
   is_beneficiary_project?: boolean;

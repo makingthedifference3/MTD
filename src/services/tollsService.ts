@@ -39,6 +39,7 @@ export interface CreateTollInput {
   budget_allocation?: number;
   is_active?: boolean;
   created_by?: string;
+  poc_password?: string;
 }
 
 export interface UpdateTollInput {
@@ -51,6 +52,7 @@ export interface UpdateTollInput {
   budget_allocation?: number;
   is_active?: boolean;
   updated_by?: string;
+  poc_password?: string;
 }
 
 /**
@@ -148,6 +150,7 @@ export const createToll = async (input: CreateTollInput): Promise<Toll | null> =
         city: input.city || null,
         state: input.state || null,
         budget_allocation: input.budget_allocation || 0,
+        poc_password: input.poc_password || null,
         is_active: input.is_active !== false,
         created_by: input.created_by || null,
       })
@@ -178,6 +181,7 @@ export const updateToll = async (id: string, input: UpdateTollInput): Promise<To
     if (input.city !== undefined) updateData.city = input.city || null;
     if (input.state !== undefined) updateData.state = input.state || null;
     if (input.budget_allocation !== undefined) updateData.budget_allocation = input.budget_allocation;
+    if (input.poc_password !== undefined) updateData.poc_password = input.poc_password || null;
     if (input.is_active !== undefined) updateData.is_active = input.is_active;
     if (input.updated_by !== undefined) updateData.updated_by = input.updated_by;
 

@@ -120,7 +120,6 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import { useNavigate, useLocation } from 'react-router-dom';
-import FilterBar from './FilterBar';
 
 interface SidebarProps {
   children: ReactNode;
@@ -301,11 +300,6 @@ const Sidebar = ({ children, currentPage, onNavigate }: SidebarProps) => {
             {filteredMenuItems.find((item) => item.id === currentPage)?.label || 'Dashboard'}
           </h2>
         </header>
-        
-        {/* Filter Bar - Show on related pages (but NOT on dashboard pages since they have their own FilterBar) */}
-        {!['dashboard'].includes(currentPage) && ['analysis-report'].includes(currentPage) && (
-          <FilterBar />
-        )}
         
         <main className="flex-1 overflow-y-auto p-8 bg-slate-50">{children}</main>
       </div>

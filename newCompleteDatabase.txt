@@ -261,6 +261,7 @@ CREATE TABLE public.csr_partner_tolls (
   created_by uuid,
   updated_by uuid,
   toll_name text,
+  poc_password character varying,
   CONSTRAINT csr_partner_tolls_pkey PRIMARY KEY (id),
   CONSTRAINT csr_partner_tolls_csr_partner_id_fkey FOREIGN KEY (csr_partner_id) REFERENCES public.csr_partners(id),
   CONSTRAINT csr_partner_tolls_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id),
@@ -305,6 +306,7 @@ CREATE TABLE public.csr_partners (
   updated_by uuid,
   primary_color character varying,
   has_toll boolean NOT NULL DEFAULT false,
+  poc_password character varying,
   CONSTRAINT csr_partners_pkey PRIMARY KEY (id),
   CONSTRAINT csr_partners_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id),
   CONSTRAINT csr_partners_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id)

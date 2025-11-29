@@ -17,7 +17,11 @@ const PROJECT_SELECT_FIELDS = `
   is_active,
   total_budget,
   utilized_budget,
+  total_beneficiaries,
   direct_beneficiaries,
+  beneficiary_type,
+  beneficiary_name,
+  metadata,
   impact_metrics,
   toll:csr_partner_tolls!projects_toll_id_fkey(id, toll_name, poc_name, city, state)
 `;
@@ -71,6 +75,9 @@ export interface Project {
   // Beneficiary stats from database
   total_beneficiaries?: number;
   direct_beneficiaries?: number;
+  beneficiary_type?: string;
+  beneficiary_name?: string;
+  metadata?: Record<string, unknown>;
   indirect_beneficiaries?: number;
   male_beneficiaries?: number;
   female_beneficiaries?: number;
@@ -166,11 +173,11 @@ export const fetchAllProjects = async (): Promise<Project[]> => {
 export const fetchProjectById = async (projectId: string): Promise<Project | null> => {
   try {
     const { data, error } = await supabase
-      .from('projects')
-      .select(
-        `id, name, project_code, csr_partner_id, toll_id, description, location, state, status, is_active, total_beneficiaries, direct_beneficiaries, indirect_beneficiaries, male_beneficiaries, female_beneficiaries, children_beneficiaries, impact_metrics,
-        toll:csr_partner_tolls!projects_toll_id_fkey(id, toll_name, poc_name, city, state)`
-      )
+        .from('projects')
+        .select(
+          `id, name, project_code, csr_partner_id, toll_id, description, location, state, status, is_active, total_beneficiaries, direct_beneficiaries, indirect_beneficiaries, male_beneficiaries, female_beneficiaries, children_beneficiaries, beneficiary_type, beneficiary_name, metadata, impact_metrics,
+          toll:csr_partner_tolls!projects_toll_id_fkey(id, toll_name, poc_name, city, state)`
+        )
       .eq('id', projectId)
       .single();
 

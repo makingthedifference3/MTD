@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { BarChart3, ChevronDown } from 'lucide-react';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import FilterBar from '../components/FilterBar';
 import {
   getAllAnalyticsData,
   type ProjectAnalytic,
@@ -61,6 +62,9 @@ const AnalysisReport = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
+      <div className="mb-6">
+        <FilterBar />
+      </div>
       {/* Header */}
       <div className="mb-8">
         <div className="flex items-center justify-between">

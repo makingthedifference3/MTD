@@ -27,6 +27,9 @@ import {
   type ImpactMetricEntry,
   type ImpactMetricKey,
 } from '../utils/impactMetrics';
+import { BENEFICIARY_TYPES } from '../constants/beneficiaryTypes';
+import { INDIAN_STATES } from '../constants/indianStates';
+import { WORK_TYPE_OPTIONS } from '../constants/projectOptions';
 
 interface TeamMemberFormEntry {
   userId: string;
@@ -41,12 +44,15 @@ interface ProjectFormData {
   tollId: string;
   location: string;
   state: string;
+  isCustomState: boolean;
   work: string;
   status: 'planning' | 'active' | 'on_hold' | 'completed';
   totalBudget: string;
   startDate: string;
   expectedEndDate: string;
   directBeneficiaries: string;
+  beneficiaryType: string;
+  beneficiaryName: string;
   createBeneficiaryProjects: boolean;
   impactMetrics: ImpactMetricEntry[];
   teamMembers: TeamMemberFormEntry[];
@@ -60,12 +66,15 @@ const createInitialProjectFormState = (): ProjectFormData => ({
   tollId: '',
   location: '',
   state: '',
+  isCustomState: false,
   work: '',
   status: 'planning',
   totalBudget: '',
   startDate: '',
   expectedEndDate: '',
   directBeneficiaries: '',
+  beneficiaryType: 'Direct Beneficiaries',
+  beneficiaryName: '',
   createBeneficiaryProjects: false,
   impactMetrics: [],
   teamMembers: [],
@@ -93,6 +102,15 @@ const mapProjectToFormData = (
 ): ProjectFormData => {
   const budgetValue = project.total_budget ?? 0;
   const beneficiaries = project.direct_beneficiaries ?? 0;
+  const projectMetadataWithName = project as {
+    metadata?: { beneficiary_name?: string; beneficiary_type?: string };
+  };
+  const projectBeneficiaryType =
+    project.beneficiary_type || projectMetadataWithName.metadata?.beneficiary_type || 'Direct Beneficiaries';
+  const projectBeneficiaryName =
+    project.beneficiary_name || projectMetadataWithName.metadata?.beneficiary_name || '';
+  const projectState = project.state ?? '';
+  const stateIsCustom = Boolean(projectState && !INDIAN_STATES.includes(projectState as typeof INDIAN_STATES[number]));
 
   return {
     name: project.name,
@@ -101,13 +119,16 @@ const mapProjectToFormData = (
     csrPartnerId: project.csr_partner_id,
     tollId: project.toll_id ?? '',
     location: project.location ?? '',
-    state: project.state ?? '',
+    state: projectState,
+    isCustomState: stateIsCustom,
     work: project.work ?? project.category ?? '',
     status: normalizeProjectStatusForForm(project.status),
     totalBudget: budgetValue ? budgetValue.toString() : '',
     startDate: project.start_date ?? '',
     expectedEndDate: project.expected_end_date ?? '',
     directBeneficiaries: beneficiaries ? beneficiaries.toString() : '',
+    beneficiaryType: projectBeneficiaryType,
+    beneficiaryName: projectBeneficiaryName,
     createBeneficiaryProjects: false,
     impactMetrics: project.impact_metrics ?? [],
     teamMembers: teamMembers.map((member) => ({
@@ -166,6 +187,24 @@ const ProjectsPage = () => {
   };
 
   const [skipPartnerChangeEffect, setSkipPartnerChangeEffect] = useState(false);
+
+  const selectedProjectMetadata = (selectedProjectDetails as Project & {
+    metadata?: { beneficiary_name?: string; beneficiary_type?: string };
+  })?.metadata;
+  const selectedProjectBeneficiaryName =
+    selectedProjectDetails?.beneficiary_name || selectedProjectMetadata?.beneficiary_name;
+  const selectedProjectBeneficiaryLabel =
+    selectedProjectDetails?.beneficiary_type || selectedProjectMetadata?.beneficiary_type || 'Beneficiaries';
+  const selectedProjectBeneficiaryCount = selectedProjectDetails?.direct_beneficiaries ?? 0;
+  const selectedProjectBeneficiaryDisplayValue =
+    selectedProjectBeneficiaryName || selectedProjectBeneficiaryCount.toLocaleString();
+
+  const selectedSubProjectMetadata = (selectedSubProject as Project & {
+    metadata?: { beneficiary_name?: string };
+  })?.metadata;
+  const selectedSubProjectBeneficiaryName =
+    selectedSubProject?.beneficiary_name || selectedSubProjectMetadata?.beneficiary_name;
+  const selectedSubProjectBeneficiaryCount = selectedSubProject?.direct_beneficiaries ?? 0;
 
   useEffect(() => {
     if (selectedProjectDetails) {
@@ -254,11 +293,13 @@ const ProjectsPage = () => {
       }
 
       // Reset toll selection and auto-fill location from CSR partner
+      const partnerState = selectedPartnerData?.state ?? '';
       setFormData((prev) => ({
         ...prev,
         tollId: '',
         location: selectedPartnerData?.city ?? '',
-        state: selectedPartnerData?.state ?? '',
+        state: partnerState,
+        isCustomState: Boolean(partnerState && !INDIAN_STATES.includes(partnerState as typeof INDIAN_STATES[number])),
       }));
     } else {
       setTolls([]);
@@ -820,8 +861,8 @@ const ProjectsPage = () => {
               <div className="flex items-center space-x-2">
                 <FolderKanban className="w-4 h-4 text-emerald-600" />
                 <div>
-                  <p className="text-xs text-gray-600">Beneficiaries</p>
-                  <p className="text-sm font-semibold text-gray-900">{(project.direct_beneficiaries || 0).toLocaleString()}</p>
+                    <p className="text-xs text-gray-600">{project.beneficiary_type || (project as { metadata?: { beneficiary_type?: string } }).metadata?.beneficiary_type || 'Beneficiaries'}</p>
+                    <p className="text-sm font-semibold text-gray-900">{(project.direct_beneficiaries || 0).toLocaleString()}</p>
                 </div>
               </div>
             </div>
@@ -968,8 +1009,13 @@ const ProjectsPage = () => {
                     <p className="text-2xl font-bold text-blue-900">₹{((selectedProjectDetails.utilized_budget || 0) / 10000000).toFixed(1)}Cr</p>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold text-purple-700 uppercase mb-1">Beneficiaries</p>
-                    <p className="text-2xl font-bold text-purple-900">{(selectedProjectDetails.direct_beneficiaries || 0).toLocaleString()}</p>
+                    <p className="text-xs font-semibold text-purple-700 uppercase mb-1">{selectedProjectBeneficiaryLabel}</p>
+                    <p className="text-2xl font-bold text-purple-900">{selectedProjectBeneficiaryDisplayValue}</p>
+                    {selectedProjectBeneficiaryName && (
+                      <p className="text-xs text-purple-600 mt-1">
+                        {(selectedProjectBeneficiaryCount).toLocaleString()} beneficiaries recorded
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -1517,10 +1563,17 @@ const ProjectsPage = () => {
 
                 {/* Budget Info */}
                 <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100">
-                  <p className="text-xs font-semibold text-emerald-700 uppercase mb-1">Beneficiaries</p>
-                  <p className="text-lg font-bold text-emerald-900">
-                    {(selectedSubProject.direct_beneficiaries || 0).toLocaleString()}
+                  <p className="text-xs font-semibold text-emerald-700 uppercase mb-1">
+                    {selectedSubProjectBeneficiaryName || 'Beneficiaries'}
                   </p>
+                  <p className="text-lg font-bold text-emerald-900">
+                    {selectedSubProjectBeneficiaryName || selectedSubProjectBeneficiaryCount.toLocaleString()}
+                  </p>
+                  {selectedSubProjectBeneficiaryName && (
+                    <p className="text-xs text-emerald-700 mt-1">
+                      {selectedSubProjectBeneficiaryCount.toLocaleString()} beneficiaries recorded
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -1605,6 +1658,12 @@ const buildProjectPayload = (values: ProjectFormData) => {
     completion_percentage: 0,
     is_active: true,
     impact_metrics: cleanedMetrics,
+    beneficiary_type: values.beneficiaryType.trim() || undefined,
+    beneficiary_name: values.beneficiaryName.trim() || undefined,
+    metadata: {
+      beneficiary_type: values.beneficiaryType.trim() || 'Direct Beneficiaries',
+      beneficiary_name: values.beneficiaryName.trim() || undefined,
+    },
     created_by: undefined,
     updated_by: undefined,
   };
@@ -1635,6 +1694,12 @@ const buildProjectUpdatePayload = (values: ProjectFormData): Partial<ProjectServ
     start_date: values.startDate || undefined,
     expected_end_date: values.expectedEndDate || undefined,
     impact_metrics: cleanedMetrics,
+    beneficiary_type: values.beneficiaryType.trim() || undefined,
+    beneficiary_name: values.beneficiaryName.trim() || undefined,
+    metadata: {
+      beneficiary_type: values.beneficiaryType.trim() || 'Direct Beneficiaries',
+      beneficiary_name: values.beneficiaryName.trim() || undefined,
+    },
   };
 
   if (budgetValue !== undefined) {
@@ -1798,11 +1863,15 @@ const AddProjectModal = ({
 
   const handleTollSelection = (tollId: string) => {
     const selectedToll = tolls.find((toll) => toll.id === tollId);
+    const tollState = selectedToll?.state ?? '';
     setFormData((prev) => ({
       ...prev,
       tollId,
       location: selectedToll?.city ?? prev.location,
       state: selectedToll?.state ?? prev.state,
+      isCustomState: selectedToll
+        ? Boolean(tollState && !INDIAN_STATES.includes(tollState as typeof INDIAN_STATES[number]))
+        : prev.isCustomState,
     }));
   };
 
@@ -1838,13 +1907,15 @@ const AddProjectModal = ({
                 onChange={(e) => {
                   const partnerId = e.target.value;
                   const partner = csrPartners.find(p => p.id === partnerId);
+                  const partnerState = partner?.state ?? '';
                   setFormData((prev) => ({
                     ...prev,
                     csrPartnerId: partnerId,
                     tollId: '', // Reset toll when partner changes
                     // Auto-fill location from CSR partner when no toll
                     location: partner?.city ?? '',
-                    state: partner?.state ?? '',
+                    state: partnerState,
+                    isCustomState: Boolean(partnerState && !INDIAN_STATES.includes(partnerState as typeof INDIAN_STATES[number])),
                   }));
                 }}
                 required
@@ -1968,29 +2039,65 @@ const AddProjectModal = ({
               placeholder="Mumbai"
             />
           </label>
-          <label className="text-sm font-medium text-gray-700">
+          <div className="text-sm font-medium text-gray-700">
             State
-            <input
-              type="text"
-              value={formData.state}
-              onChange={(e) =>
-                setFormData((prev) => ({
-                  ...prev,
-                  state: e.target.value,
-                }))
-              }
+            <select
+              value={formData.isCustomState ? 'custom' : formData.state}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value === 'custom') {
+                  setFormData((prev) => ({
+                    ...prev,
+                    state: '',
+                    isCustomState: true,
+                  }));
+                } else {
+                  setFormData((prev) => ({
+                    ...prev,
+                    state: value,
+                    isCustomState: false,
+                  }));
+                }
+              }}
               className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-              placeholder="Maharashtra"
-            />
-          </label>
+            >
+              <option value="">Select State</option>
+              {INDIAN_STATES.map((state) => (
+                <option key={state} value={state}>
+                  {state}
+                </option>
+              ))}
+              <option value="custom">Custom...</option>
+            </select>
+          </div>
         </div>
+
+        {/* Custom State Input */}
+        {formData.isCustomState && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <label className="text-sm font-medium text-gray-700">
+              Custom State Name
+              <input
+                type="text"
+                value={formData.state}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    state: e.target.value,
+                  }))
+                }
+                className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                placeholder="Enter custom state..."
+              />
+            </label>
+          </div>
+        )}
 
         {/* Work and Status */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <label className="text-sm font-medium text-gray-700">
             Work Type
-            <input
-              type="text"
+            <select
               value={formData.work}
               onChange={(e) =>
                 setFormData((prev) => ({
@@ -1999,8 +2106,14 @@ const AddProjectModal = ({
                 }))
               }
               className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-              placeholder="Education, Healthcare, Environment..."
-            />
+            >
+              <option value="">Select Work Type</option>
+              {WORK_TYPE_OPTIONS.map((type) => (
+                <option key={type} value={type}>
+                  {type}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="text-sm font-medium text-gray-700">
             Status
@@ -2167,7 +2280,7 @@ const AddProjectModal = ({
             />
           </label>
           <label className="text-sm font-medium text-gray-700">
-            Direct Beneficiaries
+            Number of Beneficiaries
             <input
               type="number"
               value={formData.directBeneficiaries}
@@ -2182,6 +2295,71 @@ const AddProjectModal = ({
             />
           </label>
         </div>
+
+        {/* Beneficiary Type Selection */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="text-sm font-medium text-gray-700">
+            Beneficiary Type
+            <select
+              value={BENEFICIARY_TYPES.includes(formData.beneficiaryType as typeof BENEFICIARY_TYPES[number]) ? formData.beneficiaryType : (formData.beneficiaryType && formData.beneficiaryType !== 'Direct Beneficiaries' ? 'custom' : 'Direct Beneficiaries')}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value === 'custom') {
+                  setFormData((prev) => ({
+                    ...prev,
+                    beneficiaryType: ' ', // Set to space to trigger custom input
+                  }));
+                } else {
+                  setFormData((prev) => ({
+                    ...prev,
+                    beneficiaryType: value,
+                  }));
+                }
+              }}
+              className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            >
+              {BENEFICIARY_TYPES.map((type) => (
+                <option key={type} value={type}>
+                  {type}
+                </option>
+              ))}
+              <option value="custom">Custom...</option>
+            </select>
+          </div>
+          {formData.beneficiaryType && !BENEFICIARY_TYPES.includes(formData.beneficiaryType as typeof BENEFICIARY_TYPES[number]) && (
+            <label className="text-sm font-medium text-gray-700">
+              Custom Beneficiary Name
+              <input
+                type="text"
+                value={formData.beneficiaryType.trim()}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    beneficiaryType: e.target.value,
+                  }))
+                }
+                className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                placeholder="Enter custom beneficiary type..."
+              />
+            </label>
+          )}
+        </div>
+
+        <label className="text-sm font-medium text-gray-700">
+          Beneficiary Name (optional)
+          <input
+            type="text"
+            value={formData.beneficiaryName}
+            onChange={(e) =>
+              setFormData((prev) => ({
+                ...prev,
+                beneficiaryName: e.target.value,
+              }))
+            }
+            className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            placeholder="e.g. 'Sankalp Community School'"
+          />
+        </label>
 
         {/* Create Beneficiary Sub-Projects Checkbox */}
         {!isEditing && Number(formData.directBeneficiaries) > 0 && (
