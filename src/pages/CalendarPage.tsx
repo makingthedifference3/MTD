@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, ChevronRight, Calendar, X, User, Clock } from 'lucide-react';
 import { getAllTasks, type Task } from '@/services/tasksService';
 import { getUserById } from '@/services/usersService';
+import * as taskService from '@/services/taskService';
 
 interface TaskWithUser extends Task {
   assignedByName?: string;
@@ -12,6 +13,7 @@ interface TaskWithUser extends Task {
 const CalendarPage = () => {
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('calendar');
   const [tasks, setTasks] = useState<TaskWithUser[]>([]);
+  const [allTasks, setAllTasks] = useState<TaskWithUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -19,6 +21,26 @@ const CalendarPage = () => {
   const [dayModalOpen, setDayModalOpen] = useState(false);
   const [upcomingPage, setUpcomingPage] = useState(0);
   const ITEMS_PER_PAGE = 4;
+
+  // Filter states
+  const [filterPriority, setFilterPriority] = useState<string>('all');
+  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterDepartment, setFilterDepartment] = useState<string>('all');
+  const [departments, setDepartments] = useState<string[]>([]);
+
+  // Fetch departments on component mount
+  useEffect(() => {
+    const fetchDepartments = async () => {
+      try {
+        const allDepartments = await taskService.getAllDepartments();
+        setDepartments(allDepartments);
+      } catch (err) {
+        console.error('Error fetching departments:', err);
+      }
+    };
+
+    fetchDepartments();
+  }, []);
 
   // Fetch tasks and user names on component mount
   useEffect(() => {
@@ -28,11 +50,11 @@ const CalendarPage = () => {
         setError(null);
 
         // Get all tasks
-        const allTasks = await getAllTasks();
+        const allTasksData = await getAllTasks();
         
         // Fetch user names for assigned_by and assigned_to
         const tasksWithUsers = await Promise.all(
-          allTasks.map(async (task) => {
+          allTasksData.map(async (task) => {
             let assignedByName = 'N/A';
             let assignedToName = 'N/A';
             
@@ -55,10 +77,12 @@ const CalendarPage = () => {
         );
         
         setTasks(tasksWithUsers);
+        setAllTasks(tasksWithUsers);
       } catch (err) {
         console.error('Error fetching tasks data:', err);
         setError('Failed to load tasks');
         setTasks([]);
+        setAllTasks([]);
       } finally {
         setLoading(false);
       }
@@ -66,6 +90,28 @@ const CalendarPage = () => {
 
     fetchTasksData();
   }, []);
+
+  // Apply filters to tasks
+  useEffect(() => {
+    let filtered = [...allTasks];
+
+    // Filter by priority
+    if (filterPriority !== 'all') {
+      filtered = filtered.filter(task => task.priority === filterPriority);
+    }
+
+    // Filter by status
+    if (filterStatus !== 'all') {
+      filtered = filtered.filter(task => task.status === filterStatus);
+    }
+
+    // Filter by department
+    if (filterDepartment !== 'all') {
+      filtered = filtered.filter(task => task.department === filterDepartment);
+    }
+
+    setTasks(filtered);
+  }, [allTasks, filterPriority, filterStatus, filterDepartment]);
 
   // Get upcoming tasks (future tasks only)
   const getUpcomingTasks = () => {
@@ -201,6 +247,153 @@ const CalendarPage = () => {
           </div>
         </div>
       </div>
+
+      {/* Filters */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Priority Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Priority
+            </label>
+            <select
+              value={filterPriority}
+              onChange={(e) => setFilterPriority(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            >
+              <option value="all">All Priorities</option>
+              <option value="On Priority">On Priority</option>
+              <option value="High Priority">High Priority</option>
+              <option value="Less Priority">Less Priority</option>
+            </select>
+          </div>
+
+          {/* Status Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Status
+            </label>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            >
+              <option value="all">All Status</option>
+              <option value="not_started">Not Started</option>
+              <option value="in_progress">In Progress</option>
+              <option value="completed">Completed</option>
+            </select>
+          </div>
+
+          {/* Department Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Department
+            </label>
+            <select
+              value={filterDepartment}
+              onChange={(e) => setFilterDepartment(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            >
+              <option value="all">All Departments</option>
+              {departments.map((dept) => (
+                <option key={dept} value={dept}>
+                  {dept}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Clear Filters Button */}
+        {(filterPriority !== 'all' || 
+          filterStatus !== 'all' || 
+          filterDepartment !== 'all') && (
+          <div className="mt-4 flex justify-end">
+            <button
+              onClick={() => {
+                setFilterPriority('all');
+                setFilterStatus('all');
+                setFilterDepartment('all');
+              }}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              Clear All Filters
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Stats Grid */}
+      {!loading && (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0 }}
+            className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-3 bg-emerald-50 rounded-xl">
+                <Calendar className="w-6 h-6 text-emerald-600" />
+              </div>
+            </div>
+            <p className="text-gray-600 text-sm font-medium mb-1">Total Tasks</p>
+            <h3 className="text-3xl font-bold text-gray-900">{tasks.length}</h3>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-3 bg-emerald-50 rounded-xl">
+                <Calendar className="w-6 h-6 text-emerald-600" />
+              </div>
+            </div>
+            <p className="text-gray-600 text-sm font-medium mb-1">Completed</p>
+            <h3 className="text-3xl font-bold text-gray-900">
+              {tasks.filter(t => t.status === 'completed').length}
+            </h3>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-3 bg-emerald-50 rounded-xl">
+                <Clock className="w-6 h-6 text-emerald-600" />
+              </div>
+            </div>
+            <p className="text-gray-600 text-sm font-medium mb-1">In Progress</p>
+            <h3 className="text-3xl font-bold text-gray-900">
+              {tasks.filter(t => t.status === 'in_progress').length}
+            </h3>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-3 bg-emerald-50 rounded-xl">
+                <Calendar className="w-6 h-6 text-emerald-600" />
+              </div>
+            </div>
+            <p className="text-gray-600 text-sm font-medium mb-1">Not Started</p>
+            <h3 className="text-3xl font-bold text-gray-900">
+              {tasks.filter(t => t.status === 'not_started').length}
+            </h3>
+          </motion.div>
+        </div>
+      )}
 
       {/* Loading State */}
       {loading && (
