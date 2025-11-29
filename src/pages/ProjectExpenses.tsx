@@ -58,6 +58,7 @@ const ProjectExpenses: React.FC = () => {
     if (currentUser) {
       loadData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser]);
 
   const loadData = async () => {

@@ -152,7 +152,13 @@ export const fetchProjectById = async (projectId: string): Promise<Project | nul
       return null;
     }
 
-    return data;
+    // Handle toll as array and extract first item if present
+    if (data && data.toll && Array.isArray(data.toll)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (data as any).toll = (data.toll as any[])[0] || null;
+    }
+
+    return data as unknown as Project;
   } catch (error) {
     console.error('Exception fetching project:', error);
     return null;

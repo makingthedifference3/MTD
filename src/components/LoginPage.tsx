@@ -151,11 +151,11 @@ export default function LoginPage() {
               disabled={isLoading}
               whileHover={{ scale: isLoading ? 1 : 1.02 }}
               whileTap={{ scale: isLoading ? 1 : 0.98 }}
-              className="w-full py-3 rounded-lg font-bold text-lg transition-all duration-200 flex items-center justify-center gap-2 text-white shadow-md hover:shadow-lg
-                ${isLoading
-                  ? 'bg-gray-300 cursor-not-allowed'
-                  : 'bg-emerald-600 hover:bg-emerald-700'
-                }"
+              className={`w-full py-3 rounded-lg font-bold text-lg transition-all duration-200 flex items-center justify-center gap-2 text-white shadow-md hover:shadow-lg ${
+                isLoading
+                  ? 'bg-gray-400 cursor-not-allowed'
+                  : 'bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800'
+              }`}
             >
               {isLoading ? (
                 <>
@@ -169,7 +169,7 @@ export default function LoginPage() {
           </form>
 
           {/* Demo Credentials */}
-          <div className="mt-8 pt-8 border-t border-emerald-100">
+          {/* <div className="mt-8 pt-8 border-t border-emerald-100">
             <p className="text-xs text-gray-600 text-center mb-3 font-semibold">Demo Credentials (Full Name / Password):</p>
             <div className="space-y-2 text-xs text-gray-600">
               <div className="flex items-center gap-2">
@@ -189,7 +189,7 @@ export default function LoginPage() {
                 <span><span className="font-mono font-semibold">Priya Patil</span> / <span className="font-mono">Field@123</span> (Team Member)</span>
               </div>
             </div>
-          </div>
+          </div> */}
         </motion.div>
 
         {/* Footer */}

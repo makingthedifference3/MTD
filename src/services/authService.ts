@@ -25,9 +25,6 @@ export const authenticateUser = async (
   plainPassword: string
 ): Promise<AuthUser | null> => {
   try {
-    const normalizedInput = username.trim();
-    const safeInput = normalizedInput.replace(/"/g, '\\"');
-    const orClause = `username.eq."${safeInput}",email.eq."${safeInput}"`;
     const { data, error } = await supabase
       .from('users')
       .select('id, username, email, full_name, role, is_active, password, csr_partner_id')

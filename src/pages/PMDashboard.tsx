@@ -14,11 +14,9 @@ import LockedFilterBar from '../components/LockedFilterBar';
 import type { Project } from '../services/filterService';
 import {
   getImpactMetricValue,
-  sumImpactMetricValue,
 } from '../utils/impactMetrics';
 import {
   IMPACT_METRIC_ORDER,
-  IMPACT_METRIC_FORMATTERS,
   renderImpactMetricCard,
 } from '../utils/impactMetricDisplay';
 
@@ -57,6 +55,11 @@ interface ProjectWithBeneficiaries extends Project {
   displayName?: string;
   total_budget?: number;
   utilized_budget?: number;
+  meals_served?: number;
+  pads_distributed?: number;
+  students_enrolled?: number;
+  trees_planted?: number;
+  schools_renovated?: number;
 }
 
 const PMDashboardInner = () => {
@@ -411,7 +414,7 @@ const PMDashboardInner = () => {
                   <span className="text-sm font-bold text-orange-700 uppercase">Meals Served</span>
                 </div>
                 <p className="text-3xl font-black text-orange-900">
-                  {(filteredProjects.reduce((sum: number, p: Project) => sum + (p.meals_served || 0), 0) / 1000000).toFixed(1)}M
+                  {(filteredProjects.reduce((sum: number, p: Project) => sum + ((p as ProjectWithBeneficiaries).meals_served || 0), 0) / 1000000).toFixed(1)}M
                 </p>
               </div>
 
@@ -424,7 +427,7 @@ const PMDashboardInner = () => {
                   <span className="text-sm font-bold text-pink-700 uppercase">Pads Distributed</span>
                 </div>
                 <p className="text-3xl font-black text-pink-900">
-                  {(filteredProjects.reduce((sum: number, p: Project) => sum + (p.pads_distributed || 0), 0) / 1000000).toFixed(1)}M
+                  {(filteredProjects.reduce((sum: number, p: Project) => sum + ((p as ProjectWithBeneficiaries).pads_distributed || 0), 0) / 1000000).toFixed(1)}M
                 </p>
               </div>
 
@@ -437,7 +440,7 @@ const PMDashboardInner = () => {
                   <span className="text-sm font-bold text-blue-700 uppercase">Students Enrolled</span>
                 </div>
                 <p className="text-3xl font-black text-blue-900">
-                  {(filteredProjects.reduce((sum: number, p: Project) => sum + (p.students_enrolled || 0), 0) / 1000).toFixed(1)}K
+                  {(filteredProjects.reduce((sum: number, p: Project) => sum + ((p as ProjectWithBeneficiaries).students_enrolled || 0), 0) / 1000).toFixed(1)}K
                 </p>
               </div>
 
@@ -450,7 +453,7 @@ const PMDashboardInner = () => {
                   <span className="text-sm font-bold text-green-700 uppercase">Trees Planted</span>
                 </div>
                 <p className="text-3xl font-black text-green-900">
-                  {(filteredProjects.reduce((sum: number, p: Project) => sum + (p.trees_planted || 0), 0) / 1000).toFixed(1)}K
+                  {(filteredProjects.reduce((sum: number, p: Project) => sum + ((p as ProjectWithBeneficiaries).trees_planted || 0), 0) / 1000).toFixed(1)}K
                 </p>
               </div>
 
@@ -463,7 +466,7 @@ const PMDashboardInner = () => {
                   <span className="text-sm font-bold text-purple-700 uppercase">Schools Renovated</span>
                 </div>
                 <p className="text-3xl font-black text-purple-900">
-                  {filteredProjects.reduce((sum: number, p: Project) => sum + (p.schools_renovated || 0), 0)}
+                  {filteredProjects.reduce((sum: number, p: Project) => sum + ((p as ProjectWithBeneficiaries).schools_renovated || 0), 0)}
                 </p>
               </div>
             </div>

@@ -1,8 +1,8 @@
 import { motion } from 'framer-motion';
-import { IndianRupee, Loader, TrendingUp, TrendingDown, Building2, FolderKanban } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { IndianRupee, TrendingUp, TrendingDown, FolderKanban } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
 import { projectService, type Project } from '@/services/projectService';
-import { getAllCSRPartners, type CSRPartner } from '@/services/csrPartnersService';
+import { useFilter } from '../context/useFilter';
 
 interface ProjectBudget {
   id: string;
@@ -23,6 +23,7 @@ interface BudgetStats {
 }
 
 const CSRBudgetPage = () => {
+  const { filteredProjects, csrPartners, selectedPartner, refreshData } = useFilter();
   const [projectBudgets, setProjectBudgets] = useState<ProjectBudget[]>([]);
   const [filteredBudgets, setFilteredBudgets] = useState<ProjectBudget[]>([]);
   const [stats, setStats] = useState<BudgetStats>({
@@ -31,11 +32,7 @@ const CSRBudgetPage = () => {
     totalAvailable: 0,
     overallUtilizationPercentage: 0,
   });
-  const [csrPartners, setCsrPartners] = useState<CSRPartner[]>([]);
-  const [selectedPartner, setSelectedPartner] = useState<string>('all');
   const [selectedProject, setSelectedProject] = useState<string>('all');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [adjustModal, setAdjustModal] = useState<{ open: boolean; project: ProjectBudget | null; type: 'allocated' | 'utilized' | null }>({ 
     open: false, 
     project: null, 
@@ -43,54 +40,7 @@ const CSRBudgetPage = () => {
   });
   const [adjustAmount, setAdjustAmount] = useState<string>('');
 
-  useEffect(() => {
-    fetchBudgetData();
-  }, []);
-
-  useEffect(() => {
-    applyFilters();
-  }, [selectedPartner, selectedProject, projectBudgets]);
-
-  const fetchBudgetData = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      // Fetch projects and CSR partners
-      const [projects, partners] = await Promise.all([
-        projectService.getAllProjects(),
-        getAllCSRPartners(),
-      ]);
-
-      setCsrPartners(partners);
-
-      // Create a map of CSR partner names
-      const partnerMap = new Map(partners.map(p => [p.id, p.name]));
-
-      // Transform projects into budget data
-      const budgets: ProjectBudget[] = projects.map(project => ({
-        id: project.id,
-        projectName: project.name,
-        projectCode: project.project_code,
-        csrPartnerName: partnerMap.get(project.csr_partner_id) || 'Unknown Partner',
-        allocatedAmount: project.total_budget || 0,
-        utilizedAmount: project.utilized_budget || 0,
-        remainingAmount: (project.total_budget || 0) - (project.utilized_budget || 0),
-        utilizationPercentage: project.total_budget > 0 
-          ? Math.round((project.utilized_budget / project.total_budget) * 100) 
-          : 0,
-      }));
-
-      setProjectBudgets(budgets);
-      calculateStats(budgets);
-    } catch (err) {
-      setError('Failed to load budget data');
-      console.error('Error fetching budget data:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Calculate stats from budgets
   const calculateStats = (budgets: ProjectBudget[]) => {
     const totalAllocated = budgets.reduce((sum, b) => sum + b.allocatedAmount, 0);
     const totalUtilized = budgets.reduce((sum, b) => sum + b.utilizedAmount, 0);
@@ -107,23 +57,51 @@ const CSRBudgetPage = () => {
     });
   };
 
-  const applyFilters = () => {
-    let filtered = [...projectBudgets];
+  // Apply filters based on selected project
+  const applyFilters = useCallback((budgets: ProjectBudget[]) => {
+    let filtered = [...budgets];
 
-    if (selectedPartner !== 'all') {
-      filtered = filtered.filter(b => {
-        const partner = csrPartners.find(p => p.name === selectedPartner);
-        return partner && b.csrPartnerName === partner.name;
-      });
-    }
-
+    // Filter by selected project if needed
     if (selectedProject !== 'all') {
       filtered = filtered.filter(b => b.id === selectedProject);
     }
 
     setFilteredBudgets(filtered);
     calculateStats(filtered);
-  };
+  }, [selectedProject]);
+
+  // Apply filters when selectedProject changes
+  useEffect(() => {
+    if (projectBudgets.length > 0) {
+      applyFilters(projectBudgets);
+    }
+  }, [selectedProject, projectBudgets, applyFilters]);
+
+  // Transform filtered projects into budget data whenever they change
+  useEffect(() => {
+    const budgets: ProjectBudget[] = filteredProjects.map(project => ({
+      id: project.id,
+      projectName: project.name,
+      projectCode: project.project_code,
+      csrPartnerName: csrPartners.find(p => p.id === project.csr_partner_id)?.name || 'Unknown Partner',
+      allocatedAmount: project.total_budget || 0,
+      utilizedAmount: project.utilized_budget || 0,
+      remainingAmount: ((project.total_budget || 0) - (project.utilized_budget || 0)),
+      utilizationPercentage: (project.total_budget ?? 0) > 0 
+        ? Math.round(((project.utilized_budget || 0) / (project.total_budget || 1)) * 100) 
+        : 0,
+    }));
+
+    setProjectBudgets(budgets);
+    
+    // Apply filters inline to avoid dependency issue
+    let filtered = [...budgets];
+    if (selectedProject !== 'all') {
+      filtered = filtered.filter(b => b.id === selectedProject);
+    }
+    setFilteredBudgets(filtered);
+    calculateStats(filtered);
+  }, [filteredProjects, csrPartners, selectedProject]);
 
   const handleAdjustBudget = async () => {
     if (!adjustModal.project || !adjustModal.type || !adjustAmount) return;
@@ -154,8 +132,8 @@ const CSRBudgetPage = () => {
 
       await projectService.updateProject(project.id, updates);
 
-      // Refresh data
-      await fetchBudgetData();
+      // Refresh data from context
+      await refreshData();
 
       // Close modal
       setAdjustModal({ open: false, project: null, type: null });
@@ -165,22 +143,6 @@ const CSRBudgetPage = () => {
       alert('Failed to adjust budget');
     }
   };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <Loader className="w-8 h-8 animate-spin text-emerald-500" />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
-        {error}
-      </div>
-    );
-  }
 
   const displayBudgets = filteredBudgets.length > 0 ? filteredBudgets : projectBudgets;
 
@@ -193,24 +155,6 @@ const CSRBudgetPage = () => {
       {/* Filters */}
       <div className="bg-white rounded-xl shadow-md p-6 border border-gray-200">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* CSR Partner Filter */}
-          <div className="flex items-center gap-3">
-            <Building2 className="w-5 h-5 text-teal-600" />
-            <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 mb-1">CSR Partner</label>
-              <select
-                value={selectedPartner}
-                onChange={(e) => setSelectedPartner(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-              >
-                <option value="all">Overall (All Partners)</option>
-                {csrPartners.map(partner => (
-                  <option key={partner.id} value={partner.name}>{partner.name}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
           {/* Project Filter */}
           <div className="flex items-center gap-3">
             <FolderKanban className="w-5 h-5 text-teal-600" />

@@ -1,4 +1,5 @@
 import { createContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import { useAuth } from './useAuth';
 import type { CSRPartner, Project } from '../services/filterService';
 import { fetchCSRPartners, fetchAllProjects } from '../services/filterService';
 import { getTollsByPartnerId, type Toll } from '../services/tollsService';
@@ -25,7 +26,12 @@ const FilterContext = createContext<FilterContextType | undefined>(undefined);
 export { FilterContext, type FilterContextType };
 
 export const FilterProvider = ({ children }: { children: ReactNode }) => {
+  const { currentRole } = useAuth();
   const [selectedPartner, setSelectedPartner] = useState<string | null>(() => {
+    // Admin always starts with no filter
+    if (currentRole === 'admin') {
+      return null;
+    }
     const saved = localStorage.getItem('selectedCSRPartnerId');
     return saved || null;
   });
@@ -33,6 +39,7 @@ export const FilterProvider = ({ children }: { children: ReactNode }) => {
     const saved = localStorage.getItem('selectedProjectId');
     return saved || null;
   });
+  const [selectedToll, setSelectedToll] = useState<string | null>(null);
   const [csrPartners, setCSRPartners] = useState<CSRPartner[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [filteredProjects, setFilteredProjects] = useState<Project[]>([]);
@@ -40,13 +47,33 @@ export const FilterProvider = ({ children }: { children: ReactNode }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Persist selectedPartner to localStorage when it changes
+  useEffect(() => {
+    if (selectedPartner) {
+      localStorage.setItem('selectedCSRPartnerId', selectedPartner);
+    } else {
+      localStorage.removeItem('selectedCSRPartnerId');
+    }
+  }, [selectedPartner]);
+
+  // Persist selectedProject to localStorage when it changes
+  useEffect(() => {
+    if (selectedProject) {
+      localStorage.setItem('selectedProjectId', selectedProject);
+    } else {
+      localStorage.removeItem('selectedProjectId');
+    }
+  }, [selectedProject]);
+
   // Fetch CSR Partners on mount
   useEffect(() => {
     const loadCSRPartners = async () => {
       setIsLoading(true);
       setError(null);
       try {
+        // Admin sees all partners regardless, others see only active partners
         const partners = await fetchCSRPartners();
+        console.log('FilterContext - Loaded', partners.length, 'CSR partners');
         setCSRPartners(partners);
       } catch (err) {
         console.error('Failed to load CSR partners:', err);
@@ -75,33 +102,52 @@ export const FilterProvider = ({ children }: { children: ReactNode }) => {
     loadAllProjects();
   }, []);
 
-  // Filter projects based on selected partner AND ensure when project is pre-selected, only that project is shown
+  // Fetch tolls when partner is selected
   useEffect(() => {
-    let currentProjects = projects;
+    const loadTolls = async () => {
+      if (selectedPartner) {
+        try {
+          // reset toll selection when partner changes
+          setSelectedToll(null);
+          const partnerTolls = await getTollsByPartnerId(selectedPartner);
+          setTolls(partnerTolls);
+        } catch (err) {
+          console.error('Failed to load tolls:', err);
+          setTolls([]);
+        }
+      } else {
+        setTolls([]);
+        setSelectedToll(null);
+      }
+    };
+    loadTolls();
+  }, [selectedPartner]);
+
+  // Filter projects based on selected partner, toll, and project
+  useEffect(() => {
+    let filtered = [...projects];
 
     if (selectedPartner) {
       console.log('FilterContext - Filtering with selectedPartner:', selectedPartner);
-      console.log('FilterContext - Total projects available:', projects.length);
-      console.log('FilterContext - Sample project csr_partner_ids:', projects.slice(0, 3).map(p => ({ name: p.name, csr_partner_id: p.csr_partner_id })));
-      let filtered = projects.filter((p) => p.csr_partner_id === selectedPartner);
-      
-      // If a specific project is also selected, filter to just that project
-      if (selectedProject) {
-        filtered = filtered.filter(p => p.id === selectedProject);
+      filtered = filtered.filter((p) => p.csr_partner_id === selectedPartner);
+
+      if (selectedToll) {
+        filtered = filtered.filter((p) => p.toll_id === selectedToll);
       }
-      
-      console.log('FilterContext - Filtered projects:', filtered.length);
-      setFilteredProjects(filtered);
+
+      if (selectedProject) {
+        filtered = filtered.filter((p) => p.id === selectedProject);
+      }
     } else if (selectedProject) {
-      // If only project is selected (no partner), show just that project
       console.log('FilterContext - Filtering with selectedProject only:', selectedProject);
-      const filtered = projects.filter(p => p.id === selectedProject);
-      setFilteredProjects(filtered);
-    } else {
-      console.log('FilterContext - No partner/project selected, showing all projects:', projects.length);
-      setFilteredProjects(projects);
+      filtered = filtered.filter((p) => p.id === selectedProject);
+    } else if (selectedToll) {
+      filtered = filtered.filter((p) => p.toll_id === selectedToll);
     }
-  }, [selectedPartner, selectedProject, projects]);
+
+    console.log('FilterContext - Filtered projects count:', filtered.length);
+    setFilteredProjects(filtered);
+  }, [selectedPartner, selectedProject, selectedToll, projects]);
 
   const resetFilters = () => {
     setSelectedPartner(null);

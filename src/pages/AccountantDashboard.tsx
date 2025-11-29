@@ -52,6 +52,11 @@ interface ProjectWithBeneficiaries extends Project {
   displayName?: string;
   total_budget?: number;
   utilized_budget?: number;
+  meals_served?: number;
+  pads_distributed?: number;
+  students_enrolled?: number;
+  trees_planted?: number;
+  schools_renovated?: number;
 }
 
 const AccountantDashboard = () => {

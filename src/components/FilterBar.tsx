@@ -4,7 +4,13 @@ import type { Toll } from '../services/tollsService';
 import { Building2, FolderKanban, X, Loader, MapPin } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const FilterBar = () => {
+interface FilterBarProps {
+  workFilter?: string;
+  onWorkFilterChange?: (value: string) => void;
+  workOptions?: string[];
+}
+
+const FilterBar = ({ workFilter = '', onWorkFilterChange, workOptions = [] }: FilterBarProps = {}) => {
   const {
     selectedPartner,
     selectedProject,
@@ -64,7 +70,19 @@ const FilterBar = () => {
     }
   };
 
-  const hasActiveFilters = selectedPartner || selectedProject || selectedToll;
+  const handleWorkChange = (value: string) => {
+    if (!onWorkFilterChange) return;
+    onWorkFilterChange(value === 'all' ? '' : value);
+  };
+
+  const showWorkFilter = Boolean(onWorkFilterChange && workOptions.length > 0);
+
+  const hasActiveFilters = Boolean(
+    selectedPartner ||
+    selectedProject ||
+    selectedToll ||
+    (showWorkFilter && workFilter)
+  );
 
   if (error) {
     console.error('FilterBar Error:', error);
@@ -179,6 +197,45 @@ const FilterBar = () => {
           </div>
         )}
 
+        {/* Work Filter */}
+        {showWorkFilter && (
+          <div className="flex-1 min-w-[250px]">
+            <label className="block text-xs font-semibold text-emerald-700 mb-2">Work Type</label>
+            <div className="relative">
+              <svg
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+              <select
+                value={workFilter || 'all'}
+                onChange={(e) => handleWorkChange(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl border-2 border-emerald-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all bg-white text-gray-900 font-medium text-sm appearance-none cursor-pointer hover:border-emerald-300"
+              >
+                <option value="all">All Work Types</option>
+                {workOptions.map((work) => (
+                  <option key={work} value={work}>
+                    {work}
+                  </option>
+                ))}
+              </select>
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                <svg
+                  className="w-4 h-4 text-emerald-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Reset Button */}
         <AnimatePresence>
           {hasActiveFilters && (
@@ -226,6 +283,11 @@ const FilterBar = () => {
               <span className="px-3 py-1 rounded-lg bg-emerald-100 text-emerald-700 text-xs font-medium flex items-center gap-2">
                 <MapPin className="w-3 h-3" />
                 {selectedTollName}
+              </span>
+            )}
+            {showWorkFilter && workFilter && (
+              <span className="px-3 py-1 rounded-lg bg-emerald-100 text-emerald-700 text-xs font-medium">
+                Work: {workFilter}
               </span>
             )}
           </motion.div>
