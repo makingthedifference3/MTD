@@ -195,7 +195,7 @@ const ProjectsPage = () => {
     selectedProjectBeneficiaryName || selectedProjectBeneficiaryCount.toLocaleString();
 
   const selectedSubProjectBeneficiaryLabel =
-    selectedProjectBeneficiaryName || selectedSubProject?.name || selectedProjectBeneficiaryLabel || 'Beneficiaries';
+    selectedProjectDetails?.beneficiary_type || selectedProjectDetails?.beneficiary_name || selectedProjectBeneficiaryLabel || 'Beneficiaries';
   const selectedSubProjectBeneficiaryCount = selectedSubProject?.direct_beneficiaries ?? 0;
 
   useEffect(() => {
