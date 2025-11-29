@@ -31,6 +31,18 @@ import { BENEFICIARY_TYPES } from '../constants/beneficiaryTypes';
 import { INDIAN_STATES } from '../constants/indianStates';
 import { WORK_TYPE_OPTIONS } from '../constants/projectOptions';
 
+const PROJECT_NAME_OPTIONS = [
+  'Shoonya',
+  'Lajja',
+  'Lajja - Naari Shakti Niketan',
+  'Lake Restoration',
+  'Gyandaan',
+  'Construction',
+  'Road Safety',
+  'Roshni',
+  'Traffic Park',
+] as const;
+
 interface TeamMemberFormEntry {
   userId: string;
   role: ProjectTeamRole;
@@ -52,6 +64,7 @@ interface ProjectFormData {
   expectedEndDate: string;
   directBeneficiaries: string;
   beneficiaryType: string;
+  projectNameIsCustom: boolean;
   createBeneficiaryProjects: boolean;
   impactMetrics: ImpactMetricEntry[];
   teamMembers: TeamMemberFormEntry[];
@@ -73,6 +86,7 @@ const createInitialProjectFormState = (): ProjectFormData => ({
   expectedEndDate: '',
   directBeneficiaries: '',
   beneficiaryType: 'Direct Beneficiaries',
+  projectNameIsCustom: false,
   createBeneficiaryProjects: false,
   impactMetrics: [],
   teamMembers: [],
@@ -107,6 +121,7 @@ const mapProjectToFormData = (
     project.beneficiary_type || projectMetadataWithName.metadata?.beneficiary_type || 'Direct Beneficiaries';
   const projectState = project.state ?? '';
   const stateIsCustom = Boolean(projectState && !INDIAN_STATES.includes(projectState as typeof INDIAN_STATES[number]));
+  const projectNameIsCustom = !PROJECT_NAME_OPTIONS.includes(project.name);
 
   return {
     name: project.name,
@@ -124,6 +139,7 @@ const mapProjectToFormData = (
     expectedEndDate: project.expected_end_date ?? '',
     directBeneficiaries: beneficiaries ? beneficiaries.toString() : '',
     beneficiaryType: projectBeneficiaryType,
+    projectNameIsCustom,
     createBeneficiaryProjects: false,
     impactMetrics: project.impact_metrics ?? [],
     teamMembers: teamMembers.map((member) => ({
@@ -1770,6 +1786,7 @@ const AddProjectModal = ({
     { value: 'accountant', label: 'Accountant' },
     { value: 'team_member', label: 'Team Member' },
   ];
+  const projectNameSelectValue = formData.projectNameIsCustom ? 'custom' : formData.name || '';
   const availablePredefinedMetrics = useMemo(
     () =>
       PREDEFINED_METRIC_KEYS.filter(
@@ -1988,20 +2005,56 @@ const AddProjectModal = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <label className="text-sm font-medium text-gray-700">
             Project Name *
-            <input
-              type="text"
-              value={formData.name}
-              onChange={(e) =>
-                setFormData((prev) => ({
-                  ...prev,
-                  name: e.target.value,
-                }))
-              }
+            <select
+              value={projectNameSelectValue}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value === 'custom') {
+                  setFormData((prev) => ({
+                    ...prev,
+                    projectNameIsCustom: true,
+                    name: prev.projectNameIsCustom ? prev.name : '',
+                  }));
+                } else {
+                  setFormData((prev) => ({
+                    ...prev,
+                    projectNameIsCustom: false,
+                    name: value,
+                  }));
+                }
+              }}
               required
-              className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-              placeholder="Rural Education Initiative"
-            />
+              className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            >
+              <option value="" disabled>
+                Select project name
+              </option>
+              {PROJECT_NAME_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+              <option value="custom">Custom...</option>
+            </select>
           </label>
+          {formData.projectNameIsCustom && (
+            <label className="text-sm font-medium text-gray-700">
+              Custom Project Name *
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    name: e.target.value,
+                  }))
+                }
+                required
+                className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                placeholder="Enter custom project name"
+              />
+            </label>
+          )}
           <label className="text-sm font-medium text-gray-700">
             Project Code
             <input
