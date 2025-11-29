@@ -303,7 +303,7 @@ const Sidebar = ({ children, currentPage, onNavigate }: SidebarProps) => {
         </header>
         
         {/* Filter Bar - Show on related pages (but NOT on dashboard pages since they have their own FilterBar) */}
-        {!['dashboard'].includes(currentPage) && ['csr-partners', 'analysis-report'].includes(currentPage) && (
+        {!['dashboard'].includes(currentPage) && ['analysis-report'].includes(currentPage) && (
           <FilterBar />
         )}
         

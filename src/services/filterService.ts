@@ -1,6 +1,35 @@
 import { supabase } from './supabaseClient';
 import type { ImpactMetricEntry } from '../utils/impactMetrics';
 
+const PROJECT_SELECT_FIELDS = `
+  id,
+  name,
+  project_code,
+  csr_partner_id,
+  toll_id,
+  description,
+  location,
+  state,
+  work,
+  start_date,
+  expected_end_date,
+  status,
+  is_active,
+  total_budget,
+  utilized_budget,
+  direct_beneficiaries,
+  impact_metrics,
+  toll:csr_partner_tolls!projects_toll_id_fkey(id, toll_name, poc_name, city, state)
+`;
+
+const normalizeTollRelation = (records: Project[]): Project[] =>
+  records.map((record) => {
+    if (record.toll && Array.isArray(record.toll)) {
+      return { ...record, toll: record.toll[0] || null };
+    }
+    return record;
+  });
+
 export interface CSRPartner {
   id: string;
   name: string;
@@ -85,9 +114,7 @@ export const fetchProjectsByPartner = async (
   try {
     const { data, error } = await supabase
       .from('projects')
-      .select(
-        'id, name, project_code, csr_partner_id, description, status, is_active, total_budget, utilized_budget'
-      )
+      .select(PROJECT_SELECT_FIELDS)
       .eq('csr_partner_id', partnerId)
       .eq('is_active', true)
       .is('parent_project_id', null)
@@ -98,7 +125,8 @@ export const fetchProjectsByPartner = async (
       return [];
     }
 
-    return data || [];
+    const projects = (data || []) as Project[];
+    return normalizeTollRelation(projects);
   } catch (error) {
     console.error('Exception fetching projects:', error);
     return [];
@@ -112,9 +140,7 @@ export const fetchAllProjects = async (): Promise<Project[]> => {
   try {
     const { data, error } = await supabase
       .from('projects')
-      .select(
-        'id, name, project_code, csr_partner_id, description, status, is_active, total_budget, utilized_budget'
-      )
+      .select(PROJECT_SELECT_FIELDS)
       .is('parent_project_id', null)
       .order('name', { ascending: true });
 
@@ -126,7 +152,8 @@ export const fetchAllProjects = async (): Promise<Project[]> => {
     console.log('fetchAllProjects - Raw data from Supabase:', data);
     console.log('fetchAllProjects - Sample projects with budget:', data?.slice(0, 3).map(p => ({ name: p.name, total_budget: p.total_budget, status: p.status })));
     
-    return data || [];
+    const projects = (data || []) as Project[];
+    return normalizeTollRelation(projects);
   } catch (error) {
     console.error('Exception fetching all projects:', error);
     return [];

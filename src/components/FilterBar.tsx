@@ -84,6 +84,13 @@ const FilterBar = ({ workFilter = '', onWorkFilterChange, workOptions = [] }: Fi
     (showWorkFilter && workFilter)
   );
 
+  const handleResetFilters = () => {
+    resetFilters();
+    if (onWorkFilterChange) {
+      onWorkFilterChange('');
+    }
+  };
+
   if (error) {
     console.error('FilterBar Error:', error);
   }
@@ -246,7 +253,7 @@ const FilterBar = ({ workFilter = '', onWorkFilterChange, workOptions = [] }: Fi
               className="flex items-end"
             >
               <button
-                onClick={resetFilters}
+                onClick={handleResetFilters}
                 className="px-4 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white font-semibold text-sm transition-all flex items-center gap-2 shadow-lg hover:shadow-xl hover:scale-105 active:scale-95"
               >
                 <X className="w-4 h-4" />
