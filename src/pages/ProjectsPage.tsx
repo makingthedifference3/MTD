@@ -194,11 +194,8 @@ const ProjectsPage = () => {
   const selectedProjectBeneficiaryDisplayValue =
     selectedProjectBeneficiaryName || selectedProjectBeneficiaryCount.toLocaleString();
 
-  const selectedSubProjectMetadata = (selectedSubProject as Project & {
-    metadata?: { beneficiary_name?: string };
-  })?.metadata;
-  const selectedSubProjectBeneficiaryName =
-    selectedSubProject?.beneficiary_name || selectedSubProjectMetadata?.beneficiary_name;
+  const selectedSubProjectBeneficiaryLabel =
+    selectedProjectBeneficiaryName || selectedSubProject?.name || selectedProjectBeneficiaryLabel || 'Beneficiaries';
   const selectedSubProjectBeneficiaryCount = selectedSubProject?.direct_beneficiaries ?? 0;
 
   useEffect(() => {
@@ -714,8 +711,38 @@ const ProjectsPage = () => {
       .map(([label, value]) => ({ label, value }));
   }, [selectedProjectDetails?.impact_metrics, subProjects]);
 
+  const aggregatedImpactMetrics = useMemo(() => {
+    const combined = [
+      ...(selectedProjectDetails?.impact_metrics || []),
+      ...subProjects.flatMap((sub) => sub.impact_metrics || []),
+    ];
+    const accumulator = new Map<string, ImpactMetricEntry>();
+    combined.forEach((metric) => {
+      const key = metric.key === 'custom' ? `custom:${metric.customLabel ?? ''}` : metric.key;
+      const previous = accumulator.get(key);
+      const value = Math.max(0, metric.value || 0);
+      if (metric.key === 'custom') {
+        const customLabel = metric.customLabel?.trim();
+        if (!customLabel) return;
+        const existingValue = previous?.value ?? 0;
+        accumulator.set(key, {
+          key: 'custom',
+          customLabel,
+          value: existingValue + value,
+        });
+      } else {
+        const existingValue = previous?.value ?? 0;
+        accumulator.set(key, {
+          key: metric.key as ImpactMetricKey,
+          value: existingValue + value,
+        });
+      }
+    });
+    return Array.from(accumulator.values()).filter((metric) => metric.value > 0);
+  }, [selectedProjectDetails?.impact_metrics, subProjects]);
+
   const impactMetricFlags = useMemo(() => {
-    const metrics = selectedProjectDetails?.impact_metrics;
+    const metrics = aggregatedImpactMetrics;
     const hasPrimary = PRIMARY_IMPACT_METRICS.some(
       (key) => getImpactMetricValue(metrics, key) > 0
     );
@@ -732,7 +759,7 @@ const ProjectsPage = () => {
       hasCustom,
       hasAny: hasPrimary || hasSecondary || hasCustom,
     };
-  }, [selectedProjectDetails?.impact_metrics]);
+  }, [aggregatedImpactMetrics]);
 
   // Use filtered projects: 
   // 1. If a specific project is selected, show only that project
@@ -1184,7 +1211,7 @@ const ProjectsPage = () => {
                           <p className="text-xs font-semibold text-gray-500 uppercase">Primary Metrics</p>
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             {PRIMARY_IMPACT_METRICS.map((key) => {
-                              const value = getImpactMetricValue(selectedProjectDetails.impact_metrics, key);
+                              const value = getImpactMetricValue(aggregatedImpactMetrics, key);
                               if (value <= 0) return null;
                               const visual = IMPACT_METRIC_VISUALS[key];
                               const Icon = visual.icon;
@@ -1209,7 +1236,7 @@ const ProjectsPage = () => {
                           <p className="text-xs font-semibold text-gray-500 uppercase">Additional Metrics</p>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {SECONDARY_IMPACT_METRICS.map((key) => {
-                              const value = getImpactMetricValue(selectedProjectDetails.impact_metrics, key);
+                              const value = getImpactMetricValue(aggregatedImpactMetrics, key);
                               if (value <= 0) return null;
                               const visual = IMPACT_METRIC_VISUALS[key];
                               const Icon = visual.icon;
@@ -1559,14 +1586,12 @@ const ProjectsPage = () => {
                 {/* Budget Info */}
                 <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100">
                   <p className="text-xs font-semibold text-emerald-700 uppercase mb-1">
-                    {selectedSubProjectBeneficiaryName || 'Beneficiaries'}
+                    {selectedSubProjectBeneficiaryLabel}
                   </p>
-                  <p className="text-lg font-bold text-emerald-900">
-                    {selectedSubProjectBeneficiaryName || selectedSubProjectBeneficiaryCount.toLocaleString()}
-                  </p>
-                  {selectedSubProjectBeneficiaryName && (
+                  <p className="text-lg font-bold text-emerald-900">{selectedSubProjectBeneficiaryCount.toLocaleString()}</p>
+                  {selectedSubProjectBeneficiaryLabel !== 'Beneficiaries' && (
                     <p className="text-xs text-emerald-700 mt-1">
-                      {selectedSubProjectBeneficiaryCount.toLocaleString()} beneficiaries recorded
+                      {selectedSubProjectBeneficiaryCount.toLocaleString()} beneficiary recorded
                     </p>
                   )}
                 </div>
