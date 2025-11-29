@@ -34,6 +34,7 @@ export interface CSRPartner {
   is_active: boolean;
   notes: string;
   metadata: Record<string, string | number>;
+  poc_password: string | null;
   created_at: string;
   updated_at: string;
   created_by: string | null;

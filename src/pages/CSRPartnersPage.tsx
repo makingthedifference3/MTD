@@ -1,9 +1,10 @@
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Dispatch, SetStateAction, FormEvent, ReactNode } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Plus, Building2, MapPin, Phone, Mail, Loader, X, User2, Globe, Info, Settings } from 'lucide-react';
+import { Search, Plus, Building2, MapPin, Phone, Mail, Loader, X, User2, Globe, Info, Settings, Eye, EyeOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { INDIAN_STATES } from '@/constants/indianStates';
 import {
   getCSRPartnersWithStats,
   getPartnerStats,
@@ -15,6 +16,7 @@ import {
   type PartnerStats,
 } from '@/services/csrPartnersService';
 import { getTollCountForPartner } from '@/services/tollsService';
+import { useFilter } from '@/context/useFilter';
 
 const INITIAL_FORM_STATE = {
   name: '',
@@ -24,16 +26,33 @@ const INITIAL_FORM_STATE = {
   phone: '',
   city: '',
   state: '',
-  budget: '',
+  isCustomState: false,
   status: 'active',
-  website: '',
   hasToll: false,
+  poc_password: '',
+  confirmPassword: '',
 };
 
-type PartnerTextFieldKey = 'companyName' | 'contactPerson' | 'email' | 'phone' | 'website';
+const isCustomStateValue = (value: string) => Boolean(value && !INDIAN_STATES.includes(value as typeof INDIAN_STATES[number]));
+
+type PartnerTextFieldKey = 'companyName' | 'contactPerson' | 'email' | 'phone';
+
+const PARTNER_TEXT_FIELDS: Array<{
+  label: string;
+  key: PartnerTextFieldKey;
+  placeholder: string;
+  syncName?: boolean;
+  type?: string;
+}> = [
+  { label: 'Company Name', key: 'companyName', placeholder: 'Acme Corp', syncName: true },
+  { label: 'Contact Person', key: 'contactPerson', placeholder: 'Jane Doe' },
+  { label: 'Email', key: 'email', placeholder: 'jane@example.com', type: 'email' },
+  { label: 'Phone', key: 'phone', placeholder: '+91 98765 43210' },
+];
 
 const CSRPartnersPage = () => {
   const navigate = useNavigate();
+  const { projects } = useFilter();
   const [searchTerm, setSearchTerm] = useState('');
   const [partners, setPartners] = useState<CSRPartnerStats[]>([]);
   const [allPartners, setAllPartners] = useState<CSRPartnerStats[]>([]);
@@ -103,6 +122,42 @@ const CSRPartnersPage = () => {
     }
   }, [searchTerm, allPartners]);
 
+  const partnerBudgetSummary = useMemo(() => {
+    type BudgetEntry = {
+      total: number;
+      directBudget: number;
+      tollBudgets: Record<string, { total: number; name?: string | null }>;
+    };
+
+    const summary = new Map<string, BudgetEntry>();
+
+    projects.forEach((project) => {
+      if (!project.csr_partner_id) {
+        return;
+      }
+
+      const partnerId = project.csr_partner_id;
+      const budget = project.total_budget ?? 0;
+      if (!summary.has(partnerId)) {
+        summary.set(partnerId, { total: 0, directBudget: 0, tollBudgets: {} });
+      }
+
+      const entry = summary.get(partnerId)!;
+      entry.total += budget;
+
+      if (project.toll_id) {
+        const existing = entry.tollBudgets[project.toll_id] || { total: 0, name: project.toll?.toll_name || project.toll?.poc_name };
+        existing.total += budget;
+        existing.name = project.toll?.toll_name || project.toll?.poc_name || existing.name;
+        entry.tollBudgets[project.toll_id] = existing;
+      } else {
+        entry.directBudget += budget;
+      }
+    });
+
+    return summary;
+  }, [projects]);
+
   const filteredPartners = partners;
 
   if (loading) {
@@ -128,6 +183,8 @@ const CSRPartnersPage = () => {
     { label: 'Total Budget', value: `₹${(stats.totalBudget / 1000000).toFixed(1)}M` },
   ];
 
+  const selectedPartnerBudgetInfo = selectedPartner ? partnerBudgetSummary.get(selectedPartner.id) : undefined;
+
   const handleAddPartner = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!formData.companyName.trim()) {
@@ -136,6 +193,10 @@ const CSRPartnersPage = () => {
     }
     if (!formData.hasToll && (!formData.contactPerson.trim() || !formData.email.trim() || !formData.phone.trim())) {
       setFormError('Please fill in contact person, email, and phone when tolls are not managed separately.');
+      return;
+    }
+    if (formData.poc_password && formData.poc_password !== formData.confirmPassword) {
+      setFormError('Passwords do not match.');
       return;
     }
 
@@ -181,6 +242,7 @@ const CSRPartnersPage = () => {
         return;
       }
       const companyName = partnerDetails.company_name || partnerDetails.name || '';
+      const partnerState = partnerDetails.state || '';
       setEditFormData({
         name: companyName,
         companyName,
@@ -188,11 +250,12 @@ const CSRPartnersPage = () => {
         email: partnerDetails.email || '',
         phone: partnerDetails.phone || '',
         city: partnerDetails.city || '',
-        state: partnerDetails.state || '',
-        budget: String(partnerDetails.budget_allocated || ''),
+        state: partnerState,
+        isCustomState: isCustomStateValue(partnerState),
         status: partnerDetails.is_active ? 'active' : 'inactive',
-        website: partnerDetails.website || '',
         hasToll: Boolean(partnerDetails.has_toll),
+        poc_password: '',
+        confirmPassword: '',
       });
       setSelectedPartner(partnerDetails);
       setIsEditModalOpen(true);
@@ -210,6 +273,10 @@ const CSRPartnersPage = () => {
     }
     if (!editFormData.hasToll && (!editFormData.contactPerson.trim() || !editFormData.email.trim() || !editFormData.phone.trim())) {
       setEditFormError('Please fill in contact person, email, and phone when tolls are not managed separately.');
+      return;
+    }
+    if (editFormData.poc_password && editFormData.poc_password !== editFormData.confirmPassword) {
+      setEditFormError('Passwords do not match.');
       return;
     }
 
@@ -288,7 +355,11 @@ const CSRPartnersPage = () => {
       {/* Partners Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {filteredPartners.length > 0 ? (
-          filteredPartners.map((partner, index) => (
+          filteredPartners.map((partner, index) => {
+            const budgetInfo = partnerBudgetSummary.get(partner.id);
+            const partnerBudgetValue = budgetInfo?.total ?? partner.totalBudget ?? 0;
+
+            return (
           <motion.div
             key={partner.id}
             initial={{ opacity: 0, y: 20 }}
@@ -338,7 +409,7 @@ const CSRPartnersPage = () => {
                 </div>
                 <div>
                   <p className="text-xs text-gray-600 mb-1">Total Budget</p>
-                  <p className="text-xl font-bold text-emerald-600">₹{(partner.totalBudget / 1000).toFixed(0)}K</p>
+                  <p className="text-xl font-bold text-emerald-600">₹{(partnerBudgetValue / 1000).toFixed(0)}K</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-600 mb-1">Tolls</p>
@@ -371,7 +442,8 @@ const CSRPartnersPage = () => {
               )}
             </div>
           </motion.div>
-          ))
+          );
+          })
         ) : (
           <div className="col-span-full text-center py-8 text-gray-500">
             No partners found
@@ -400,6 +472,13 @@ const CSRPartnersPage = () => {
           partner={selectedPartner}
           isLoading={detailsLoading}
           error={detailsError}
+          budgetTotal={selectedPartnerBudgetInfo?.total ?? 0}
+          directBudget={selectedPartnerBudgetInfo?.directBudget ?? 0}
+          tollBudgets={selectedPartnerBudgetInfo ? Object.entries(selectedPartnerBudgetInfo.tollBudgets).map(([tollId, info]) => ({
+            tollId,
+            tollName: info.name || 'Toll',
+            total: info.total,
+          })) : []}
           onClose={() => {
             if (!detailsLoading) {
               setDetailsModalOpen(false);
@@ -436,8 +515,6 @@ export default CSRPartnersPage;
 const buildPartnerPayload = (values: typeof INITIAL_FORM_STATE): Omit<CSRPartner, 'id' | 'created_at' | 'updated_at'> => {
   const now = new Date().toISOString();
   const fiscalYear = `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
-  const budgetValue = Number(values.budget) || 0;
-  const website = values.website.trim();
   const companyName = values.companyName.trim() || values.name.trim();
 
   return {
@@ -456,12 +533,12 @@ const buildPartnerPayload = (values: typeof INITIAL_FORM_STATE): Omit<CSRPartner
     city: values.city.trim(),
     state: values.state.trim(),
     pincode: '',
-    website,
+    website: '',
     logo_drive_link: '',
     mou_drive_link: '',
-    budget_allocated: budgetValue,
+    budget_allocated: 0,
     budget_utilized: 0,
-    budget_pending: budgetValue,
+    budget_pending: 0,
     fiscal_year: fiscalYear,
     agreement_start_date: now,
     agreement_end_date: now,
@@ -479,7 +556,73 @@ const buildPartnerPayload = (values: typeof INITIAL_FORM_STATE): Omit<CSRPartner
     notes: '',
     created_by: null,
     updated_by: null,
+    poc_password: values.poc_password.trim() || null,
   };
+};
+
+interface PasswordFieldsProps {
+  formData: typeof INITIAL_FORM_STATE;
+  setFormData: Dispatch<SetStateAction<typeof INITIAL_FORM_STATE>>;
+}
+
+const PasswordFields = ({ formData, setFormData }: PasswordFieldsProps) => {
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  return (
+    <>
+      <div className="text-sm font-medium text-gray-700">
+        Password
+        <div className="relative mt-1">
+          <input
+            type={showPassword ? 'text' : 'password'}
+            value={formData.poc_password}
+            onChange={(event) =>
+              setFormData((prev) => ({
+                ...prev,
+                poc_password: event.target.value,
+              }))
+            }
+            className="w-full rounded-xl border border-gray-200 px-4 py-3 pr-12 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            placeholder="Enter password"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((prev) => !prev)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+            aria-label="Toggle password visibility"
+          >
+            {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+          </button>
+        </div>
+      </div>
+      <div className="text-sm font-medium text-gray-700">
+        Confirm Password
+        <div className="relative mt-1">
+          <input
+            type={showConfirmPassword ? 'text' : 'password'}
+            value={formData.confirmPassword}
+            onChange={(event) =>
+              setFormData((prev) => ({
+                ...prev,
+                confirmPassword: event.target.value,
+              }))
+            }
+            className="w-full rounded-xl border border-gray-200 px-4 py-3 pr-12 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            placeholder="Confirm password"
+          />
+          <button
+            type="button"
+            onClick={() => setShowConfirmPassword((prev) => !prev)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+            aria-label="Toggle confirm password visibility"
+          >
+            {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+          </button>
+        </div>
+      </div>
+    </>
+  );
 };
 
 interface AddPartnerModalProps {
@@ -533,17 +676,7 @@ const AddPartnerModal = ({ formData, setFormData, isSubmitting, formError, onClo
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {[
-            { label: 'Company Name', key: 'companyName' as PartnerTextFieldKey, placeholder: 'Acme Corp', syncName: true, required: true },
-            ...(formData.hasToll
-              ? []
-              : [
-                  { label: 'Contact Person', key: 'contactPerson' as PartnerTextFieldKey, placeholder: 'Jane Doe', required: true },
-                  { label: 'Email', key: 'email' as PartnerTextFieldKey, placeholder: 'jane@example.com', type: 'email', required: true },
-                  { label: 'Phone', key: 'phone' as PartnerTextFieldKey, placeholder: '+91 98765 43210', required: true },
-                ]),
-            { label: 'Website', key: 'website' as PartnerTextFieldKey, placeholder: 'https://acme.org', required: false },
-          ].map((field) => (
+          {PARTNER_TEXT_FIELDS.map((field) => (
             <label key={field.key} className="text-sm font-medium text-gray-700">
               {field.label}
               <input
@@ -557,7 +690,7 @@ const AddPartnerModal = ({ formData, setFormData, isSubmitting, formError, onClo
                     ...(field.syncName ? { name: value } : {}),
                   }));
                 }}
-                required={field.required !== false}
+                required
                 className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                 placeholder={field.placeholder}
               />
@@ -567,60 +700,85 @@ const AddPartnerModal = ({ formData, setFormData, isSubmitting, formError, onClo
 
         {/* Conditional City/State/Budget - only show if no toll */}
         {!formData.hasToll && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-gray-50 rounded-xl border border-gray-100">
-            <p className="col-span-full text-sm text-gray-600 mb-2">
-              Since this partner has no tolls, specify location and budget here:
-            </p>
-            <label className="text-sm font-medium text-gray-700">
-              City
-              <input
-                type="text"
-                value={formData.city}
-                onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    city: e.target.value,
-                  }))
-                }
-                required
-                className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                placeholder="Mumbai"
-              />
-            </label>
-            <label className="text-sm font-medium text-gray-700">
-              State
-              <input
-                type="text"
-                value={formData.state}
-                onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    state: e.target.value,
-                  }))
-                }
-                required
-                className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                placeholder="Maharashtra"
-              />
-            </label>
-            <label className="text-sm font-medium text-gray-700">
-              Budget (₹)
-              <input
-                type="number"
-                value={formData.budget}
-                onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    budget: e.target.value,
-                  }))
-                }
-                required
-                className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                placeholder="5000000"
-              />
-            </label>
-          </div>
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-gray-50 rounded-xl border border-gray-100">
+              <p className="col-span-full text-sm text-gray-600 mb-2">
+                Since this partner has no tolls, specify location and budget here:
+              </p>
+              <label className="text-sm font-medium text-gray-700">
+                City
+                <input
+                  type="text"
+                  value={formData.city}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      city: e.target.value,
+                    }))
+                  }
+                  required
+                  className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  placeholder="Mumbai"
+                />
+              </label>
+              <div className="text-sm font-medium text-gray-700">
+                State
+                <select
+                  value={formData.isCustomState ? 'custom' : formData.state}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === 'custom') {
+                      setFormData((prev) => ({
+                        ...prev,
+                        state: '',
+                        isCustomState: true,
+                      }));
+                    } else {
+                      setFormData((prev) => ({
+                        ...prev,
+                        state: value,
+                        isCustomState: false,
+                      }));
+                    }
+                  }}
+                  required
+                  className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                >
+                  <option value="">Select State</option>
+                  {INDIAN_STATES.map((state) => (
+                    <option key={state} value={state}>
+                      {state}
+                    </option>
+                  ))}
+                  <option value="custom">Custom...</option>
+                </select>
+              </div>
+            </div>
+
+            {formData.isCustomState && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label className="text-sm font-medium text-gray-700">
+                  Custom State Name
+                  <input
+                    type="text"
+                    value={formData.state}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        state: e.target.value,
+                      }))
+                    }
+                    required
+                    className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    placeholder="Enter custom state..."
+                  />
+                </label>
+              </div>
+            )}
+          </>
         )}
+
+        <PasswordFields formData={formData} setFormData={setFormData} />
 
         {formData.hasToll && (
           <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
@@ -725,17 +883,7 @@ const EditPartnerModal = ({ formData, setFormData, isSubmitting, formError, onCl
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {[
-            { label: 'Company Name', key: 'companyName' as PartnerTextFieldKey, placeholder: 'Acme Corp', syncName: true, required: true },
-            ...(formData.hasToll
-              ? []
-              : [
-                  { label: 'Contact Person', key: 'contactPerson' as PartnerTextFieldKey, placeholder: 'Jane Doe', required: true },
-                  { label: 'Email', key: 'email' as PartnerTextFieldKey, placeholder: 'jane@example.com', type: 'email', required: true },
-                  { label: 'Phone', key: 'phone' as PartnerTextFieldKey, placeholder: '+91 98765 43210', required: true },
-                ]),
-            { label: 'Website', key: 'website' as PartnerTextFieldKey, placeholder: 'https://acme.org', required: false },
-          ].map((field) => (
+          {PARTNER_TEXT_FIELDS.map((field) => (
             <label key={field.key} className="text-sm font-medium text-gray-700">
               {field.label}
               <input
@@ -749,7 +897,7 @@ const EditPartnerModal = ({ formData, setFormData, isSubmitting, formError, onCl
                     ...(field.syncName ? { name: value } : {}),
                   }));
                 }}
-                required={field.required !== false}
+                required
                 className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                 placeholder={field.placeholder}
               />
@@ -759,7 +907,8 @@ const EditPartnerModal = ({ formData, setFormData, isSubmitting, formError, onCl
 
         {/* Conditional City/State/Budget - only show if no toll */}
         {!formData.hasToll && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-gray-50 rounded-xl border border-gray-100">
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-gray-50 rounded-xl border border-gray-100">
             <p className="col-span-full text-sm text-gray-600 mb-2">
               Since this partner has no tolls, specify location and budget here:
             </p>
@@ -779,40 +928,64 @@ const EditPartnerModal = ({ formData, setFormData, isSubmitting, formError, onCl
                 placeholder="Mumbai"
               />
             </label>
-            <label className="text-sm font-medium text-gray-700">
+            <div className="text-sm font-medium text-gray-700">
               State
-              <input
-                type="text"
-                value={formData.state}
-                onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    state: e.target.value,
-                  }))
-                }
+              <select
+                value={formData.isCustomState ? 'custom' : formData.state}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === 'custom') {
+                    setFormData((prev) => ({
+                      ...prev,
+                      state: '',
+                      isCustomState: true,
+                    }));
+                  } else {
+                    setFormData((prev) => ({
+                      ...prev,
+                      state: value,
+                      isCustomState: false,
+                    }));
+                  }
+                }}
                 required
                 className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                placeholder="Maharashtra"
-              />
-            </label>
-            <label className="text-sm font-medium text-gray-700">
-              Budget (₹)
-              <input
-                type="number"
-                value={formData.budget}
-                onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    budget: e.target.value,
-                  }))
-                }
-                required
-                className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                placeholder="5000000"
-              />
-            </label>
-          </div>
+              >
+                <option value="">Select State</option>
+                {INDIAN_STATES.map((state) => (
+                  <option key={state} value={state}>
+                    {state}
+                  </option>
+                ))}
+                <option value="custom">Custom...</option>
+              </select>
+            </div>
+            </div>
+
+            {formData.isCustomState && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <label className="text-sm font-medium text-gray-700">
+                Custom State Name
+                <input
+                  type="text"
+                  value={formData.state}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      state: e.target.value,
+                    }))
+                  }
+                  required
+                  className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                  placeholder="Enter custom state..."
+                />
+              </label>
+            </div>
+            )}
+          </>
         )}
+
+        <PasswordFields formData={formData} setFormData={setFormData} />
 
         {formData.hasToll && (
           <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
@@ -870,10 +1043,13 @@ interface PartnerDetailsModalProps {
   partner: CSRPartner | null;
   isLoading: boolean;
   error: string | null;
+  budgetTotal: number;
+  directBudget: number;
+  tollBudgets: Array<{ tollId: string; tollName: string; total: number }>;
   onClose: () => void;
 }
 
-const PartnerDetailsModal = ({ partner, isLoading, error, onClose }: PartnerDetailsModalProps) => (
+const PartnerDetailsModal = ({ partner, isLoading, error, budgetTotal, directBudget, tollBudgets, onClose }: PartnerDetailsModalProps) => (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
     <motion.div
       initial={{ opacity: 0, y: 40 }}
@@ -926,8 +1102,8 @@ const PartnerDetailsModal = ({ partner, isLoading, error, onClose }: PartnerDeta
               <DetailRow icon={<Globe className="w-4 h-4" />} label="Website" value={partner.website || '—'} />
               <DetailRow
                 icon={<Info className="w-4 h-4" />}
-                label="Budget Allocated"
-                value={`₹${(partner.budget_allocated || 0).toLocaleString()}`}
+                label="Project Budget"
+                value={`₹${(budgetTotal || 0).toLocaleString()}`}
               />
             </div>
 
@@ -935,6 +1111,20 @@ const PartnerDetailsModal = ({ partner, isLoading, error, onClose }: PartnerDeta
               <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
                 <p className="text-sm font-semibold text-gray-700 mb-2">Notes</p>
                 <p className="text-sm text-gray-600">{partner.notes}</p>
+              </div>
+            )}
+
+            {(directBudget > 0 || tollBudgets.length > 0) && (
+              <div className="bg-white border border-gray-100 rounded-2xl p-4 space-y-3">
+                <p className="text-sm font-semibold text-gray-700">Budget Breakdown</p>
+                <div className="space-y-2">
+                  {directBudget > 0 && (
+                    <BudgetBreakdownRow label="Direct Projects" amount={directBudget} />
+                  )}
+                  {tollBudgets.map((toll) => (
+                    <BudgetBreakdownRow key={toll.tollId} label={toll.tollName} amount={toll.total} />
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -951,5 +1141,12 @@ const DetailRow = ({ icon, label, value }: { icon: ReactNode; label: string; val
       <p className="text-xs uppercase tracking-wide text-gray-500">{label}</p>
       <p className="text-sm font-semibold text-gray-900">{value || '—'}</p>
     </div>
+  </div>
+);
+
+const BudgetBreakdownRow = ({ label, amount }: { label: string; amount: number }) => (
+  <div className="flex items-center justify-between text-sm text-gray-700">
+    <span>{label}</span>
+    <span className="font-semibold text-gray-900">₹{amount.toLocaleString()}</span>
   </div>
 );

@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { FormEvent, Dispatch, SetStateAction } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ArrowLeft, Plus, Building2, MapPin, Phone, Mail, Loader, X, 
-  User2, DollarSign, Edit, Trash2, CheckCircle 
+  User2, DollarSign, Edit, Trash2, CheckCircle, Eye, EyeOff 
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getCSRPartnerById, type CSRPartner } from '@/services/csrPartnersService';
@@ -16,6 +16,8 @@ import {
   type CreateTollInput, 
   type UpdateTollInput 
 } from '@/services/tollsService';
+import { useFilter } from '@/context/useFilter';
+import { INDIAN_STATES } from '@/constants/indianStates';
 
 const INITIAL_TOLL_FORM = {
   toll_name: '',
@@ -24,12 +26,18 @@ const INITIAL_TOLL_FORM = {
   email_id: '',
   city: '',
   state: '',
-  budget_allocation: '',
+  isCustomState: false,
+  poc_password: '',
+  confirmPassword: '',
 };
+
+const isCustomStateValue = (value: string) =>
+  Boolean(value && !INDIAN_STATES.includes(value as typeof INDIAN_STATES[number]));
 
 const TollManagementPage = () => {
   const navigate = useNavigate();
   const { partnerId } = useParams<{ partnerId: string }>();
+  const { projects } = useFilter();
   
   const [partner, setPartner] = useState<CSRPartner | null>(null);
   const [tolls, setTolls] = useState<Toll[]>([]);
@@ -48,6 +56,31 @@ const TollManagementPage = () => {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [tollToDelete, setTollToDelete] = useState<Toll | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const partnerProjects = useMemo(() => {
+    if (!partnerId) {
+      return [];
+    }
+
+    return projects.filter((project) => project.csr_partner_id === partnerId);
+  }, [projects, partnerId]);
+
+  const partnerBudgetTotal = useMemo(() => {
+    return partnerProjects.reduce((sum, project) => sum + (project.total_budget || 0), 0);
+  }, [partnerProjects]);
+
+  const tollBudgetMap = useMemo(() => {
+    const map = new Map<string, number>();
+    partnerProjects.forEach((project) => {
+      if (!project.toll_id) {
+        return;
+      }
+
+      const nextValue = (map.get(project.toll_id) || 0) + (project.total_budget || 0);
+      map.set(project.toll_id, nextValue);
+    });
+    return map;
+  }, [partnerProjects]);
 
   const fetchData = useCallback(async () => {
     if (!partnerId) return;
@@ -82,6 +115,12 @@ const TollManagementPage = () => {
       return;
     }
 
+    // Validate passwords match if password is provided
+    if (formData.poc_password && formData.poc_password !== formData.confirmPassword) {
+      setFormError('Passwords do not match.');
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       setFormError(null);
@@ -94,8 +133,8 @@ const TollManagementPage = () => {
         email_id: formData.email_id.trim() || undefined,
         city: formData.city.trim() || undefined,
         state: formData.state.trim() || undefined,
-        budget_allocation: Number(formData.budget_allocation) || 0,
         is_active: true,
+        poc_password: formData.poc_password.trim() || undefined,
       };
 
       await createToll(payload);
@@ -118,6 +157,12 @@ const TollManagementPage = () => {
       return;
     }
 
+    // Validate passwords match if password is provided
+    if (formData.poc_password && formData.poc_password !== formData.confirmPassword) {
+      setFormError('Passwords do not match.');
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       setFormError(null);
@@ -128,8 +173,7 @@ const TollManagementPage = () => {
         contact_number: formData.contact_number.trim() || undefined,
         email_id: formData.email_id.trim() || undefined,
         city: formData.city.trim() || undefined,
-        state: formData.state.trim() || undefined,
-        budget_allocation: Number(formData.budget_allocation) || 0,
+        poc_password: formData.poc_password.trim() || undefined,
       };
 
       await updateToll(selectedToll.id, payload);
@@ -164,14 +208,17 @@ const TollManagementPage = () => {
 
   const openEditModal = (toll: Toll) => {
     setSelectedToll(toll);
+    const tollState = toll.state || '';
     setFormData({
       toll_name: toll.toll_name || '',
       poc_name: toll.poc_name,
       contact_number: toll.contact_number || '',
       email_id: toll.email_id || '',
       city: toll.city || '',
-      state: toll.state || '',
-      budget_allocation: toll.budget_allocation?.toString() || '',
+      state: tollState,
+      isCustomState: isCustomStateValue(tollState),
+      poc_password: '',
+      confirmPassword: '',
     });
     setIsEditModalOpen(true);
   };
@@ -285,7 +332,7 @@ const TollManagementPage = () => {
             <DollarSign className="w-5 h-5 text-emerald-600" />
             <div>
               <p className="text-xs text-gray-500">Budget Allocated</p>
-              <p className="font-medium text-gray-900">₹{(partner.budget_allocated || 0).toLocaleString()}</p>
+              <p className="font-medium text-gray-900">₹{partnerBudgetTotal.toLocaleString()}</p>
             </div>
           </div>
         </div>
@@ -310,7 +357,7 @@ const TollManagementPage = () => {
         >
           <p className="text-gray-600 text-sm font-medium mb-1">Total Budget</p>
           <h3 className="text-3xl font-bold text-emerald-600">
-            ₹{tolls.reduce((sum, t) => sum + (t.budget_allocation || 0), 0).toLocaleString()}
+            ₹{partnerBudgetTotal.toLocaleString()}
           </h3>
         </motion.div>
         <motion.div
@@ -370,7 +417,7 @@ const TollManagementPage = () => {
                 )}
                 <div className="flex items-center text-sm text-gray-600">
                   <DollarSign className="w-4 h-4 mr-2 text-blue-600" />
-                  Budget: ₹{(toll.budget_allocation || 0).toLocaleString()}
+                  Budget: ₹{(tollBudgetMap.get(toll.id) || 0).toLocaleString()}
                 </div>
               </div>
 
@@ -515,19 +562,23 @@ const TollFormModal = ({
   formError,
   onClose,
   onSubmit,
-}: TollFormModalProps) => (
-  <motion.div
-    initial={{ opacity: 0 }}
-    animate={{ opacity: 1 }}
-    exit={{ opacity: 0 }}
-    className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4"
-  >
+}: TollFormModalProps) => {
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  return (
     <motion.div
-      initial={{ opacity: 0, y: 40 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 40 }}
-      className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-emerald-100"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4"
     >
+      <motion.div
+        initial={{ opacity: 0, y: 40 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 40 }}
+        className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-emerald-100 max-h-[90vh] overflow-y-auto"
+      >
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
         <div>
           <p className="text-sm font-medium text-blue-600">Toll / Subcompany</p>
@@ -618,34 +669,95 @@ const TollFormModal = ({
           </label>
           <label className="text-sm font-medium text-gray-700">
             State
-            <input
-              type="text"
-              value={formData.state}
-              onChange={(e) =>
+            <select
+              value={formData.isCustomState ? 'custom' : formData.state}
+              onChange={(e) => {
+                const value = e.target.value;
                 setFormData((prev) => ({
                   ...prev,
-                  state: e.target.value,
-                }))
-              }
+                  state: value === 'custom' ? '' : value,
+                  isCustomState: value === 'custom',
+                }));
+              }}
               className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Maharashtra"
-            />
+            >
+              <option value="">Select State</option>
+              {INDIAN_STATES.map((state) => (
+                <option key={state} value={state}>
+                  {state}
+                </option>
+              ))}
+              <option value="custom">Custom...</option>
+            </select>
           </label>
-          <label className="text-sm font-medium text-gray-700 md:col-span-2">
-            Budget Allocation (₹)
-            <input
-              type="number"
-              value={formData.budget_allocation}
-              onChange={(e) =>
-                setFormData((prev) => ({
-                  ...prev,
-                  budget_allocation: e.target.value,
-                }))
-              }
-              className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="500000"
-            />
-          </label>
+
+          {formData.isCustomState && (
+            <label className="text-sm font-medium text-gray-700">
+              Custom State
+              <input
+                type="text"
+                value={formData.state}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    state: e.target.value,
+                  }))
+                }
+                className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Enter custom state"
+              />
+            </label>
+          )}
+          
+          {/* Password Fields */}
+          <div className="text-sm font-medium text-gray-700">
+            POC Password
+            <div className="relative mt-1">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={formData.poc_password}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    poc_password: e.target.value,
+                  }))
+                }
+                className="w-full rounded-xl border border-gray-200 px-4 py-3 pr-12 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Enter password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-500 hover:text-gray-700"
+              >
+                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
+          </div>
+          <div className="text-sm font-medium text-gray-700">
+            Confirm Password
+            <div className="relative mt-1">
+              <input
+                type={showConfirmPassword ? 'text' : 'password'}
+                value={formData.confirmPassword}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    confirmPassword: e.target.value,
+                  }))
+                }
+                className="w-full rounded-xl border border-gray-200 px-4 py-3 pr-12 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Confirm password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-500 hover:text-gray-700"
+              >
+                {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
+          </div>
         </div>
 
         {formError && <p className="text-sm text-red-600">{formError}</p>}
@@ -678,6 +790,7 @@ const TollFormModal = ({
           </button>
         </div>
       </form>
+      </motion.div>
     </motion.div>
-  </motion.div>
-);
+  );
+};

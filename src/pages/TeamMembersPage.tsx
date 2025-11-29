@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Plus, Trash2, Loader, AlertCircle } from 'lucide-react';
 import { teamMembersService } from '../services/teamMembersService';
 import type { TeamMemberWithManager } from '../services/teamMembersService';
+import { INDIAN_STATES } from '@/constants/indianStates';
 
 const TeamMembersPage = () => {
   const [loading, setLoading] = useState(true);
@@ -195,13 +196,18 @@ const TeamMembersPage = () => {
             />
 
             {/* State */}
-            <input
-              type="text"
-              value={formData.state}
-              onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              placeholder="State"
-            />
+              <select
+                value={formData.state}
+                onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="">Select State</option>
+                {INDIAN_STATES.map((state) => (
+                  <option key={state} value={state}>
+                    {state}
+                  </option>
+                ))}
+              </select>
 
             {/* Pincode */}
             <input
