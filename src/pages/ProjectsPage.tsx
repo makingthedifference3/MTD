@@ -52,7 +52,6 @@ interface ProjectFormData {
   expectedEndDate: string;
   directBeneficiaries: string;
   beneficiaryType: string;
-  beneficiaryName: string;
   createBeneficiaryProjects: boolean;
   impactMetrics: ImpactMetricEntry[];
   teamMembers: TeamMemberFormEntry[];
@@ -74,7 +73,6 @@ const createInitialProjectFormState = (): ProjectFormData => ({
   expectedEndDate: '',
   directBeneficiaries: '',
   beneficiaryType: 'Direct Beneficiaries',
-  beneficiaryName: '',
   createBeneficiaryProjects: false,
   impactMetrics: [],
   teamMembers: [],
@@ -107,8 +105,6 @@ const mapProjectToFormData = (
   };
   const projectBeneficiaryType =
     project.beneficiary_type || projectMetadataWithName.metadata?.beneficiary_type || 'Direct Beneficiaries';
-  const projectBeneficiaryName =
-    project.beneficiary_name || projectMetadataWithName.metadata?.beneficiary_name || '';
   const projectState = project.state ?? '';
   const stateIsCustom = Boolean(projectState && !INDIAN_STATES.includes(projectState as typeof INDIAN_STATES[number]));
 
@@ -128,7 +124,6 @@ const mapProjectToFormData = (
     expectedEndDate: project.expected_end_date ?? '',
     directBeneficiaries: beneficiaries ? beneficiaries.toString() : '',
     beneficiaryType: projectBeneficiaryType,
-    beneficiaryName: projectBeneficiaryName,
     createBeneficiaryProjects: false,
     impactMetrics: project.impact_metrics ?? [],
     teamMembers: teamMembers.map((member) => ({
@@ -1659,10 +1654,8 @@ const buildProjectPayload = (values: ProjectFormData) => {
     is_active: true,
     impact_metrics: cleanedMetrics,
     beneficiary_type: values.beneficiaryType.trim() || undefined,
-    beneficiary_name: values.beneficiaryName.trim() || undefined,
     metadata: {
       beneficiary_type: values.beneficiaryType.trim() || 'Direct Beneficiaries',
-      beneficiary_name: values.beneficiaryName.trim() || undefined,
     },
     created_by: undefined,
     updated_by: undefined,
@@ -1695,10 +1688,8 @@ const buildProjectUpdatePayload = (values: ProjectFormData): Partial<ProjectServ
     expected_end_date: values.expectedEndDate || undefined,
     impact_metrics: cleanedMetrics,
     beneficiary_type: values.beneficiaryType.trim() || undefined,
-    beneficiary_name: values.beneficiaryName.trim() || undefined,
     metadata: {
       beneficiary_type: values.beneficiaryType.trim() || 'Direct Beneficiaries',
-      beneficiary_name: values.beneficiaryName.trim() || undefined,
     },
   };
 
@@ -2345,21 +2336,6 @@ const AddProjectModal = ({
           )}
         </div>
 
-        <label className="text-sm font-medium text-gray-700">
-          Beneficiary Name (optional)
-          <input
-            type="text"
-            value={formData.beneficiaryName}
-            onChange={(e) =>
-              setFormData((prev) => ({
-                ...prev,
-                beneficiaryName: e.target.value,
-              }))
-            }
-            className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-            placeholder="e.g. 'Sankalp Community School'"
-          />
-        </label>
 
         {/* Create Beneficiary Sub-Projects Checkbox */}
         {!isEditing && Number(formData.directBeneficiaries) > 0 && (
