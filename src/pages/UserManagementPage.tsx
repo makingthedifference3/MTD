@@ -310,8 +310,6 @@ export default function UserManagementPage() {
                   className="w-full px-4 py-2 rounded-lg border-2 border-emerald-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all"
                 >
                   <option value="team_member">Team Member</option>
-                  <option value="accountant">Accountant</option>
-                  <option value="project_manager">Project Manager</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>
