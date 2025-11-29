@@ -1,17 +1,17 @@
-import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { Plus, Video, Image as ImageIcon, Eye, Trash2, Download, Link as LinkIcon } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Plus, Video, Image as ImageIcon, Eye, Trash2, Download, X, Edit2, FileText } from 'lucide-react';
 import { useAuth } from '@/context/useAuth';
 import { supabase } from '@/services/supabaseClient';
 import {
   getAllArticles,
-  getArticleStats,
   deleteArticle,
   createArticle,
+  updateArticle,
   getArticlesByMediaType,
-  incrementViewsCount,
 } from '@/services/mediaArticleService';
-import type { MediaArticle, ArticleStats } from '@/services/mediaArticleService';
+import type { MediaArticle } from '@/services/mediaArticleService';
+import { getAllTolls, type Toll } from '@/services/tollsService';
 
 interface MediaItem extends MediaArticle {
   newsChannel?: string;
@@ -21,40 +21,47 @@ const MediaPage = () => {
   const { currentUser } = useAuth();
   const [filterType, setFilterType] = useState<string>('all');
   const [filterNewsChannel, setFilterNewsChannel] = useState<string>('all');
-  const [filterCategory, setFilterCategory] = useState<string>('all');
-  const [selectedMedia, setSelectedMedia] = useState<string | null>(null);
+  const [filterPartner, setFilterPartner] = useState<string>('all');
+  const [filterToll, setFilterToll] = useState<string>('all');
+  const [selectedMedia, setSelectedMedia] = useState<MediaItem | null>(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
-  const [stats, setStats] = useState<ArticleStats>({ total: 0, published: 0, draft: 0, pending: 0 });
-  const [projects, setProjects] = useState<Array<{id: string; name: string; project_code: string}>>([]);
-  const [csrPartners, setCSRPartners] = useState<Array<{id: string; name: string; partner_code: string}>>([]);
+  const [projects, setProjects] = useState<Array<{id: string; name: string; project_code: string; csr_partner_id?: string}>>([]);
+  const [projectsLoading, setProjectsLoading] = useState(true);
+  const [csrPartners, setCSRPartners] = useState<Array<{id: string; name: string; company_name?: string}>>([]);
+  const [partnersLoading, setPartnersLoading] = useState(true);
+  const [tolls, setTolls] = useState<Toll[]>([]);
   
-  // Form state for creating new media
+  // Form state for creating/editing media
   const [showUploadForm, setShowUploadForm] = useState(false);
+  const [editingMediaId, setEditingMediaId] = useState<string | null>(null);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [uploadForm, setUploadForm] = useState({
     title: '',
     description: '',
     media_type: 'photo' as 'photo' | 'video' | 'document' | 'pdf' | 'newspaper_cutting' | 'certificate' | 'report',
-    category: '',
     drive_link: '',
     news_channel: '',
     project_id: '',
     csr_partner_id: '',
+    toll_id: '',
   });
 
   // Load media articles on component mount
   useEffect(() => {
     const loadMediaData = async () => {
       setIsLoading(true);
+      setProjectsLoading(true);
       try {
-        const [articles, projectsData, partnersData] = await Promise.all([
-          getAllArticles(),
+        const [articles, projectsData, tollsData] = await Promise.all([
+          getAllArticles(undefined, { isArticle: false }),
           (async () => {
             try {
               const { data, error } = await supabase
                 .from('projects')
-                .select('id, name, project_code')
+                .select('id, name, project_code, csr_partner_id')
                 .order('name');
               if (error) throw error;
               return data || [];
@@ -63,39 +70,48 @@ const MediaPage = () => {
               return [];
             }
           })(),
-          (async () => {
-            try {
-              const { data, error } = await supabase
-                .from('csr_partners')
-                .select('id, name, partner_code')
-                .order('name');
-              if (error) throw error;
-              return data || [];
-            } catch (err) {
-              console.error('Error fetching CSR partners:', err);
-              return [];
-            }
-          })(),
+          getAllTolls(),
         ]);
         
-        const formattedArticles: MediaItem[] = (articles as MediaArticle[]).map((article: MediaArticle) => ({
+        const filteredArticles = (articles as MediaArticle[]).filter(article => article.is_article === false);
+        const formattedArticles: MediaItem[] = filteredArticles.map((article: MediaArticle) => ({
           ...article,
           newsChannel: article.sub_category || 'General',
         }));
         setMediaItems(formattedArticles);
         setProjects(projectsData || []);
-        setCSRPartners(partnersData || []);
+        setTolls(tollsData || []);
         console.log('Projects loaded:', projectsData?.length || 0);
-        console.log('CSR Partners loaded:', partnersData?.length || 0);
-        const articleStats = await getArticleStats();
-        setStats(articleStats);
+        console.log('Tolls loaded:', tollsData?.length || 0);
       } catch (error) {
         console.error('Error loading media articles:', error);
       } finally {
         setIsLoading(false);
+        setProjectsLoading(false);
       }
     };
     loadMediaData();
+  }, []);
+
+  useEffect(() => {
+    const fetchPartners = async () => {
+      setPartnersLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('csr_partners')
+          .select('id, name, company_name')
+          .order('name');
+        if (error) throw error;
+        setCSRPartners(data || []);
+      } catch (err) {
+        console.error('Error fetching CSR partners:', err);
+        setCSRPartners([]);
+      } finally {
+        setPartnersLoading(false);
+      }
+    };
+
+    fetchPartners();
   }, []);
 
   // Apply filters whenever they change
@@ -103,20 +119,37 @@ const MediaPage = () => {
     const applyFilters = async () => {
       setIsLoading(true);
       try {
-        let filtered = await getAllArticles();
+        let filtered = await getAllArticles(undefined, { isArticle: false });
 
         if (filterType !== 'all') {
-          filtered = await getArticlesByMediaType(filterType);
+          filtered = await getArticlesByMediaType(filterType, { isArticle: false });
         }
+
+        filtered = filtered.filter(article => article.is_article === false);
+        filtered = filtered.filter(article => article.is_article !== true);
 
         if (filterNewsChannel !== 'all' && filtered.length > 0) {
           const channelFiltered = filtered.filter(item => item.sub_category === filterNewsChannel);
           filtered = channelFiltered;
         }
 
-        if (filterCategory !== 'all' && filtered.length > 0) {
-          const categoryFiltered = filtered.filter(item => item.category === filterCategory);
-          filtered = categoryFiltered;
+        if (filterPartner !== 'all' && filtered.length > 0) {
+          const partnerFiltered = filtered.filter(item => {
+            const metadata = item.metadata as Record<string, unknown> | undefined;
+            const itemPartnerId = item.csr_parter_id || (metadata?.csr_partner_id as string | undefined);
+            return itemPartnerId === filterPartner;
+          });
+          filtered = partnerFiltered;
+        }
+
+        // Filter by toll (using metadata or direct field)
+        if (filterToll !== 'all' && filtered.length > 0) {
+          const tollFiltered = filtered.filter(item => {
+            const metadata = item.metadata as Record<string, unknown> | undefined;
+            const itemTollId = item.toll_id || (metadata?.toll_id as string | undefined);
+            return itemTollId === filterToll;
+          });
+          filtered = tollFiltered;
         }
 
         const formattedArticles: MediaItem[] = filtered.map(article => ({
@@ -132,7 +165,11 @@ const MediaPage = () => {
     };
 
     applyFilters();
-  }, [filterType, filterNewsChannel, filterCategory]);
+  }, [filterType, filterNewsChannel, filterToll, filterPartner]);
+
+  useEffect(() => {
+    setFilterToll('all');
+  }, [filterPartner]);
 
   // Handle upload form submission
   const handleUploadMedia = async (e: React.FormEvent) => {
@@ -146,57 +183,96 @@ const MediaPage = () => {
     setIsUploading(true);
     try {
       interface MediaData extends Omit<MediaArticle, 'id' | 'created_at' | 'updated_at'> {
-        csr_partner_id?: string;
+        csr_parter_id?: string;
+        toll_id?: string;
+        is_article?: boolean;
+        metadata?: Record<string, unknown>;
       }
       
+      const metadataPayload: Record<string, unknown> = {};
+      if (uploadForm.toll_id) metadataPayload.toll_id = uploadForm.toll_id;
+      if (uploadForm.csr_partner_id) metadataPayload.csr_partner_id = uploadForm.csr_partner_id;
+
       const mediaData: MediaData = {
         media_code: `MEDIA-${Date.now()}`,
         title: uploadForm.title,
         description: uploadForm.description,
         media_type: uploadForm.media_type,
-        category: uploadForm.category,
         sub_category: uploadForm.news_channel,
         drive_link: uploadForm.drive_link,
         is_public: true,
         project_id: uploadForm.project_id as unknown as string,
         uploaded_by: currentUser?.id as unknown as string,
         created_by: currentUser?.id as unknown as string,
+        csr_parter_id: uploadForm.csr_partner_id || undefined,
+        toll_id: uploadForm.toll_id || undefined,
+        is_article: false,
+        metadata: Object.keys(metadataPayload).length > 0 ? metadataPayload : undefined,
       };
       
-      // Add CSR partner if selected
-      if (uploadForm.csr_partner_id) {
-        mediaData.csr_partner_id = uploadForm.csr_partner_id;
+      if (editingMediaId) {
+        // Update existing media
+        await updateArticle(editingMediaId, mediaData as Partial<MediaArticle>);
+        setEditingMediaId(null);
+      } else {
+        // Create new media
+        await createArticle(mediaData as MediaArticle);
       }
-      
-      await createArticle(mediaData as MediaArticle);
 
       // Reset form and reload data
-      setUploadForm({
-        title: '',
-        description: '',
-        media_type: 'photo',
-        category: '',
-        drive_link: '',
-        news_channel: '',
-        project_id: '',
-        csr_partner_id: '',
-      });
+      resetUploadForm();
       setShowUploadForm(false);
       
-      const articles = await getAllArticles();
-      const formattedArticles: MediaItem[] = articles.map(article => ({
+      const articles = await getAllArticles(undefined, { isArticle: false });
+      const filteredArticles = (articles as MediaArticle[]).filter(article => article.is_article === false);
+      const formattedArticles: MediaItem[] = filteredArticles.map(article => ({
         ...article,
         newsChannel: article.sub_category || 'General',
       }));
       setMediaItems(formattedArticles);
       
-      alert('Media uploaded successfully!');
+      alert(editingMediaId ? 'Media updated successfully!' : 'Media uploaded successfully!');
     } catch (error) {
       console.error('Error uploading media:', error);
       alert('Failed to upload media. Please try again.');
     } finally {
       setIsUploading(false);
     }
+  };
+
+  // Reset upload form
+  const resetUploadForm = () => {
+    setUploadForm({
+      title: '',
+      description: '',
+      media_type: 'photo',
+      drive_link: '',
+      news_channel: '',
+      project_id: '',
+      csr_partner_id: '',
+      toll_id: '',
+    });
+    setEditingMediaId(null);
+  };
+
+  // Handle edit media - opens the update modal
+  const handleEditMedia = (item: MediaItem) => {
+    const metadata = item.metadata as Record<string, unknown> | undefined;
+    const existingPartnerId = item.csr_parter_id || (metadata?.csr_partner_id as string | undefined) || '';
+    const existingTollId = item.toll_id || (metadata?.toll_id as string | undefined) || '';
+    setUploadForm({
+      title: item.title || '',
+      description: item.description || '',
+      media_type: item.media_type as 'photo' | 'video' | 'document' | 'pdf' | 'newspaper_cutting' | 'certificate' | 'report',
+      drive_link: item.drive_link || '',
+      news_channel: item.sub_category || '',
+      project_id: item.project_id || '',
+      csr_partner_id: existingPartnerId,
+      toll_id: existingTollId,
+    });
+    setEditingMediaId(item.id);
+    setShowUpdateModal(true);
+    setShowDetailModal(false);
   };
 
   // Handle delete with confirmation
@@ -213,19 +289,48 @@ const MediaPage = () => {
     }
   };
 
-  // Handle view increment
-  const handleViewMedia = async (id: string, link: string) => {
-    try {
-      await incrementViewsCount(id);
-      window.open(link, '_blank');
-    } catch (error) {
-      console.error('Error incrementing views:', error);
+  // Handle opening detail modal
+  const handleOpenDetailModal = (item: MediaItem) => {
+    setSelectedMedia(item);
+    setShowDetailModal(true);
+  };
+
+  // Get embed URL for Google Drive
+  const getEmbedUrl = (driveLink: string): string => {
+    // Handle Google Drive links
+    if (driveLink.includes('drive.google.com')) {
+      // Extract file ID from various Google Drive URL formats
+      let fileId = '';
+      
+      // Format: https://drive.google.com/file/d/FILE_ID/view
+      const fileMatch = driveLink.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+      if (fileMatch) {
+        fileId = fileMatch[1];
+      }
+      
+      // Format: https://drive.google.com/open?id=FILE_ID
+      const openMatch = driveLink.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+      if (openMatch) {
+        fileId = openMatch[1];
+      }
+      
+      if (fileId) {
+        return `https://drive.google.com/file/d/${fileId}/preview`;
+      }
     }
+    
+    // Return original link if not a Google Drive link
+    return driveLink;
   };
 
   const mediaTypeOptions = ['photo', 'video', 'document', 'pdf', 'newspaper_cutting', 'certificate', 'report'];
   const newsChannelOptions = ['News Channel', 'Social Media', 'Internal Updates', 'Client Reports', 'General'];
-  const categoryOptions = ['Project Updates', 'Training', 'Events', 'Documentation', 'Impact'];
+  const availableFilterTolls = filterPartner === 'all' ? [] : tolls.filter(toll => toll.csr_partner_id === filterPartner);
+  const uploadFormTolls = uploadForm.csr_partner_id ? tolls.filter(toll => toll.csr_partner_id === uploadForm.csr_partner_id) : [];
+  const uploadProjectsForPartner = useMemo(() => {
+    if (!uploadForm.csr_partner_id) return [];
+    return projects.filter(project => project.csr_partner_id === uploadForm.csr_partner_id);
+  }, [uploadForm.csr_partner_id, projects]);
 
   return (
     <div className="space-y-6">
@@ -242,30 +347,9 @@ const MediaPage = () => {
         </motion.button>
       </div>
 
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <motion.div className="bg-white rounded-xl shadow p-4">
-          <p className="text-gray-600 text-sm">Total Items</p>
-          <p className="text-3xl font-bold text-emerald-600">{stats.total}</p>
-        </motion.div>
-        <motion.div className="bg-white rounded-xl shadow p-4">
-          <p className="text-gray-600 text-sm">Published</p>
-          <p className="text-3xl font-bold text-blue-600">{stats.published}</p>
-        </motion.div>
-        <motion.div className="bg-white rounded-xl shadow p-4">
-          <p className="text-gray-600 text-sm">Draft</p>
-          <p className="text-3xl font-bold text-yellow-600">{stats.draft}</p>
-        </motion.div>
-        <motion.div className="bg-white rounded-xl shadow p-4">
-          <p className="text-gray-600 text-sm">Pending</p>
-          <p className="text-3xl font-bold text-orange-600">{stats.pending}</p>
-        </motion.div>
-      </div>
-
       {/* Filters */}
       <div className="bg-white rounded-2xl shadow-lg p-6">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">Filter Media</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Media Type</label>
             <select
@@ -293,17 +377,45 @@ const MediaPage = () => {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">CSR Partner</label>
             <select
-              value={filterCategory}
-              onChange={(e) => setFilterCategory(e.target.value)}
+              value={filterPartner}
+              onChange={(e) => setFilterPartner(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
             >
-              <option value="all">All Categories</option>
-              {categoryOptions.map(category => (
-                <option key={category} value={category}>{category}</option>
-              ))}
+              <option value="all">All Partners</option>
+              {partnersLoading ? (
+                <option disabled>Loading partners...</option>
+              ) : csrPartners.length > 0 ? (
+                csrPartners.map(partner => (
+                  <option key={partner.id} value={partner.id}>{partner.name}{partner.company_name ? ` (${partner.company_name})` : ''}</option>
+                ))
+              ) : (
+                <option disabled>No partners available</option>
+              )}
             </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Toll</label>
+            {filterPartner === 'all' || availableFilterTolls.length === 0 ? (
+              <select
+                disabled
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-400 cursor-not-allowed"
+              >
+                <option>No tolls available</option>
+              </select>
+            ) : (
+              <select
+                value={filterToll}
+                onChange={(e) => setFilterToll(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="all">All Tolls</option>
+                {availableFilterTolls.map(toll => (
+                  <option key={toll.id} value={toll.id}>{toll.toll_name || toll.poc_name}</option>
+                ))}
+              </select>
+            )}
           </div>
         </div>
       </div>
@@ -315,73 +427,134 @@ const MediaPage = () => {
           animate={{ opacity: 1, y: 0 }}
           className="bg-white rounded-2xl shadow-lg p-6"
         >
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">Upload New Media</h3>
+          <h3 className="text-lg font-semibold text-gray-800 mb-4">
+            {editingMediaId ? 'Edit Media' : 'Upload New Media'}
+          </h3>
           <form onSubmit={handleUploadMedia} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <input
-                type="text"
-                placeholder="Media Title *"
-                value={uploadForm.title}
-                onChange={(e) => setUploadForm({...uploadForm, title: e.target.value})}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-              />
-              <select
-                value={uploadForm.media_type}
-                onChange={(e) => setUploadForm({...uploadForm, media_type: e.target.value as 'photo' | 'video' | 'document' | 'pdf' | 'newspaper_cutting' | 'certificate' | 'report'})}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-              >
-                {mediaTypeOptions.map(type => (
-                  <option key={type} value={type}>{type.charAt(0).toUpperCase() + type.slice(1).replace('_', ' ')}</option>
-                ))}
-              </select>
-              <input
-                type="text"
-                placeholder="Category"
-                value={uploadForm.category}
-                onChange={(e) => setUploadForm({...uploadForm, category: e.target.value})}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-              />
-              <select
-                value={uploadForm.news_channel}
-                onChange={(e) => setUploadForm({...uploadForm, news_channel: e.target.value})}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-              >
-                <option value="">Select Channel</option>
-                {newsChannelOptions.map(channel => (
-                  <option key={channel} value={channel}>{channel}</option>
-                ))}
-              </select>
-              <input
-                type="text"
-                placeholder="Drive Link *"
-                value={uploadForm.drive_link}
-                onChange={(e) => setUploadForm({...uploadForm, drive_link: e.target.value})}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-              />
-              <select
-                value={uploadForm.project_id}
-                onChange={(e) => setUploadForm({...uploadForm, project_id: e.target.value})}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-              >
-                <option value="">Select Project *</option>
-                {projects.length > 0 ? projects.map((project: {id: string; name: string; project_code: string}) => (
-                  <option key={project.id} value={project.id}>{project.name} ({project.project_code})</option>
-                )) : (
-                  <option disabled>Loading projects...</option>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Media Title *</label>
+                <input
+                  type="text"
+                  placeholder="Media Title"
+                  value={uploadForm.title}
+                  onChange={(e) => setUploadForm({...uploadForm, title: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Media Type</label>
+                <select
+                  value={uploadForm.media_type}
+                  onChange={(e) => setUploadForm({...uploadForm, media_type: e.target.value as 'photo' | 'video' | 'document' | 'pdf' | 'newspaper_cutting' | 'certificate' | 'report'})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                >
+                  {mediaTypeOptions.map(type => (
+                    <option key={type} value={type}>{type.charAt(0).toUpperCase() + type.slice(1).replace('_', ' ')}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">News Channel</label>
+                <select
+                  value={uploadForm.news_channel}
+                  onChange={(e) => setUploadForm({...uploadForm, news_channel: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="">Select Channel</option>
+                  {newsChannelOptions.map(channel => (
+                    <option key={channel} value={channel}>{channel}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Drive Link *</label>
+                <input
+                  type="text"
+                  placeholder="Drive Link"
+                  value={uploadForm.drive_link}
+                  onChange={(e) => setUploadForm({...uploadForm, drive_link: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">CSR Partner (Optional)</label>
+                <select
+                  value={uploadForm.csr_partner_id}
+                  onChange={(e) => setUploadForm(prev => ({ ...prev, csr_partner_id: e.target.value, toll_id: '' }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="">Select CSR Partner</option>
+                  {partnersLoading ? (
+                    <option disabled>Loading partners...</option>
+                  ) : csrPartners.length > 0 ? (
+                    csrPartners.map(partner => (
+                      <option key={partner.id} value={partner.id}>{partner.name}{partner.company_name ? ` (${partner.company_name})` : ''}</option>
+                    ))
+                  ) : (
+                    <option disabled>No partners available</option>
+                  )}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Project *</label>
+                <select
+                  value={uploadForm.project_id}
+                  onChange={(e) => setUploadForm({...uploadForm, project_id: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                  disabled={projectsLoading}
+                >
+                  <option value="">Select Project</option>
+                  {projectsLoading ? (
+                    <option disabled>Loading projects...</option>
+                  ) : uploadForm.csr_partner_id ? (
+                    uploadProjectsForPartner.length > 0 ? (
+                      uploadProjectsForPartner.map(project => (
+                        <option key={project.id} value={project.id}>{project.name} ({project.project_code})</option>
+                      ))
+                    ) : (
+                      <option disabled>No projects found for selected partner</option>
+                    )
+                  ) : projects.length > 0 ? (
+                    projects.map(project => (
+                      <option key={project.id} value={project.id}>{project.name} ({project.project_code})</option>
+                    ))
+                  ) : (
+                    <option disabled>No projects available</option>
+                  )}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Toll (Optional)</label>
+                {uploadForm.csr_partner_id ? (
+                  uploadFormTolls.length > 0 ? (
+                    <select
+                      value={uploadForm.toll_id}
+                      onChange={(e) => setUploadForm(prev => ({ ...prev, toll_id: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                    >
+                      <option value="">Select Toll</option>
+                      {uploadFormTolls.map(toll => (
+                        <option key={toll.id} value={toll.id}>{toll.toll_name || toll.poc_name}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <select
+                      disabled
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-400 cursor-not-allowed"
+                    >
+                      <option>No tolls for selected partner</option>
+                    </select>
+                  )
+                ) : (
+                  <select
+                    disabled
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-400 cursor-not-allowed"
+                  >
+                    <option>Select CSR partner to load tolls</option>
+                  </select>
                 )}
-              </select>
-              <select
-                value={uploadForm.csr_partner_id}
-                onChange={(e) => setUploadForm({...uploadForm, csr_partner_id: e.target.value})}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-              >
-                <option value="">Select CSR Partner (Optional)</option>
-                {csrPartners.length > 0 ? csrPartners.map((partner: {id: string; name: string; partner_code: string}) => (
-                  <option key={partner.id} value={partner.id}>{partner.name} ({partner.partner_code})</option>
-                )) : (
-                  <option disabled>Loading partners...</option>
-                )}
-              </select>
+              </div>
             </div>
             <textarea
               placeholder="Description"
@@ -393,7 +566,10 @@ const MediaPage = () => {
             <div className="flex justify-end space-x-3">
               <button
                 type="button"
-                onClick={() => setShowUploadForm(false)}
+                onClick={() => {
+                  setShowUploadForm(false);
+                  resetUploadForm();
+                }}
                 className="px-6 py-2 bg-gray-300 hover:bg-gray-400 text-gray-800 rounded-lg transition-colors"
               >
                 Cancel
@@ -403,7 +579,7 @@ const MediaPage = () => {
                 disabled={isUploading}
                 className="px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors disabled:opacity-50"
               >
-                {isUploading ? 'Uploading...' : 'Upload'}
+                {isUploading ? 'Saving...' : (editingMediaId ? 'Update' : 'Upload')}
               </button>
             </div>
           </form>
@@ -431,51 +607,57 @@ const MediaPage = () => {
                 transition={{ delay: index * 0.05 }}
                 className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow"
               >
-                <div className="bg-emerald-50 p-8 flex items-center justify-center">
-                  {item.media_type === 'video' ? (
-                    <Video className="w-16 h-16 text-emerald-600" />
+                {/* Iframe preview for drive link */}
+                <div className="bg-gray-100 h-48 overflow-hidden">
+                  {item.drive_link ? (
+                    <iframe
+                      src={getEmbedUrl(item.drive_link)}
+                      className="w-full h-full border-0"
+                      title={item.title}
+                      loading="lazy"
+                      allowFullScreen
+                      scrolling="no"
+                      style={{ border: 'none' }}
+                    />
                   ) : (
-                    <ImageIcon className="w-16 h-16 text-emerald-600" />
+                    <div className="w-full h-full flex items-center justify-center bg-emerald-50">
+                      {item.media_type === 'video' ? (
+                        <Video className="w-16 h-16 text-emerald-600" />
+                      ) : item.media_type === 'document' || item.media_type === 'pdf' ? (
+                        <FileText className="w-16 h-16 text-emerald-600" />
+                      ) : (
+                        <ImageIcon className="w-16 h-16 text-emerald-600" />
+                      )}
+                    </div>
                   )}
                 </div>
-                <div className="p-6">
-                  <h4 className="font-semibold text-gray-800 mb-2">{item.title}</h4>
+                <div className="p-4">
+                  <h4 className="font-semibold text-gray-800 mb-1 truncate">{item.title}</h4>
                   {item.description && (
-                    <p className="text-sm text-gray-600 mb-3 line-clamp-2">{item.description}</p>
+                    <p className="text-sm text-gray-600 mb-2 line-clamp-2">{item.description}</p>
                   )}
-                  <div className="space-y-1 mb-4">
-                    <p className="text-xs text-gray-500">Type: {item.media_type}</p>
-                    {item.sub_category && <p className="text-xs text-gray-500">Channel: {item.sub_category}</p>}
-                    {item.created_at && <p className="text-xs text-gray-500">Date: {new Date(item.created_at).toLocaleDateString()}</p>}
+                  <div className="space-y-1 mb-3 text-xs text-gray-500">
+                    <p>Type: {item.media_type}</p>
+                    {item.sub_category && <p>Channel: {item.sub_category}</p>}
+                    {item.created_at && <p>Date: {new Date(item.created_at).toLocaleDateString()}</p>}
                   </div>
-                  <div className="flex items-center space-x-2 mb-3">
-                    <Eye className="w-4 h-4 text-gray-400" />
-                    <span className="text-xs text-gray-500">{item.views_count || 0} views</span>
-                    <Download className="w-4 h-4 text-gray-400 ml-2" />
-                    <span className="text-xs text-gray-500">{item.downloads_count || 0} downloads</span>
+                  <div className="flex items-center space-x-3 mb-3 text-xs text-gray-500">
+                    <span className="flex items-center space-x-1"><Eye className="w-3 h-3" /><span>{item.views_count || 0}</span></span>
+                    <span className="flex items-center space-x-1"><Download className="w-3 h-3" /><span>{item.downloads_count || 0}</span></span>
                   </div>
-                  {selectedMedia === item.id && (
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="bg-gray-50 p-3 rounded-lg mb-3 text-sm"
-                    >
-                      {item.drive_link && <p className="text-gray-700 truncate">{item.drive_link}</p>}
-                    </motion.div>
-                  )}
                   <div className="flex items-center space-x-2">
                     <button
-                      onClick={() => setSelectedMedia(selectedMedia === item.id ? null : item.id)}
+                      onClick={() => handleOpenDetailModal(item)}
                       className="flex-1 px-3 py-2 bg-emerald-50 text-emerald-700 rounded-lg hover:bg-emerald-100 text-sm font-medium transition-colors flex items-center justify-center space-x-1"
                     >
-                      <LinkIcon className="w-4 h-4" />
+                      <Eye className="w-4 h-4" />
                       <span>Details</span>
                     </button>
                     <button
-                      onClick={() => item.drive_link && handleViewMedia(item.id, item.drive_link)}
-                      className="px-3 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 text-sm font-medium transition-colors"
+                      onClick={() => handleEditMedia(item)}
+                      className="px-3 py-2 bg-yellow-50 text-yellow-700 rounded-lg hover:bg-yellow-100 text-sm font-medium transition-colors"
                     >
-                      View
+                      <Edit2 className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => handleDeleteMedia(item.id)}
@@ -490,6 +672,287 @@ const MediaPage = () => {
           </div>
         )}
       </div>
+
+      {/* Detail Modal with Large Preview */}
+      <AnimatePresence>
+        {showDetailModal && selectedMedia && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+            onClick={() => setShowDetailModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[90vh] overflow-hidden flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-4 border-b">
+                <h3 className="text-xl font-semibold text-gray-800">{selectedMedia.title}</h3>
+                <button
+                  onClick={() => setShowDetailModal(false)}
+                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                >
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+
+              {/* Modal Content */}
+              <div className="flex-1 bg-gray-100">
+                {selectedMedia.drive_link ? (
+                  <iframe
+                    src={getEmbedUrl(selectedMedia.drive_link)}
+                    title={selectedMedia.title}
+                    className="w-full h-full border-0"
+                    allow="autoplay; fullscreen; encrypted-media"
+                    allowFullScreen
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-gray-500">
+                    No drive link available
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Update Modal */}
+      <AnimatePresence>
+        {showUpdateModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+            onClick={() => { setShowUpdateModal(false); resetUploadForm(); }}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between p-4 border-b">
+                <h3 className="text-xl font-semibold text-gray-800">Update Media</h3>
+                <button
+                  onClick={() => { setShowUpdateModal(false); resetUploadForm(); }}
+                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                >
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+              <div className="p-6 overflow-y-auto max-h-[calc(90vh-160px)]">
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!uploadForm.title || !uploadForm.drive_link || !uploadForm.project_id) {
+                      alert('Please fill in all required fields');
+                      return;
+                    }
+                    setIsUploading(true);
+                    try {
+                      interface MediaData extends Omit<MediaArticle, 'id' | 'created_at' | 'updated_at'> {
+                        csr_parter_id?: string;
+                        toll_id?: string;
+                        is_article?: boolean;
+                        metadata?: Record<string, unknown>;
+                      }
+                      const metadataPayload: Record<string, unknown> = {};
+                      if (uploadForm.toll_id) metadataPayload.toll_id = uploadForm.toll_id;
+                      if (uploadForm.csr_partner_id) metadataPayload.csr_partner_id = uploadForm.csr_partner_id;
+                      const mediaData: MediaData = {
+                        media_code: `MEDIA-${Date.now()}`,
+                        title: uploadForm.title,
+                        description: uploadForm.description,
+                        media_type: uploadForm.media_type,
+                        sub_category: uploadForm.news_channel,
+                        drive_link: uploadForm.drive_link,
+                        is_public: true,
+                        project_id: uploadForm.project_id as unknown as string,
+                        uploaded_by: currentUser?.id as unknown as string,
+                        created_by: currentUser?.id as unknown as string,
+                        csr_parter_id: uploadForm.csr_partner_id || undefined,
+                        toll_id: uploadForm.toll_id || undefined,
+                        is_article: false,
+                        metadata: Object.keys(metadataPayload).length > 0 ? metadataPayload : undefined,
+                      };
+                      if (editingMediaId) {
+                        await updateArticle(editingMediaId, mediaData as Partial<MediaArticle>);
+                      }
+                      resetUploadForm();
+                      setShowUpdateModal(false);
+                      const articles = await getAllArticles(undefined, { isArticle: false });
+                      const filteredArticles = (articles as MediaArticle[]).filter(article => article.is_article === false);
+                      const formattedArticles: MediaItem[] = filteredArticles.map(article => ({
+                        ...article,
+                        newsChannel: article.sub_category || 'General',
+                      }));
+                      setMediaItems(formattedArticles);
+                      alert('Media updated successfully!');
+                    } catch (error) {
+                      console.error('Error updating media:', error);
+                      alert('Failed to update media. Please try again.');
+                    } finally {
+                      setIsUploading(false);
+                    }
+                  }}
+                  className="space-y-4"
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Media Title *</label>
+                      <input
+                        type="text"
+                        placeholder="Media Title"
+                        value={uploadForm.title}
+                        onChange={(e) => setUploadForm({...uploadForm, title: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Media Type</label>
+                      <select
+                        value={uploadForm.media_type}
+                        onChange={(e) => setUploadForm({...uploadForm, media_type: e.target.value as 'photo' | 'video' | 'document' | 'pdf' | 'newspaper_cutting' | 'certificate' | 'report'})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                      >
+                        {mediaTypeOptions.map(type => (
+                          <option key={type} value={type}>{type.charAt(0).toUpperCase() + type.slice(1).replace('_', ' ')}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">News Channel</label>
+                      <select
+                        value={uploadForm.news_channel}
+                        onChange={(e) => setUploadForm({...uploadForm, news_channel: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                      >
+                        <option value="">Select Channel</option>
+                        {newsChannelOptions.map(channel => (
+                          <option key={channel} value={channel}>{channel}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Drive Link *</label>
+                      <input
+                        type="text"
+                        placeholder="Drive Link"
+                        value={uploadForm.drive_link}
+                        onChange={(e) => setUploadForm({...uploadForm, drive_link: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">CSR Partner (Optional)</label>
+                      <select
+                        value={uploadForm.csr_partner_id}
+                        onChange={(e) => setUploadForm(prev => ({ ...prev, csr_partner_id: e.target.value, toll_id: '' }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                      >
+                        <option value="">Select CSR Partner</option>
+                        {csrPartners.map(partner => (
+                          <option key={partner.id} value={partner.id}>{partner.name}{partner.company_name ? ` (${partner.company_name})` : ''}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Project *</label>
+                      <select
+                        value={uploadForm.project_id}
+                        onChange={(e) => setUploadForm({...uploadForm, project_id: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                      >
+                        <option value="">Select Project</option>
+                        {uploadForm.csr_partner_id ? (
+                          uploadProjectsForPartner.length > 0 ? (
+                            uploadProjectsForPartner.map(project => (
+                              <option key={project.id} value={project.id}>{project.name} ({project.project_code})</option>
+                            ))
+                          ) : (
+                            <option disabled>No projects found for selected partner</option>
+                          )
+                        ) : projects.length > 0 ? (
+                          projects.map(project => (
+                            <option key={project.id} value={project.id}>{project.name} ({project.project_code})</option>
+                          ))
+                        ) : (
+                          <option disabled>No projects available</option>
+                        )}
+                      </select>
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Toll (Optional)</label>
+                      {uploadForm.csr_partner_id ? (
+                        uploadFormTolls.length > 0 ? (
+                          <select
+                            value={uploadForm.toll_id}
+                            onChange={(e) => setUploadForm(prev => ({ ...prev, toll_id: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                          >
+                            <option value="">Select Toll</option>
+                            {uploadFormTolls.map(toll => (
+                              <option key={toll.id} value={toll.id}>{toll.toll_name || toll.poc_name}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <select
+                            disabled
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-400 cursor-not-allowed"
+                          >
+                            <option>No tolls for selected partner</option>
+                          </select>
+                        )
+                      ) : (
+                        <select
+                          disabled
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-400 cursor-not-allowed"
+                        >
+                          <option>Select CSR partner to load tolls</option>
+                        </select>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                    <textarea
+                      placeholder="Description"
+                      value={uploadForm.description}
+                      onChange={(e) => setUploadForm({...uploadForm, description: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                      rows={3}
+                    />
+                  </div>
+                  <div className="flex justify-end space-x-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => { setShowUpdateModal(false); resetUploadForm(); }}
+                      className="px-6 py-2 bg-gray-300 hover:bg-gray-400 text-gray-800 rounded-lg transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isUploading}
+                      className="px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      {isUploading ? 'Saving...' : 'Update'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

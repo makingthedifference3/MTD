@@ -29,6 +29,10 @@ export interface MediaArticle {
   updated_at?: string;
   created_by?: string;
   is_public?: boolean;
+  metadata?: Record<string, unknown>;
+  csr_parter_id?: string;
+  toll_id?: string;
+  is_article?: boolean;
 }
 
 export interface ArticleStats {
@@ -38,13 +42,18 @@ export interface ArticleStats {
   pending: number;
 }
 
+export interface ArticleQueryOptions {
+  isArticle?: boolean;
+}
+
 // Get all articles with optional filtering
 export const getAllArticles = async (
-  status?: 'published' | 'draft' | 'pending'
+  status?: 'published' | 'draft' | 'pending',
+  options?: ArticleQueryOptions
 ): Promise<MediaArticle[]> => {
   try {
     let query = supabase.from('media_articles').select(
-      'id, media_code, project_id, title, description, media_type, category, sub_category, publication_date, reporter_name, uploaded_by, approved_by, approval_date, views_count, downloads_count, notes, created_at, updated_at, created_by, is_public'
+      'id, media_code, project_id, title, description, media_type, category, sub_category, drive_link, publication_date, reporter_name, uploaded_by, approved_by, approval_date, views_count, downloads_count, notes, created_at, updated_at, created_by, is_public, metadata, csr_parter_id, toll_id, is_article'
     );
 
     if (status) {
@@ -56,6 +65,10 @@ export const getAllArticles = async (
       } else if (status === 'pending') {
         query = query.is('approved_by', null).eq('is_public', false);
       }
+    }
+
+    if (options?.isArticle !== undefined) {
+      query = query.eq('is_article', options.isArticle);
     }
 
     const { data, error } = await query.order('created_at', { ascending: false });
@@ -279,13 +292,22 @@ export const getArticlesByNewsChannel = async (newsChannel: string): Promise<Med
 };
 
 // Get articles by media type
-export const getArticlesByMediaType = async (mediaType: string): Promise<MediaArticle[]> => {
+export const getArticlesByMediaType = async (
+  mediaType: string,
+  options?: ArticleQueryOptions
+): Promise<MediaArticle[]> => {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('media_articles')
       .select('*')
       .eq('media_type', mediaType)
       .order('created_at', { ascending: false });
+
+    if (options?.isArticle !== undefined) {
+      query = query.eq('is_article', options.isArticle);
+    }
+
+    const { data, error } = await query;
 
     if (error) throw error;
     return data || [];
