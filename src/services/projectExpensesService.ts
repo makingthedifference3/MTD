@@ -16,11 +16,13 @@ export interface ProjectExpense {
   total_amount: number;
   base_amount: number;
   tax_amount?: number;
-  status: 'draft' | 'submitted' | 'pending' | 'approved' | 'rejected' | 'reimbursed';
+  status: 'draft' | 'submitted' | 'pending' | 'approved' | 'rejected' | 'reimbursed' | 'paid';
   payment_method: 'Cash' | 'Cheque' | 'Online' | 'Card';
   submitted_by?: string;
   approved_by?: string;
   rejection_reason?: string;
+  csr_partner_id?: string;
+  toll_id?: string;
   created_at: string;
   updated_at: string;
 }
@@ -30,10 +32,12 @@ export interface ExpenseStats {
   pending: number;
   approved: number;
   rejected: number;
+  paid: number;
   totalAmount: number;
   pendingAmount: number;
   approvedAmount: number;
   rejectedAmount: number;
+  paidAmount: number;
 }
 
 export interface ExpenseSummary {
@@ -44,7 +48,7 @@ export interface ExpenseSummary {
   amount: number;
   date: string;
   submitted_by: string;
-  status: 'draft' | 'submitted' | 'pending' | 'approved' | 'rejected' | 'reimbursed';
+  status: 'draft' | 'submitted' | 'pending' | 'approved' | 'rejected' | 'reimbursed' | 'paid';
   description: string;
 }
 
@@ -126,6 +130,7 @@ export const projectExpensesService = {
       const pending = expenses.filter(e => e.status === 'pending' || e.status === 'submitted').length;
       const approved = expenses.filter(e => e.status === 'approved').length;
       const rejected = expenses.filter(e => e.status === 'rejected').length;
+      const paid = expenses.filter(e => e.status === 'paid').length;
 
       const totalAmount = expenses.reduce((sum, e) => sum + e.total_amount, 0);
       const pendingAmount = expenses
@@ -137,16 +142,21 @@ export const projectExpensesService = {
       const rejectedAmount = expenses
         .filter(e => e.status === 'rejected')
         .reduce((sum, e) => sum + e.total_amount, 0);
+      const paidAmount = expenses
+        .filter(e => e.status === 'paid')
+        .reduce((sum, e) => sum + e.total_amount, 0);
 
       return {
         total,
         pending,
         approved,
         rejected,
+        paid,
         totalAmount,
         pendingAmount,
         approvedAmount,
         rejectedAmount,
+        paidAmount,
       };
     } catch (error) {
       console.error('Error calculating expense stats:', error);
@@ -155,10 +165,12 @@ export const projectExpensesService = {
         pending: 0,
         approved: 0,
         rejected: 0,
+        paid: 0,
         totalAmount: 0,
         pendingAmount: 0,
         approvedAmount: 0,
         rejectedAmount: 0,
+        paidAmount: 0,
       };
     }
   },
@@ -247,6 +259,30 @@ export const projectExpensesService = {
       return data;
     } catch (error) {
       console.error('Error rejecting expense:', error);
+      return null;
+    }
+  },
+
+  async markAsPaid(expenseId: string, paidBy: string): Promise<ProjectExpense | null> {
+    try {
+      const { data, error } = await supabase
+        .from('project_expenses')
+        .update({
+          status: 'paid',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', expenseId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      
+      // Note: paidBy parameter kept for future use when paid_by field is added to schema
+      console.log('Expense marked as paid by:', paidBy);
+      
+      return data;
+    } catch (error) {
+      console.error('Error marking expense as paid:', error);
       return null;
     }
   },
