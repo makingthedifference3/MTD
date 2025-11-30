@@ -523,7 +523,7 @@ const ResultAnalysisPage = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-emerald-50/20 to-gray-50 p-4 md:p-8">
+    <div className="min-h-screen bg-linear-to-br from-gray-50 via-emerald-50/20 to-gray-50 p-4 md:p-8">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -594,7 +594,7 @@ const ResultAnalysisPage = () => {
               exit={{ opacity: 0, y: -10 }}
               className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3"
             >
-              <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
               <div>
                 <p className="font-medium text-red-800">Error</p>
                 <p className="text-sm text-red-600">{error}</p>
