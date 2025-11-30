@@ -63,15 +63,16 @@ const PMDashboard = () => {
       const project = filteredProjects.find(p => p.id === selectedProject);
       console.log('PMDashboard - Found project:', project?.name);
       if (project) {
+        const projectData = project as unknown as Record<string, unknown>;
         const projectWithDesc: ProjectWithBeneficiaries = {
           ...project,
           beneficiaryStats: {
             totalBeneficiaries: project.total_beneficiaries || 0,
-            mealsServed: project.meals_served || 0,
-            padsDistributed: project.pads_distributed || 0,
-            studentsEnrolled: project.students_enrolled || 0,
-            treesPlanted: project.trees_planted || 0,
-            schoolsRenovated: project.schools_renovated || 0,
+            mealsServed: (projectData.meals_served as number) || 0,
+            padsDistributed: (projectData.pads_distributed as number) || 0,
+            studentsEnrolled: (projectData.students_enrolled as number) || 0,
+            treesPlanted: (projectData.trees_planted as number) || 0,
+            schoolsRenovated: (projectData.schools_renovated as number) || 0,
           },
           description: project.description || 'No description available',
         };
@@ -100,15 +101,16 @@ const PMDashboard = () => {
   };
 
   const handleProjectClick = (project: Project) => {
+    const projectData = project as unknown as Record<string, unknown>;
     const projectWithDesc: ProjectWithBeneficiaries = {
       ...project,
       beneficiaryStats: {
         totalBeneficiaries: project.total_beneficiaries || 0,
-        mealsServed: project.meals_served || 0,
-        padsDistributed: project.pads_distributed || 0,
-        studentsEnrolled: project.students_enrolled || 0,
-        treesPlanted: project.trees_planted || 0,
-        schoolsRenovated: project.schools_renovated || 0,
+        mealsServed: (projectData.meals_served as number) || 0,
+        padsDistributed: (projectData.pads_distributed as number) || 0,
+        studentsEnrolled: (projectData.students_enrolled as number) || 0,
+        treesPlanted: (projectData.trees_planted as number) || 0,
+        schoolsRenovated: (projectData.schools_renovated as number) || 0,
       },
       description: project.description || 'No description available',
     };

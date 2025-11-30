@@ -15,6 +15,7 @@ export const IMPACT_METRIC_FORMATTERS: Record<ImpactMetricKey, (value: number) =
   students_enrolled: (value) => `${(value / 1000).toFixed(1)}K`,
   trees_planted: (value) => `${(value / 1000).toFixed(1)}K`,
   schools_renovated: (value) => value.toLocaleString(),
+  custom: (value) => value.toLocaleString(),
 };
 
 export const renderImpactMetricCard = (key: ImpactMetricKey, formattedValue: string) => {

@@ -132,8 +132,8 @@ export const fetchProjectsByPartner = async (
       return [];
     }
 
-    const projects = (data || []) as Project[];
-    return normalizeTollRelation(projects);
+    const projects = normalizeTollRelation((data || []) as unknown as Project[]);
+    return projects;
   } catch (error) {
     console.error('Exception fetching projects:', error);
     return [];
@@ -159,8 +159,8 @@ export const fetchAllProjects = async (): Promise<Project[]> => {
     console.log('fetchAllProjects - Raw data from Supabase:', data);
     console.log('fetchAllProjects - Sample projects with budget:', data?.slice(0, 3).map(p => ({ name: p.name, total_budget: p.total_budget, status: p.status })));
     
-    const projects = (data || []) as Project[];
-    return normalizeTollRelation(projects);
+    const projects = normalizeTollRelation((data || []) as unknown as Project[]);
+    return projects;
   } catch (error) {
     console.error('Exception fetching all projects:', error);
     return [];

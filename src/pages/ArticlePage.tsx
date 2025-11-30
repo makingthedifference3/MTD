@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, Newspaper, Trash2, Filter, Calendar, Link as LinkIcon } from 'lucide-react';
 import { supabase } from '@/services/supabaseClient';
-import { getAllArticles, createArticle, deleteArticle, type MediaArticle } from '@/services/mediaArticleService';
+import { deleteArticle, type MediaArticle } from '@/services/mediaArticleService';
 
 const ArticlePage = () => {
   const formRef = useRef<HTMLDivElement>(null);
@@ -257,7 +257,7 @@ const ArticlePage = () => {
     }
 
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('media_articles')
         .insert([{
           media_code: `ART-${Date.now()}`,
