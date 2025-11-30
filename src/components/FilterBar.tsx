@@ -20,6 +20,7 @@ const FilterBar = ({ workFilter = '', onWorkFilterChange, workOptions = [] }: Fi
     tolls,
     isLoading,
     error,
+    filtersLocked,
     setSelectedPartner,
     setSelectedProject,
     setSelectedToll,
@@ -97,11 +98,23 @@ const FilterBar = ({ workFilter = '', onWorkFilterChange, workOptions = [] }: Fi
 
   return (
     <div className="bg-white/70 backdrop-blur-xl border-b border-emerald-100 px-8 py-4">
+      {filtersLocked && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 flex items-center gap-2">
+          <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+          <span className="text-sm font-medium text-blue-800">
+            Project view is locked to: <strong>{selectedPartnerName}</strong>
+            {selectedTollName && <> → <strong>{selectedTollName}</strong></>}
+            {selectedProjectName && <> → <strong>{selectedProjectName}</strong></>}
+          </span>
+        </div>
+      )}
       <div className="flex items-center gap-4 flex-wrap">
         {/* CSR Partner Dropdown */}
         <div className="flex-1 min-w-[250px]">
           <label className="block text-xs font-semibold text-emerald-700 mb-2">
-            CSR Partner
+            CSR Partner {filtersLocked && <span className="text-blue-600">(Locked)</span>}
           </label>
           <div className="relative">
             <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-600" />
@@ -114,7 +127,8 @@ const FilterBar = ({ workFilter = '', onWorkFilterChange, workOptions = [] }: Fi
               <select
                 value={selectedPartner || 'all'}
                 onChange={(e) => handlePartnerChange(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl border-2 border-emerald-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all bg-white text-gray-900 font-medium text-sm appearance-none cursor-pointer hover:border-emerald-300"
+                disabled={filtersLocked}
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl border-2 border-emerald-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all bg-white text-gray-900 font-medium text-sm appearance-none cursor-pointer hover:border-emerald-300 disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-gray-50"
               >
                 <option value="all">Overall (All Partners)</option>
                 {csrPartners.map((partner: CSRPartner) => (
@@ -139,14 +153,16 @@ const FilterBar = ({ workFilter = '', onWorkFilterChange, workOptions = [] }: Fi
 
         {/* Project Dropdown */}
         <div className="flex-1 min-w-[250px]">
-          <label className="block text-xs font-semibold text-emerald-700 mb-2">Project</label>
+          <label className="block text-xs font-semibold text-emerald-700 mb-2">
+            Project {filtersLocked && <span className="text-blue-600">(Locked)</span>}
+          </label>
           <div className="relative">
             <FolderKanban className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-600" />
             <select
               value={selectedProject || 'all'}
               onChange={(e) => handleProjectChange(e.target.value)}
-              disabled={!selectedPartner || isLoading}
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl border-2 border-emerald-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all bg-white text-gray-900 font-medium text-sm appearance-none cursor-pointer hover:border-emerald-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-50"
+              disabled={!selectedPartner || isLoading || filtersLocked}
+              className="w-full pl-10 pr-4 py-2.5 rounded-xl border-2 border-emerald-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all bg-white text-gray-900 font-medium text-sm appearance-none cursor-pointer hover:border-emerald-300 disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-gray-50"
             >
               <option value="all">
                 {selectedPartner ? 'All Projects (Partner-wise)' : 'Select Partner First'}
@@ -173,14 +189,16 @@ const FilterBar = ({ workFilter = '', onWorkFilterChange, workOptions = [] }: Fi
         {/* Toll Dropdown */}
         {selectedPartner && (
           <div className="flex-1 min-w-[250px]">
-            <label className="block text-xs font-semibold text-emerald-700 mb-2">Toll / Subcompany</label>
+            <label className="block text-xs font-semibold text-emerald-700 mb-2">
+              Toll / Subcompany {filtersLocked && <span className="text-blue-600">(Locked)</span>}
+            </label>
             <div className="relative">
               <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-600" />
               <select
                 value={selectedToll || 'all'}
                 onChange={(e) => handleTollChange(e.target.value)}
-                disabled={tolls.length === 0 || isLoading}
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl border-2 border-emerald-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all bg-white text-gray-900 font-medium text-sm appearance-none cursor-pointer hover:border-emerald-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-50"
+                disabled={tolls.length === 0 || isLoading || filtersLocked}
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl border-2 border-emerald-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all bg-white text-gray-900 font-medium text-sm appearance-none cursor-pointer hover:border-emerald-300 disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-gray-50"
               >
                 <option value="all">{tolls.length ? 'All Tolls (Partner-wise)' : 'No tolls available'}</option>
                 {tolls.map((toll: Toll) => (

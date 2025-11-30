@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { FormEvent, Dispatch, SetStateAction } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, FolderKanban, DollarSign, X, MapPin, Calendar, Loader } from 'lucide-react';
+import { Plus, FolderKanban, DollarSign, X, MapPin, Calendar, Loader, LayoutDashboard } from 'lucide-react';
 import { useFilter } from '../context/useFilter';
 import { useAuth } from '../context/useAuth';
+import { useNavigate } from 'react-router-dom';
 import FilterBar from '../components/FilterBar';
 import type { Project } from '../services/filterService';
 import type { Project as ProjectServiceProject } from '../services/projectsService';
@@ -14,6 +15,7 @@ import {
   addProjectTeamMembers,
   replaceProjectTeamMembers,
   fetchProjectTeamMembers,
+  getUserRoleInProject,
   type ProjectTeamMemberWithUser,
   type ProjectTeamRole,
 } from '../services/projectTeamMembersService';
@@ -121,7 +123,7 @@ const mapProjectToFormData = (
     project.beneficiary_type || projectMetadataWithName.metadata?.beneficiary_type || 'Direct Beneficiaries';
   const projectState = project.state ?? '';
   const stateIsCustom = Boolean(projectState && !INDIAN_STATES.includes(projectState as typeof INDIAN_STATES[number]));
-  const projectNameIsCustom = !PROJECT_NAME_OPTIONS.includes(project.name);
+  const projectNameIsCustom = !PROJECT_NAME_OPTIONS.includes(project.name as typeof PROJECT_NAME_OPTIONS[number]);
 
   return {
     name: project.name,
@@ -156,8 +158,9 @@ const SECONDARY_IMPACT_METRICS: ImpactMetricKey[] = ['students_enrolled', 'schoo
 import type { Project as ServiceProject } from '../services/projectsService';
 
 const ProjectsPage = () => {
-  const { projects, filteredProjects, selectedPartner, selectedProject, refreshData } = useFilter();
-  const { currentRole } = useAuth();
+  const { projects, filteredProjects, selectedPartner, selectedProject, refreshData, setSelectedPartner, setSelectedProject, setSelectedToll } = useFilter();
+  const { currentRole, currentUser } = useAuth();
+  const navigate = useNavigate();
   const [selectedProjectDetails, setSelectedProjectDetails] = useState<Project | null>(null);
   const [selectedProjectTeamMembers, setSelectedProjectTeamMembers] = useState<ProjectTeamMemberWithUser[]>([]);
   const [teamMembersLoading, setTeamMembersLoading] = useState(false);
@@ -693,6 +696,60 @@ const ProjectsPage = () => {
     );
   };
 
+  // Handle viewing project dashboard
+  const handleViewProjectDashboard = async (project: Project) => {
+    if (!currentUser) return;
+
+    try {
+      // Get user's role in this project
+      const userRole = currentRole === 'admin' 
+        ? 'admin' 
+        : await getUserRoleInProject(currentUser.id, project.id);
+
+      console.log('User role in project:', userRole);
+      console.log('Current role from auth:', currentRole);
+
+      if (!userRole && currentRole !== 'admin') {
+        alert('You are not assigned to this project');
+        return;
+      }
+
+      // Normalize role to lowercase with underscores (e.g., "Project Manager" -> "project_manager")
+      const normalizedRole = userRole?.toLowerCase().replace(/\s+/g, '_') || 'team_member';
+      console.log('Normalized role:', normalizedRole);
+
+      // Store project context in localStorage for dashboard to pick up
+      localStorage.setItem('projectContext', JSON.stringify({
+        projectId: project.id,
+        partnerId: project.csr_partner_id,
+        tollId: project.toll_id,
+        projectRole: normalizedRole,
+      }));
+
+      // Set filters and lock them
+      setSelectedPartner(project.csr_partner_id);
+      if (project.toll_id) {
+        setSelectedToll(project.toll_id);
+      }
+      setSelectedProject(project.id);
+
+      // Navigate to appropriate dashboard based on role
+      const roleRouteMap: Record<string, string> = {
+        'admin': '/admin-dashboard',
+        'project_manager': '/pm-dashboard',
+        'accountant': '/accountant-dashboard',
+        'team_member': '/team-member-dashboard',
+      };
+
+      const route = roleRouteMap[normalizedRole] || '/team-member-dashboard';
+      console.log('Navigating to route:', route, 'for normalized role:', normalizedRole);
+      navigate(route);
+    } catch (error) {
+      console.error('Error viewing project dashboard:', error);
+      alert('Failed to open project dashboard');
+    }
+  };
+
   // Get unique work values for filter dropdown
   const uniqueWorkValues = useMemo(() => {
     const workSet = new Set<string>();
@@ -905,11 +962,20 @@ const ProjectsPage = () => {
               </div>
             </div>
 
-            <button 
-              onClick={() => setSelectedProjectDetails(project)}
-              className="w-full mt-4 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-medium py-2 rounded-lg transition-colors">
-              View Details
-            </button>
+            <div className="flex gap-2 mt-4">
+              <button 
+                onClick={() => setSelectedProjectDetails(project)}
+                className="flex-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-medium py-2 rounded-lg transition-colors">
+                View Details
+              </button>
+              <button
+                onClick={() => handleViewProjectDashboard(project)}
+                className="flex-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-medium py-2 rounded-lg transition-colors flex items-center justify-center gap-2"
+              >
+                <LayoutDashboard className="w-4 h-4" />
+                View Dashboard
+              </button>
+            </div>
           </motion.div>
         ))}
       </div>

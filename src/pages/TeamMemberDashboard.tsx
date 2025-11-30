@@ -5,8 +5,12 @@ import * as taskService from '../services/taskService';
 import type { TaskWithProject, TaskStats } from '../services/taskService';
 import { useFilter } from '../context/useFilter';
 import { useAuth } from '../context/useAuth';
+import { useProjectContextLock } from '../hooks/useProjectContext';
 
 const TeamMemberDashboard = () => {
+  // Lock filters when viewing from project context
+  useProjectContextLock();
+
   const { selectedProject } = useFilter();
   const { currentUser } = useAuth();
   const [allTasks, setAllTasks] = useState<TaskWithProject[]>([]);

@@ -1,13 +1,3 @@
-/**
- * Result Analysis Page
- * 
- * Allows admins to:
- * 1. Upload pre/post campaign question papers
- * 2. Upload Google Drive links with student answer sheets
- * 3. Automatically extract and grade using Gemini AI
- * 4. Compare pre vs post campaign performance
- */
-
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -179,6 +169,10 @@ const ResultAnalysisPage = () => {
           const { studentInfo, answers } = await geminiService.extractStudentAnswerSheet(preStudentFiles[i]);
 
           // Grade the answers
+          if (!preQuestionPaper?.extractedData?.questions) {
+            throw new Error('Pre-campaign question paper not properly extracted');
+          }
+          
           const { gradedAnswers, score, totalMarks, percentage } = await geminiService.gradeStudentAnswers(
             answers,
             preQuestionPaper.extractedData.questions
@@ -341,6 +335,10 @@ const ResultAnalysisPage = () => {
           const { studentInfo, answers } = await geminiService.extractStudentAnswerSheet(postStudentFiles[i]);
 
           // Grade the answers
+          if (!postQuestionPaper?.extractedData?.questions) {
+            throw new Error('Post-campaign question paper not properly extracted');
+          }
+          
           const { gradedAnswers, score, totalMarks, percentage } = await geminiService.gradeStudentAnswers(
             answers,
             postQuestionPaper.extractedData.questions

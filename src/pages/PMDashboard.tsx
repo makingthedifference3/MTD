@@ -9,6 +9,7 @@ import {
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useFilter } from '../context/useFilter';
 import { useProjectContext } from '../context/useProjectContext';
+import { useProjectContextLock } from '../hooks/useProjectContext';
 import FilterBar from '../components/FilterBar';
 import LockedFilterBar from '../components/LockedFilterBar';
 import type { Project } from '../services/filterService';
@@ -63,6 +64,9 @@ interface ProjectWithBeneficiaries extends Project {
 }
 
 const PMDashboardInner = () => {
+  // Lock filters when viewing from project context
+  useProjectContextLock();
+
   const {
     csrPartners,
     selectedPartner,

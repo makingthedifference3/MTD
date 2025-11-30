@@ -1,117 +1,4 @@
-﻿// import { useState } from 'react';
-// import type { ReactNode } from 'react';
-// import { motion, AnimatePresence } from 'framer-motion';
-// import { Menu, X, LogOut, LayoutDashboard, Briefcase, CheckSquare, Image, FileText, Users, Calendar, DollarSign, Receipt, CreditCard, BarChart3 } from 'lucide-react';
-// import { useAuth } from '../context/AuthContext';
-
-// interface SidebarProps {
-//   children: ReactNode;
-//   currentPage: string;
-//   onNavigate: (page: string) => void;
-// }
-
-// const Sidebar = ({ children, currentPage, onNavigate }: SidebarProps) => {
-//   const [isOpen, setIsOpen] = useState(true);
-//   const { currentRole, currentUser, logout } = useAuth();
-
-//   const menuItems = [
-//     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'accountant', 'project-manager'] },
-//     { id: 'csr-partners', label: 'CSR Partners', icon: Briefcase, roles: ['admin', 'accountant', 'project-manager'] },
-//     { id: 'todo', label: 'To-Do List', icon: CheckSquare, roles: ['admin', 'accountant', 'project-manager'] },
-//     { id: 'tasks', label: 'Task Assignment', icon: CheckSquare, roles: ['team-member'] },
-//     { id: 'media', label: 'Media', icon: Image, roles: ['admin', 'project-manager'] },
-//     { id: 'article', label: 'Article', icon: FileText, roles: ['admin', 'project-manager'] },
-//     { id: 'team-members', label: 'Team Members', icon: Users, roles: ['admin', 'project-manager'] },
-//     { id: 'calendar', label: 'Calendar', icon: Calendar, roles: ['admin', 'accountant', 'project-manager'] },
-//     { id: 'project-expenses', label: 'Project Expenses', icon: DollarSign, roles: ['admin', 'accountant', 'project-manager'] },
-//     { id: 'csr-budget', label: 'CSR Budget', icon: CreditCard, roles: ['admin', 'accountant'] },
-//     { id: 'bills', label: 'Bills', icon: Receipt, roles: ['admin', 'project-manager', 'team-member'] },
-//     { id: 'analysis-report', label: 'Analysis Report', icon: BarChart3, roles: ['admin', 'project-manager'] },
-//   ];
-
-//   const filteredMenuItems = menuItems.filter((item) => item.roles.includes(currentRole || ''));
-
-//   return (
-//     <div className="flex h-screen bg-slate-100">
-//       <AnimatePresence>
-//         {isOpen && (
-//           <motion.aside initial={{ x: -300 }} animate={{ x: 0 }} exit={{ x: -300 }} className="w-72 bg-white border-r border-gray-200 text-gray-900 shadow-sm flex flex-col">
-//             <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-//               <h1 className="text-2xl font-bold text-emerald-600">MTD CSR</h1>
-//               <button onClick={() => setIsOpen(false)} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-//                 <X className="w-5 h-5" />
-//               </button>
-//             </div>
-
-//             <div className="p-6 border-b border-gray-200">
-//               <div className="flex items-center space-x-3">
-//                 <div className="w-12 h-12 rounded-full bg-linear-to-r from-emerald-500 to-emerald-600 flex items-center justify-center font-bold text-white">
-//                   {currentUser?.name.charAt(0)}
-//                 </div>
-//                 <div>
-//                   <p className="font-semibold text-gray-900">{currentUser?.name}</p>
-//                   <p className="text-xs text-gray-500">{currentUser?.email}</p>
-//                 </div>
-//               </div>
-//             </div>
-
-//             <nav className="flex-1 overflow-y-auto p-4">
-//               <ul className="space-y-2">
-//                 {filteredMenuItems.map((item) => {
-//                   const Icon = item.icon;
-//                   const isActive = currentPage === item.id;
-//                   return (
-//                     <li key={item.id}>
-//                       <button
-//                         onClick={() => onNavigate(item.id)}
-//                         className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
-//                           isActive ? 'bg-emerald-500 text-white' : 'hover:bg-emerald-50 text-gray-700'
-//                         }`}
-//                       >
-//                         <Icon className="w-5 h-5" />
-//                         <span className="text-sm font-medium">{item.label}</span>
-//                       </button>
-//                     </li>
-//                   );
-//                 })}
-//               </ul>
-//             </nav>
-
-//             <div className="p-4 border-t border-gray-200">
-//               <button onClick={logout} className="w-full flex items-center space-x-3 px-4 py-3 bg-red-500 hover:bg-red-600 rounded-lg transition-colors text-white">
-//                 <LogOut className="w-5 h-5" />
-//                 <span className="text-sm font-medium">Logout</span>
-//               </button>
-//             </div>
-//           </motion.aside>
-//         )}
-//       </AnimatePresence>
-
-//       <div className="flex-1 flex flex-col overflow-hidden">
-//         <header className="bg-white shadow-sm border-b border-gray-200 px-6 py-4">
-//           <div className="flex items-center justify-between">
-//             <div className="flex items-center space-x-4">
-//               {!isOpen && (
-//                 <button onClick={() => setIsOpen(true)} className="p-2 hover:bg-gray-100 rounded-lg">
-//                   <Menu className="w-6 h-6 text-gray-700" />
-//                 </button>
-//               )}
-//               <h2 className="text-2xl font-bold text-gray-800">
-//                 {filteredMenuItems.find((item) => item.id === currentPage)?.label || 'Dashboard'}
-//               </h2>
-//             </div>
-//           </div>
-//         </header>
-
-//         <main className="flex-1 overflow-y-auto p-6 bg-slate-50">{children}</main>
-//       </div>
-//     </div>
-//   );
-// };
-
-// export default Sidebar;
-
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -130,24 +17,24 @@ interface SidebarProps {
 
 const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'accountant', 'project_manager'] },
-  { id: 'csr-partners', label: 'CSR Partners', icon: Briefcase, roles: ['admin'] },
+  { id: 'csr-partners', label: 'CSR Partners', icon: Briefcase, roles: ['admin', 'accountant', 'project_manager'] },
   { id: 'projects', label: 'Projects', icon: Briefcase, roles: ['admin', 'accountant', 'project_manager'] },
   { id: 'todo', label: 'To-Do List Assignment', icon: CheckSquare, roles: ['admin', 'accountant', 'project_manager'] },
   { id: 'real-time-update', label: 'Real Time Update', icon: RefreshCw, roles: ['admin', 'project_manager'] },
   { id: 'media', label: 'Media', icon: Image, roles: ['admin', 'project_manager'] },
   { id: 'article', label: 'Article', icon: FileText, roles: ['admin', 'project_manager'] },
   { id: 'team-members', label: 'Team Members', icon: Users, roles: ['admin', 'project_manager'] },
-  { id: 'dashboard-forms', label: 'Dashboard Forms', icon: FileSpreadsheet, roles: ['admin', 'project_manager', 'team_member'] },
-  { id: 'calendar', label: 'Calendar', icon: Calendar, roles: ['admin', 'accountant', 'project_manager', 'team_member'] },
-  { id: 'project-expenses', label: 'Project Expenses', icon: DollarSign, roles: ['admin', 'accountant', 'project_manager', 'team_member'] },
-  { id: 'daily-report', label: 'Daily Report', icon: ClipboardList, roles: ['admin', 'accountant', 'project_manager', 'team_member'] },
-  { id: 'data-entry', label: 'Data Entry', icon: Database, roles: ['admin', 'project_manager', 'team_member'] },
-  { id: 'csr-budget', label: 'CSR Budget', icon: CreditCard, roles: ['admin', 'accountant'] },
-  { id: 'utilization-certificate', label: 'Utilization Certificate', icon: FileCheck, roles: ['accountant'] },
+  { id: 'dashboard-forms', label: 'Dashboard Forms', icon: FileSpreadsheet, roles: ['admin', 'project_manager'] },
+  { id: 'calendar', label: 'Calendar', icon: Calendar, roles: ['admin', 'accountant', 'project_manager'] },
+  { id: 'project-expenses', label: 'Project Expenses', icon: DollarSign, roles: ['admin', 'accountant', 'project_manager'] },
+  { id: 'daily-report', label: 'Daily Report', icon: ClipboardList, roles: ['admin', 'accountant', 'project_manager'] },
+  { id: 'data-entry', label: 'Data Entry', icon: Database, roles: ['admin', 'project_manager'] },
+  { id: 'result-analysis', label: 'Result Analysis', icon: GraduationCap, roles: ['admin', 'project_manager'] },
   { id: 'upcoming-expenses', label: 'Upcoming Expenses', icon: TrendingUp, roles: ['admin', 'project_manager'] },
-  { id: 'bills', label: 'Bills', icon: Receipt, roles: ['admin', 'project_manager', 'team_member'] },
-  { id: 'analysis-report', label: 'Analysis Report', icon: BarChart3, roles: ['admin', 'project_manager'] },
-  { id: 'result-analysis', label: 'Result Analysis', icon: GraduationCap, roles: ['admin'] },
+  { id: 'bills', label: 'Bills', icon: Receipt, roles: ['admin', 'project_manager'] },
+  { id: 'csr-budget', label: 'CSR Budget', icon: CreditCard, roles: ['admin', 'accountant'] },
+  { id: 'utilization-certificate', label: 'Utilization Certificate', icon: FileCheck, roles: ['admin', 'accountant'] },
+  { id: 'analysis-report', label: 'Analysis Report', icon: BarChart3, roles: ['admin'] },
   { id: 'tasks', label: 'My Tasks', icon: CheckSquare, roles: ['team_member'] },
   // Admin Only
   { id: 'user-management', label: 'User Management', icon: Users, roles: ['admin'] },
@@ -158,13 +45,44 @@ const Sidebar = ({ children, currentPage, onNavigate }: SidebarProps) => {
   const { currentRole, currentUser, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const filteredMenuItems = menuItems.filter((item) => item.roles.includes(currentRole || ''));
+  
+  // Get role from project context for non-admin users
+  const getEffectiveRole = () => {
+    // Admin role always comes from users table
+    if (currentRole === 'admin') {
+      return 'admin';
+    }
+    
+    // For non-admin users, ALWAYS use role from project context
+    const projectContextStr = localStorage.getItem('projectContext');
+    if (projectContextStr) {
+      try {
+        const projectContext = JSON.parse(projectContextStr);
+        if (projectContext.projectRole) {
+          // Normalize role from project context (handles "Project Manager" or "project_manager")
+          const normalized = projectContext.projectRole.toLowerCase().trim().replace(/\s+/g, '_');
+          console.log('Sidebar using project role:', normalized, 'from context:', projectContext.projectRole);
+          return normalized;
+        }
+      } catch (error) {
+        console.error('Error parsing project context:', error);
+      }
+    }
+    
+    // If no project context, return team_member as safe default for non-admin users
+    console.log('No project context found, defaulting to team_member');
+    return 'team_member';
+  };
+  
+  const effectiveRole = getEffectiveRole();
+  console.log('Sidebar effectiveRole:', effectiveRole, 'currentRole from auth:', currentRole);
+  const filteredMenuItems = menuItems.filter((item) => item.roles.includes(effectiveRole));
 
   // Map menu IDs to routes
   const routeMap: Record<string, string> = {
-    'dashboard': currentRole === 'admin' ? '/admin-dashboard' : 
-                 currentRole === 'accountant' ? '/accountant-dashboard' :
-                 currentRole === 'project_manager' ? '/pm-dashboard' : '/team-member-dashboard',
+    'dashboard': effectiveRole === 'admin' ? '/admin-dashboard' : 
+                 effectiveRole === 'accountant' ? '/accountant-dashboard' :
+                 effectiveRole === 'project_manager' ? '/pm-dashboard' : '/team-member-dashboard',
     'csr-partners': '/csr-partners',
     'projects': '/projects',
     'todo': '/todo',

@@ -167,7 +167,25 @@ export default function ProjectsDashboardPage() {
   };
 
   const handleProjectSelect = (project: ProjectWithRole) => {
-    // Store selected project and role in context and localStorage
+    // Normalize: lowercase, trim, replace spaces with underscores
+    const normalizedRole = project.user_role.toLowerCase().trim().replace(/\s+/g, '_');
+    
+    console.log('ProjectsDashboard - Setting project context:', {
+      projectId: project.id,
+      partnerId: project.csr_partner_id,
+      projectRole: normalizedRole,
+      originalRole: project.user_role
+    });
+    
+    // Store project context in localStorage for sidebar and dashboards to use
+    localStorage.setItem('projectContext', JSON.stringify({
+      projectId: project.id,
+      partnerId: project.csr_partner_id,
+      tollId: null,
+      projectRole: normalizedRole,
+    }));
+    
+    // Also store in the context
     setSelectedProject(
       project.id,
       project.name,
@@ -176,32 +194,28 @@ export default function ProjectsDashboardPage() {
       project.user_role
     );
     
-    // Route based on user's role in this project
-    const normalizedRole = project.user_role.toLowerCase().trim();
+    const roleRouteMap: Record<string, string> = {
+      'admin': '/admin-dashboard',
+      'project_manager': '/pm-dashboard',
+      'projectmanager': '/pm-dashboard',
+      'accountant': '/accountant-dashboard',
+      'team_member': '/team-member-dashboard',
+      'member': '/team-member-dashboard',
+    };
     
-    if (normalizedRole === 'accountant') {
-      navigate('/accountant-dashboard');
-    } else if (normalizedRole === 'project_manager' || normalizedRole === 'projectmanager') {
-      navigate('/pm-dashboard');
-    } else if (normalizedRole === 'admin') {
-      navigate('/admin-dashboard');
-    } else if (normalizedRole === 'team_member' || normalizedRole === 'team member' || normalizedRole === 'member') {
-      navigate('/team-member-dashboard');
-    } else {
-      // Default to team member dashboard for unknown roles
-      navigate('/team-member-dashboard');
-    }
+    const route = roleRouteMap[normalizedRole] || '/team-member-dashboard';
+    console.log('ProjectsDashboard - Navigating to:', route, 'for role:', normalizedRole);
+    navigate(route);
   };
 
   const getRoleColor = (role: string) => {
-    const normalizedRole = role.toLowerCase().trim();
+    const normalizedRole = role.toLowerCase().trim().replace(/\s+/g, '_');
     const roleColors: Record<string, string> = {
       'admin': 'bg-red-100 text-red-800 border-red-300',
       'project_manager': 'bg-blue-100 text-blue-800 border-blue-300',
       'projectmanager': 'bg-blue-100 text-blue-800 border-blue-300',
       'accountant': 'bg-green-100 text-green-800 border-green-300',
       'team_member': 'bg-yellow-100 text-yellow-800 border-yellow-300',
-      'team member': 'bg-yellow-100 text-yellow-800 border-yellow-300',
       'member': 'bg-yellow-100 text-yellow-800 border-yellow-300',
     };
     return roleColors[normalizedRole] || 'bg-gray-100 text-gray-800 border-gray-300';

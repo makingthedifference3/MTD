@@ -9,6 +9,7 @@ import {
 import { PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { useFilter } from '../context/useFilter';
 import { useProjectContext } from '../context/useProjectContext';
+import { useProjectContextLock } from '../hooks/useProjectContext';
 import FilterBar from '../components/FilterBar';
 import LockedFilterBar from '../components/LockedFilterBar';
 import type { Project } from '../services/filterService';
@@ -60,6 +61,9 @@ interface ProjectWithBeneficiaries extends Project {
 }
 
 const AccountantDashboard = () => {
+  // Lock filters when viewing from project context
+  useProjectContextLock();
+
   const {
     csrPartners,
     selectedPartner,

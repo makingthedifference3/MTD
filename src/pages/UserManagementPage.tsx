@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { Plus, Edit2, Trash2, Search, Loader, Check, X } from 'lucide-react';
 import { getAllUsers, createUser, updateUser, deleteUser, type AuthUser } from '../services/authService';
 
-type RoleType = 'admin' | 'accountant' | 'project_manager' | 'team_member';
+type RoleType = 'admin' | 'accountant' | 'project_manager' | 'team_member' | 'data_manager';
 type FormMode = 'create' | 'edit' | null;
 
 export default function UserManagementPage() {
@@ -310,6 +310,7 @@ export default function UserManagementPage() {
                   className="w-full px-4 py-2 rounded-lg border-2 border-emerald-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all"
                 >
                   <option value="team_member">Team Member</option>
+                  <option value="data_manager">Data Manager</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>

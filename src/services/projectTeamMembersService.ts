@@ -139,11 +139,54 @@ export const fetchProjectTeamMembers = async (
   }));
 };
 
+// Get all projects where a user is a team member
+export const getUserProjects = async (userId: string): Promise<string[]> => {
+  const { data, error } = await supabase
+    .from('project_team_members')
+    .select('project_id')
+    .eq('user_id', userId)
+    .eq('is_active', true);
+
+  if (error) {
+    console.error('Error fetching user projects:', error);
+    throw error;
+  }
+
+  return data?.map(item => item.project_id) || [];
+};
+
+// Get user's role in a specific project
+export const getUserRoleInProject = async (
+  userId: string,
+  projectId: string
+): Promise<ProjectTeamRole | null> => {
+  const { data, error } = await supabase
+    .from('project_team_members')
+    .select('role')
+    .eq('user_id', userId)
+    .eq('project_id', projectId)
+    .eq('is_active', true)
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') {
+      // No rows returned
+      return null;
+    }
+    console.error('Error fetching user role in project:', error);
+    throw error;
+  }
+
+  return (data?.role as ProjectTeamRole) || null;
+};
+
 export const projectTeamMembersService = {
   addProjectTeamMembers,
   removeProjectTeamMembers,
   replaceProjectTeamMembers,
   fetchProjectTeamMembers,
+  getUserProjects,
+  getUserRoleInProject,
 };
 
 export default projectTeamMembersService;

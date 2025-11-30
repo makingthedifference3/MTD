@@ -3,6 +3,7 @@ import { useAuth } from './useAuth';
 import type { CSRPartner, Project } from '../services/filterService';
 import { fetchCSRPartners, fetchAllProjects } from '../services/filterService';
 import { getTollsByPartnerId, type Toll } from '../services/tollsService';
+import { getUserProjects } from '../services/projectTeamMembersService';
 
 interface FilterContextType {
   selectedPartner: string | null;
@@ -14,11 +15,14 @@ interface FilterContextType {
   tolls: Toll[];
   isLoading: boolean;
   error: string | null;
+  filtersLocked: boolean;
   setSelectedPartner: (partnerId: string | null) => void;
   setSelectedProject: (projectId: string | null) => void;
   setSelectedToll: (tollId: string | null) => void;
   resetFilters: () => void;
   refreshData: () => Promise<void>;
+  lockFilters: () => void;
+  unlockFilters: () => void;
 }
 
 const FilterContext = createContext<FilterContextType | undefined>(undefined);
@@ -26,7 +30,7 @@ const FilterContext = createContext<FilterContextType | undefined>(undefined);
 export { FilterContext, type FilterContextType };
 
 export const FilterProvider = ({ children }: { children: ReactNode }) => {
-  const { currentRole } = useAuth();
+  const { currentRole, currentUser } = useAuth();
   const [selectedPartner, setSelectedPartner] = useState<string | null>(() => {
     // Admin always starts with no filter
     if (currentRole === 'admin') {
@@ -46,6 +50,8 @@ export const FilterProvider = ({ children }: { children: ReactNode }) => {
   const [tolls, setTolls] = useState<Toll[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [userProjectIds, setUserProjectIds] = useState<string[]>([]);
+  const [filtersLocked, setFiltersLocked] = useState(false);
 
   // Persist selectedPartner to localStorage when it changes
   useEffect(() => {
@@ -86,21 +92,50 @@ export const FilterProvider = ({ children }: { children: ReactNode }) => {
     loadCSRPartners();
   }, []);
 
+  // Fetch user's project assignments
+  useEffect(() => {
+    const loadUserProjects = async () => {
+      if (!currentUser || currentRole === 'admin') {
+        // Admin sees all projects
+        setUserProjectIds([]);
+        return;
+      }
+
+      try {
+        const projectIds = await getUserProjects(currentUser.id);
+        console.log('FilterContext - User assigned to projects:', projectIds);
+        setUserProjectIds(projectIds);
+      } catch (err) {
+        console.error('Failed to load user projects:', err);
+        setUserProjectIds([]);
+      }
+    };
+
+    loadUserProjects();
+  }, [currentUser, currentRole]);
+
   // Fetch all projects on mount
   useEffect(() => {
     const loadAllProjects = async () => {
       try {
         const allProjects = await fetchAllProjects();
         console.log('FilterContext - LoadAllProjects returned:', allProjects.length, 'projects');
-        console.log('FilterContext - Sample projects:', allProjects.slice(0, 3).map(p => ({ id: p.id, name: p.name, status: p.status, direct_beneficiaries: p.direct_beneficiaries, total_budget: p.total_budget })));
-        setProjects(allProjects);
+        
+        // Filter projects based on user role
+        let visibleProjects = allProjects;
+        if (currentRole !== 'admin' && userProjectIds.length > 0) {
+          visibleProjects = allProjects.filter(p => userProjectIds.includes(p.id));
+          console.log('FilterContext - Filtered to user projects:', visibleProjects.length);
+        }
+        
+        setProjects(visibleProjects);
       } catch (err) {
         console.error('Failed to load projects:', err);
       }
     };
 
     loadAllProjects();
-  }, []);
+  }, [currentRole, userProjectIds]);
 
   // Fetch tolls when partner is selected
   useEffect(() => {
@@ -150,9 +185,19 @@ export const FilterProvider = ({ children }: { children: ReactNode }) => {
   }, [selectedPartner, selectedProject, selectedToll, projects]);
 
   const resetFilters = () => {
-    setSelectedPartner(null);
-    setSelectedProject(null);
-    setSelectedToll(null);
+    if (!filtersLocked) {
+      setSelectedPartner(null);
+      setSelectedProject(null);
+      setSelectedToll(null);
+    }
+  };
+
+  const lockFilters = () => {
+    setFiltersLocked(true);
+  };
+
+  const unlockFilters = () => {
+    setFiltersLocked(false);
   };
 
   // Refresh data from the server
@@ -186,11 +231,14 @@ export const FilterProvider = ({ children }: { children: ReactNode }) => {
         tolls,
         isLoading,
         error,
+        filtersLocked,
         setSelectedPartner,
         setSelectedProject,
         setSelectedToll,
         resetFilters,
         refreshData,
+        lockFilters,
+        unlockFilters,
       }}
     >
       {children}
