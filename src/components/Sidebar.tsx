@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Menu, X, LogOut, LayoutDashboard, Briefcase, CheckSquare, Image, FileText, Users, Calendar,
-  DollarSign, Receipt, CreditCard, BarChart3, FileSpreadsheet, RefreshCw, ClipboardList, Database,GraduationCap, TrendingUp, FileCheck
+  DollarSign, Receipt, CreditCard, BarChart3, FileSpreadsheet, RefreshCw, ClipboardList, Database,GraduationCap, TrendingUp, FileCheck, CalendarClock
 } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -19,6 +19,7 @@ const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'accountant', 'project_manager'] },
   { id: 'csr-partners', label: 'CSR Partners', icon: Briefcase, roles: ['admin', 'accountant', 'project_manager'] },
   { id: 'projects', label: 'Projects', icon: Briefcase, roles: ['admin', 'accountant', 'project_manager'] },
+  { id: 'project-timeline', label: 'Project Timeline', icon: CalendarClock, roles: ['admin', 'project_manager'] },
   { id: 'todo', label: 'To-Do List Assignment', icon: CheckSquare, roles: ['admin', 'accountant', 'project_manager'] },
   { id: 'real-time-update', label: 'Real Time Update', icon: RefreshCw, roles: ['admin', 'project_manager'] },
   { id: 'media', label: 'Media', icon: Image, roles: ['admin', 'project_manager'] },
@@ -85,6 +86,7 @@ const Sidebar = ({ children, currentPage, onNavigate }: SidebarProps) => {
                  effectiveRole === 'project_manager' ? '/pm-dashboard' : '/team-member-dashboard',
     'csr-partners': '/csr-partners',
     'projects': '/projects',
+    'project-timeline': '/project-timeline',
     'todo': '/todo',
     'real-time-update': '/real-time-update',
     'media': '/media',
