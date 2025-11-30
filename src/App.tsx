@@ -8,6 +8,8 @@ import Sidebar from './components/Sidebar';
 import PMDashboard from './pages/PMDashboard';
 import ToDoList from './pages/ToDoList';
 import ProjectExpenses from './pages/ProjectExpenses';
+import AdminExpensesPage from './pages/AdminExpensesPage';
+import AccountantExpensesPage from './pages/AccountantExpensesPage';
 import Bills from './pages/Bills';
 import AnalysisReport from './pages/AnalysisReport';
 import AccountantDashboard from './pages/AccountantDashboard';
@@ -88,6 +90,8 @@ function AppRoutes() {
       <Route path="/dashboard-forms" element={<ProtectedRoute><Sidebar currentPage="dashboard-forms" onNavigate={() => {}}><DashboardFormsPage /></Sidebar></ProtectedRoute>} />
       <Route path="/calendar" element={<ProtectedRoute><Sidebar currentPage="calendar" onNavigate={() => {}}><CalendarPage /></Sidebar></ProtectedRoute>} />
       <Route path="/project-expenses" element={<ProtectedRoute><Sidebar currentPage="project-expenses" onNavigate={() => {}}><ProjectExpenses /></Sidebar></ProtectedRoute>} />
+      <Route path="/admin-expenses" element={<ProtectedRoute><Sidebar currentPage="admin-expenses" onNavigate={() => {}}><AdminExpensesPage /></Sidebar></ProtectedRoute>} />
+      <Route path="/acc-expense" element={<ProtectedRoute><Sidebar currentPage="acc-expense" onNavigate={() => {}}><AccountantExpensesPage /></Sidebar></ProtectedRoute>} />
       <Route path="/daily-report" element={<ProtectedRoute><Sidebar currentPage="daily-report" onNavigate={() => {}}><DailyReportPage /></Sidebar></ProtectedRoute>} />
       <Route path="/data-entry" element={<ProtectedRoute><Sidebar currentPage="data-entry" onNavigate={() => {}}><DataEntryPage /></Sidebar></ProtectedRoute>} />
       <Route path="/csr-budget" element={<ProtectedRoute><Sidebar currentPage="csr-budget" onNavigate={() => {}}><CSRBudgetPage /></Sidebar></ProtectedRoute>} />

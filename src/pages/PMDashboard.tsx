@@ -63,9 +63,22 @@ interface ProjectWithBeneficiaries extends Project {
   schools_renovated?: number;
 }
 
-const PMDashboardInner = () => {
-  // Lock filters when viewing from project context
-  useProjectContextLock();
+interface PMDashboardInnerProps {
+  shouldLockContext?: boolean;
+}
+
+const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = {}) => {
+  // Lock filters when viewing from project context (only for non-admin)
+  // Always call the hook, but it will check shouldLockContext internally
+  const contextLockHook = useProjectContextLock();
+  
+  // Disable the lock effect for admin
+  useEffect(() => {
+    if (!shouldLockContext) {
+      // For admin, don't lock filters even if there's a project context
+      localStorage.removeItem('projectContext');
+    }
+  }, [shouldLockContext]);
 
   const {
     csrPartners,

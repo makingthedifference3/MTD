@@ -140,7 +140,7 @@ const AdminDashboard = () => {
       </motion.div>
 
       {/* PMDashboard Inner - will show all projects when no partner selected */}
-      <PMDashboardInner />
+      <PMDashboardInner shouldLockContext={false} />
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}

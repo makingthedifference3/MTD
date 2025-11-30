@@ -19,6 +19,10 @@ import {
   type ProjectTeamMemberWithUser,
   type ProjectTeamRole,
 } from '../services/projectTeamMembersService';
+import {
+  createBudgetCategories,
+  type BudgetCategoryInput,
+} from '../services/budgetCategoriesService';
 import { getAllActiveUsers, type User } from '../services/usersService';
 import { IMPACT_METRIC_VISUALS } from '../constants/impactMetricVisuals';
 import {
@@ -50,6 +54,14 @@ interface TeamMemberFormEntry {
   role: ProjectTeamRole;
 }
 
+interface BudgetCategoryFormEntry {
+  id: string;
+  name: string;
+  allocated_amount: string;
+  parent_id: string | null;
+  children: BudgetCategoryFormEntry[];
+}
+
 interface ProjectFormData {
   name: string;
   projectCode: string;
@@ -70,8 +82,9 @@ interface ProjectFormData {
   createBeneficiaryProjects: boolean;
   impactMetrics: ImpactMetricEntry[];
   teamMembers: TeamMemberFormEntry[];
+  enableBudgetCategories: boolean;
+  budgetCategories: BudgetCategoryFormEntry[];
 }
-
 const createInitialProjectFormState = (): ProjectFormData => ({
   name: '',
   projectCode: '',
@@ -92,6 +105,8 @@ const createInitialProjectFormState = (): ProjectFormData => ({
   createBeneficiaryProjects: false,
   impactMetrics: [],
   teamMembers: [],
+  enableBudgetCategories: false,
+  budgetCategories: [],
 });
 
 const formatRoleLabel = (role?: string | null) => {
@@ -148,6 +163,8 @@ const mapProjectToFormData = (
       userId: member.user_id,
       role: (member.role ?? 'team_member') as ProjectTeamRole,
     })),
+    enableBudgetCategories: false, // Will be loaded separately
+    budgetCategories: [], // Will be loaded separately
   };
 };
 
@@ -193,6 +210,11 @@ const ProjectsPage = () => {
   const [tollsLoading, setTollsLoading] = useState(false);
   const [teamUsers, setTeamUsers] = useState<User[]>([]);
   const [teamUsersLoading, setTeamUsersLoading] = useState(false);
+  
+  // Budget categories state for view details
+  const [projectBudgetCategories, setProjectBudgetCategories] = useState<any[]>([]);
+  const [budgetCategoriesLoading, setBudgetCategoriesLoading] = useState(false);
+  
   const resetFormState = () => {
     setFormData(createInitialProjectFormState());
     setTolls([]);
@@ -225,8 +247,26 @@ const ProjectsPage = () => {
           value: metric.value ?? 0,
         }))
       );
+      
+      // Load budget categories
+      const loadBudgetCategories = async () => {
+        try {
+          setBudgetCategoriesLoading(true);
+          const { getBudgetCategoriesByProject } = await import('../services/budgetCategoriesService');
+          const categories = await getBudgetCategoriesByProject(selectedProjectDetails.id);
+          setProjectBudgetCategories(categories);
+        } catch (error) {
+          console.error('Error loading budget categories:', error);
+          setProjectBudgetCategories([]);
+        } finally {
+          setBudgetCategoriesLoading(false);
+        }
+      };
+      
+      loadBudgetCategories();
     } else {
       setImpactMetricsForm([]);
+      setProjectBudgetCategories([]);
     }
     setIsEditingImpactMetrics(false);
     setProjectCustomMetricName('');
@@ -437,6 +477,35 @@ const ProjectsPage = () => {
         await addProjectTeamMembers(memberInputs);
       }
 
+      // Handle budget categories
+      if (formData.enableBudgetCategories && projectId && formData.budgetCategories.length > 0) {
+        if (editingProjectId) {
+          // When editing, delete all existing categories and recreate them
+          const { getBudgetCategoriesByProject, deleteBudgetCategory } = await import('../services/budgetCategoriesService');
+          const existingCategories = await getBudgetCategoriesByProject(projectId);
+          
+          // Delete all root categories (children will cascade delete)
+          const rootCategories = existingCategories.filter(cat => cat.parent_id === null);
+          for (const cat of rootCategories) {
+            await deleteBudgetCategory(cat.id);
+          }
+          
+          // Create new categories
+          await saveBudgetCategories(projectId, formData.budgetCategories, currentUser?.id);
+        } else {
+          // When creating new project, just create categories
+          await saveBudgetCategories(projectId, formData.budgetCategories, currentUser?.id);
+        }
+      } else if (editingProjectId && !formData.enableBudgetCategories && projectId) {
+        // If categories were disabled during edit, delete all existing categories
+        const { getBudgetCategoriesByProject, deleteBudgetCategory } = await import('../services/budgetCategoriesService');
+        const existingCategories = await getBudgetCategoriesByProject(projectId);
+        const rootCategories = existingCategories.filter(cat => cat.parent_id === null);
+        for (const cat of rootCategories) {
+          await deleteBudgetCategory(cat.id);
+        }
+      }
+
       // Create beneficiary sub-projects if checkbox was checked
       if (!editingProjectId && formData.createBeneficiaryProjects && projectId) {
         const beneficiaryCount = Number(formData.directBeneficiaries) || 0;
@@ -448,6 +517,8 @@ const ProjectsPage = () => {
           }
         }
       }
+
+      setIsAddModalOpen(false);
 
       setIsAddModalOpen(false);
       setSelectedProjectDetails(null);
@@ -499,12 +570,35 @@ const ProjectsPage = () => {
       console.log('Fetching team members for project:', project.id);
       const members = await fetchProjectTeamMembers(project.id);
       console.log('Fetched team members for edit:', members);
+      
+      // Fetch budget categories if they exist
+      const { getBudgetCategoriesByProject } = await import('../services/budgetCategoriesService');
+      const budgetCategories = await getBudgetCategoriesByProject(project.id);
+      console.log('Fetched budget categories for edit:', budgetCategories);
+      
+      // Convert budget categories to form format with temporary IDs
+      const convertToFormEntries = (categories: any[], parentId: string | null = null): BudgetCategoryFormEntry[] => {
+        return categories
+          .filter((cat) => cat.parent_id === parentId)
+          .map((cat) => ({
+            id: cat.id, // Use database ID for existing categories
+            name: cat.name,
+            allocated_amount: cat.allocated_amount.toString(),
+            parent_id: cat.parent_id,
+            children: convertToFormEntries(categories, cat.id),
+          }));
+      };
+      
+      const formBudgetCategories = convertToFormEntries(budgetCategories);
+      
       setFormData((prev) => ({
         ...prev,
         teamMembers: members.map((member) => ({
           userId: member.user_id,
           role: (member.role ?? 'team_member') as ProjectTeamRole,
         })),
+        enableBudgetCategories: formBudgetCategories.length > 0,
+        budgetCategories: formBudgetCategories,
       }));
     } catch (err) {
       console.error('Failed to prepare project for editing:', err);
@@ -694,6 +788,31 @@ const ProjectsPage = () => {
         return metric.key !== key;
       })
     );
+  };
+
+  // Save budget categories recursively
+  const saveBudgetCategories = async (
+    projectId: string,
+    categories: BudgetCategoryFormEntry[],
+    userId?: string,
+    parentId: string | null = null
+  ): Promise<void> => {
+    for (const category of categories) {
+      const categoryInput: BudgetCategoryInput = {
+        project_id: projectId,
+        parent_id: parentId,
+        name: category.name.trim(),
+        allocated_amount: Number(category.allocated_amount) || 0,
+        created_by: userId,
+      };
+
+      const createdCategory = await createBudgetCategories([categoryInput]);
+      
+      // If this category has children, save them recursively
+      if (category.children && category.children.length > 0) {
+        await saveBudgetCategories(projectId, category.children, userId, createdCategory[0].id);
+      }
+    }
   };
 
   // Handle viewing project dashboard
@@ -1122,6 +1241,103 @@ const ProjectsPage = () => {
                     )}
                   </div>
                 </div>
+
+                {/* Budget Categories */}
+                {(projectBudgetCategories.length > 0 || budgetCategoriesLoading) && (
+                  <div className="border border-emerald-200 bg-emerald-50 rounded-2xl p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="font-semibold text-emerald-900">Budget Categories</h3>
+                      <span className="text-xs bg-emerald-200 text-emerald-800 px-2 py-1 rounded-full">
+                        {projectBudgetCategories.filter(cat => cat.parent_id === null).length} categor{projectBudgetCategories.filter(cat => cat.parent_id === null).length !== 1 ? 'ies' : 'y'}
+                      </span>
+                    </div>
+                    {budgetCategoriesLoading ? (
+                      <p className="text-sm text-emerald-700">Loading budget categories...</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {projectBudgetCategories
+                          .filter(cat => cat.parent_id === null)
+                          .map((category) => {
+                            const children = projectBudgetCategories.filter(cat => cat.parent_id === category.id);
+                            const utilizationPercent = category.allocated_amount > 0 
+                              ? (category.utilized_amount / category.allocated_amount) * 100 
+                              : 0;
+                            
+                            return (
+                              <div key={category.id} className="bg-white rounded-xl p-4 border border-emerald-100">
+                                <div className="flex items-start justify-between mb-2">
+                                  <div className="flex-1">
+                                    <h4 className="font-semibold text-gray-900">{category.name}</h4>
+                                    <div className="flex items-center gap-4 mt-2 text-sm">
+                                      <div>
+                                        <span className="text-gray-500">Allocated: </span>
+                                        <span className="font-semibold text-emerald-700">₹{category.allocated_amount.toLocaleString()}</span>
+                                      </div>
+                                      <div>
+                                        <span className="text-gray-500">Utilized: </span>
+                                        <span className="font-semibold text-blue-700">₹{category.utilized_amount.toLocaleString()}</span>
+                                      </div>
+                                      <div>
+                                        <span className="text-gray-500">Available: </span>
+                                        <span className="font-semibold text-purple-700">₹{category.available_amount.toLocaleString()}</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <span className="text-xs text-gray-500">Utilization</span>
+                                    <p className="text-lg font-bold text-gray-900">{utilizationPercent.toFixed(1)}%</p>
+                                  </div>
+                                </div>
+                                
+                                {/* Progress bar */}
+                                <div className="w-full bg-gray-200 rounded-full h-2 mt-3">
+                                  <div 
+                                    className="bg-emerald-500 h-2 rounded-full transition-all"
+                                    style={{ width: `${Math.min(utilizationPercent, 100)}%` }}
+                                  ></div>
+                                </div>
+                                
+                                {/* Sub-categories */}
+                                {children.length > 0 && (
+                                  <div className="mt-3 pl-4 border-l-2 border-emerald-200 space-y-2">
+                                    {children.map((subCat) => {
+                                      const subUtilizationPercent = subCat.allocated_amount > 0 
+                                        ? (subCat.utilized_amount / subCat.allocated_amount) * 100 
+                                        : 0;
+                                      
+                                      return (
+                                        <div key={subCat.id} className="bg-emerald-50 rounded-lg p-3">
+                                          <div className="flex items-start justify-between">
+                                            <div className="flex-1">
+                                              <p className="font-medium text-gray-800 text-sm">{subCat.name}</p>
+                                              <div className="flex items-center gap-3 mt-1 text-xs">
+                                                <span className="text-gray-600">₹{subCat.allocated_amount.toLocaleString()}</span>
+                                                <span className="text-gray-400">•</span>
+                                                <span className="text-blue-600">Used: ₹{subCat.utilized_amount.toLocaleString()}</span>
+                                                <span className="text-gray-400">•</span>
+                                                <span className="text-purple-600">Left: ₹{subCat.available_amount.toLocaleString()}</span>
+                                              </div>
+                                            </div>
+                                            <span className="text-xs font-semibold text-gray-700">{subUtilizationPercent.toFixed(1)}%</span>
+                                          </div>
+                                          <div className="w-full bg-gray-200 rounded-full h-1.5 mt-2">
+                                            <div 
+                                              className="bg-emerald-400 h-1.5 rounded-full transition-all"
+                                              style={{ width: `${Math.min(subUtilizationPercent, 100)}%` }}
+                                            ></div>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Sub-Projects (Beneficiary Projects) */}
                 {(subProjects.length > 0 || subProjectsLoading) && (
@@ -1810,6 +2026,254 @@ const buildProjectUpdatePayload = (values: ProjectFormData): Partial<ProjectServ
   return payload;
 };
 
+// Budget Categories Manager Component
+interface BudgetCategoriesManagerProps {
+  totalBudget: number;
+  categories: BudgetCategoryFormEntry[];
+  onCategoriesChange: (categories: BudgetCategoryFormEntry[]) => void;
+}
+
+const BudgetCategoriesManager = ({
+  totalBudget,
+  categories,
+  onCategoriesChange,
+}: BudgetCategoriesManagerProps) => {
+  const [validationError, setValidationError] = useState('');
+
+  const generateTempId = () => `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+  const addRootCategory = () => {
+    onCategoriesChange([
+      ...categories,
+      {
+        id: generateTempId(),
+        name: '',
+        allocated_amount: '',
+        parent_id: null,
+        children: [],
+      },
+    ]);
+    setValidationError('');
+  };
+
+  const addSubCategory = (parentId: string) => {
+    const addSubToCategory = (cats: BudgetCategoryFormEntry[]): BudgetCategoryFormEntry[] => {
+      return cats.map((cat) => {
+        if (cat.id === parentId) {
+          return {
+            ...cat,
+            children: [
+              ...cat.children,
+              {
+                id: generateTempId(),
+                name: '',
+                allocated_amount: '',
+                parent_id: parentId,
+                children: [],
+              },
+            ],
+          };
+        }
+        if (cat.children.length > 0) {
+          return { ...cat, children: addSubToCategory(cat.children) };
+        }
+        return cat;
+      });
+    };
+
+    onCategoriesChange(addSubToCategory(categories));
+    setValidationError('');
+  };
+
+  const updateCategory = (
+    id: string,
+    field: 'name' | 'allocated_amount',
+    value: string
+  ) => {
+    const updateInTree = (cats: BudgetCategoryFormEntry[]): BudgetCategoryFormEntry[] => {
+      return cats.map((cat) => {
+        if (cat.id === id) {
+          return { ...cat, [field]: value };
+        }
+        if (cat.children.length > 0) {
+          return { ...cat, children: updateInTree(cat.children) };
+        }
+        return cat;
+      });
+    };
+
+    const updated = updateInTree(categories);
+    onCategoriesChange(updated);
+    validateAllocations(updated);
+  };
+
+  const removeCategory = (id: string) => {
+    const removeFromTree = (cats: BudgetCategoryFormEntry[]): BudgetCategoryFormEntry[] => {
+      return cats
+        .filter((cat) => cat.id !== id)
+        .map((cat) => ({
+          ...cat,
+          children: removeFromTree(cat.children),
+        }));
+    };
+
+    const updated = removeFromTree(categories);
+    onCategoriesChange(updated);
+    validateAllocations(updated);
+  };
+
+  const validateAllocations = (cats: BudgetCategoryFormEntry[]) => {
+    // Validate root categories don't exceed total budget
+    const rootTotal = cats.reduce((sum, cat) => sum + (Number(cat.allocated_amount) || 0), 0);
+    
+    if (rootTotal > totalBudget) {
+      setValidationError(
+        `Total allocated (₹${rootTotal.toLocaleString()}) exceeds project budget (₹${totalBudget.toLocaleString()})`
+      );
+      return false;
+    }
+
+    // Validate each parent's children don't exceed parent allocation
+    const validateChildren = (parent: BudgetCategoryFormEntry): boolean => {
+      if (parent.children.length > 0) {
+        const childrenTotal = parent.children.reduce(
+          (sum, child) => sum + (Number(child.allocated_amount) || 0),
+          0
+        );
+        const parentAmount = Number(parent.allocated_amount) || 0;
+
+        if (childrenTotal > parentAmount) {
+          setValidationError(
+            `Sub-categories of "${parent.name}" (₹${childrenTotal.toLocaleString()}) exceed parent allocation (₹${parentAmount.toLocaleString()})`
+          );
+          return false;
+        }
+
+        return parent.children.every(validateChildren);
+      }
+      return true;
+    };
+
+    const allValid = cats.every(validateChildren);
+    if (allValid) {
+      setValidationError('');
+    }
+
+    return allValid;
+  };
+
+  const calculateRemaining = () => {
+    const allocated = categories.reduce((sum, cat) => sum + (Number(cat.allocated_amount) || 0), 0);
+    return totalBudget - allocated;
+  };
+
+  const renderCategory = (category: BudgetCategoryFormEntry, level: number = 0) => {
+    const remaining = category.children.length > 0
+      ? (Number(category.allocated_amount) || 0) -
+        category.children.reduce((sum, child) => sum + (Number(child.allocated_amount) || 0), 0)
+      : 0;
+
+    return (
+      <div key={category.id} className={`${level > 0 ? 'ml-8 mt-3' : 'mt-4'}`}>
+        <div className="bg-white rounded-xl p-4 border border-gray-200">
+          <div className="flex gap-3 items-start">
+            <div className="flex-1 grid grid-cols-2 gap-3">
+              <input
+                type="text"
+                value={category.name}
+                onChange={(e) => updateCategory(category.id, 'name', e.target.value)}
+                placeholder={level === 0 ? 'Category name (e.g., Admin Cost)' : 'Sub-category name (e.g., Travel)'}
+                className="px-3 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm"
+              />
+              <input
+                type="number"
+                value={category.allocated_amount}
+                onChange={(e) => updateCategory(category.id, 'allocated_amount', e.target.value)}
+                placeholder="Amount (₹)"
+                className="px-3 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm"
+                min="0"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => addSubCategory(category.id)}
+                className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                title="Add sub-category"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => removeCategory(category.id)}
+                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                title="Remove category"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {category.children.length > 0 && (
+            <div className="mt-2 text-xs text-gray-500">
+              Remaining: ₹{remaining.toLocaleString()}
+            </div>
+          )}
+        </div>
+
+        {category.children.length > 0 && (
+          <div className="border-l-2 border-emerald-200 pl-4">
+            {category.children.map((child) => renderCategory(child, level + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="bg-emerald-50 rounded-2xl p-4 border border-emerald-100 space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold text-emerald-700">Budget Categories</p>
+          <p className="text-xs text-gray-600 mt-1">
+            Total Budget: ₹{totalBudget.toLocaleString()} | Allocated: ₹
+            {categories
+              .reduce((sum, cat) => sum + (Number(cat.allocated_amount) || 0), 0)
+              .toLocaleString()}{' '}
+            | Remaining: ₹{calculateRemaining().toLocaleString()}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={addRootCategory}
+          className="px-3 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-sm font-medium flex items-center gap-2 transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          Add Category
+        </button>
+      </div>
+
+      {validationError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+          <p className="text-sm text-red-700">{validationError}</p>
+        </div>
+      )}
+
+      {categories.length === 0 ? (
+        <div className="text-center py-8 text-gray-500 text-sm">
+          No categories added yet. Click "Add Category" to start.
+        </div>
+      ) : (
+        <div className="space-y-2">{categories.map((cat) => renderCategory(cat))}</div>
+      )}
+
+      <p className="text-xs text-gray-500 mt-4">
+        💡 Tip: Create main categories first, then click the + icon to add sub-categories. All amounts should add up to the total budget.
+      </p>
+    </div>
+  );
+};
+
 // Modal props interface
 interface AddProjectModalProps {
   formData: ProjectFormData;
@@ -2430,6 +2894,43 @@ const AddProjectModal = ({
             />
           </label>
         </div>
+
+        {/* Budget Categories Checkbox and Interface */}
+        {formData.totalBudget && Number(formData.totalBudget) > 0 && (
+          <div className="bg-blue-50 rounded-2xl p-4 border border-blue-100">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formData.enableBudgetCategories}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    enableBudgetCategories: e.target.checked,
+                    budgetCategories: e.target.checked ? prev.budgetCategories : [],
+                  }))
+                }
+                className="mt-1 w-5 h-5 rounded border-blue-300 text-blue-600 focus:ring-blue-500"
+              />
+              <div className="flex-1">
+                <p className="font-semibold text-blue-900">Create Budget Categories</p>
+                <p className="text-sm text-blue-700 mt-1">
+                  Break down the total budget into categories (e.g., Admin Cost, Operations, HR) and optionally create sub-categories for detailed tracking.
+                </p>
+              </div>
+            </label>
+          </div>
+        )}
+
+        {/* Budget Categories Management */}
+        {formData.enableBudgetCategories && (
+          <BudgetCategoriesManager
+            totalBudget={Number(formData.totalBudget) || 0}
+            categories={formData.budgetCategories}
+            onCategoriesChange={(categories) =>
+              setFormData((prev) => ({ ...prev, budgetCategories: categories }))
+            }
+          />
+        )}
 
         {/* Beneficiary Type Selection */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
