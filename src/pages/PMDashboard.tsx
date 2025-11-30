@@ -70,7 +70,7 @@ interface PMDashboardInnerProps {
 const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = {}) => {
   // Lock filters when viewing from project context (only for non-admin)
   // Always call the hook, but it will check shouldLockContext internally
-  const contextLockHook = useProjectContextLock();
+  useProjectContextLock();
   
   // Disable the lock effect for admin
   useEffect(() => {
