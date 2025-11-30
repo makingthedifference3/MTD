@@ -10,22 +10,17 @@ interface UserMap {
   [key: string]: string;
 }
 
-interface Project {
-  id: string;
-  name: string;
-  project_code: string;
-}
-
 const ProjectExpenses: React.FC = () => {
   const { currentUser } = useAuth();
   const [expenses, setExpenses] = useState<ProjectExpense[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
-  const [selectedStatus, setSelectedStatus] = useState<'pending' | 'approved' | 'rejected' | null>(null);
+  const [showBillModal, setShowBillModal] = useState(false);
+  const [billUrl, setBillUrl] = useState<string>('');
+  const [selectedStatus, setSelectedStatus] = useState<'pending' | 'approved' | 'rejected' | 'paid' | null>(null);
   const [selectedExpense, setSelectedExpense] = useState<ProjectExpense | null>(null);
   const [userMap, setUserMap] = useState<UserMap>({});
-  const [projects, setProjects] = useState<Project[]>([]);
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
   const [filterCategory, setFilterCategory] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<string>('');
@@ -36,10 +31,12 @@ const ProjectExpenses: React.FC = () => {
     pending: 0,
     approved: 0,
     rejected: 0,
+    paid: 0,
     totalAmount: 0,
     pendingAmount: 0,
     approvedAmount: 0,
     rejectedAmount: 0,
+    paidAmount: 0,
   });
 
   const [newExpense, setNewExpense] = useState({
@@ -53,6 +50,17 @@ const ProjectExpenses: React.FC = () => {
     bill_drive_link: '',
     payment_method: 'Cash',
   });
+  
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  
+  // Cascading dropdown states
+  const [csrPartners, setCSRPartners] = useState<Array<{id: string; name: string; has_toll: boolean}>>([]);
+  const [selectedCsrPartner, setSelectedCsrPartner] = useState('');
+  const [hasToll, setHasToll] = useState(false);
+  const [tolls, setTolls] = useState<Array<{id: string; toll_name: string}>>([]);
+  const [selectedToll, setSelectedToll] = useState('');
+  const [filteredProjects, setFilteredProjects] = useState<Array<{id: string; name: string; project_code: string}>>([]);
 
   useEffect(() => {
     if (currentUser) {
@@ -63,17 +71,17 @@ const ProjectExpenses: React.FC = () => {
 
   const loadData = async () => {
     try {
-      const [allExpenses, users, allProjects, allCategories] = await Promise.all([
+      const [allExpenses, users, allCategories, allCsrPartners] = await Promise.all([
         projectExpensesService.getAllExpenses(),
         fetchUsers(),
-        fetchProjects(),
         projectExpensesService.getExpenseCategories(),
+        fetchCsrPartners(),
       ]);
       
       setExpenses(allExpenses);
       setUserMap(users);
-      setProjects(allProjects);
       setCategories(allCategories);
+      setCSRPartners(allCsrPartners);
 
       // Calculate stats only for current user's expenses
       const myExpenses = currentUser 
@@ -105,18 +113,57 @@ const ProjectExpenses: React.FC = () => {
     }
   };
 
-  const fetchProjects = async (): Promise<Project[]> => {
+  const fetchCsrPartners = async () => {
     try {
       const { data, error } = await supabase
-        .from('projects')
-        .select('id, name, project_code')
+        .from('csr_partners')
+        .select('id, name, has_toll')
         .order('name');
-
+      
       if (error) throw error;
       return data || [];
     } catch (error) {
-      console.error('Error fetching projects:', error);
+      console.error('Error fetching CSR partners:', error);
       return [];
+    }
+  };
+
+  const fetchTollsForPartner = async (partnerId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('csr_partner_tolls')
+        .select('id, toll_name')
+        .eq('csr_partner_id', partnerId)
+        .order('toll_name');
+      
+      if (error) throw error;
+      setTolls(data || []);
+    } catch (error) {
+      console.error('Error fetching tolls:', error);
+      setTolls([]);
+    }
+  };
+
+  const fetchProjectsForPartnerAndToll = async (partnerId: string, tollId?: string) => {
+    try {
+      let query = supabase
+        .from('projects')
+        .select('id, name, project_code')
+        .eq('csr_partner_id', partnerId);
+      
+      if (tollId) {
+        query = query.eq('toll_id', tollId);
+      }
+      
+      query = query.order('name');
+      
+      const { data, error } = await query;
+      
+      if (error) throw error;
+      setFilteredProjects(data || []);
+    } catch (error) {
+      console.error('Error fetching projects:', error);
+      setFilteredProjects([]);
     }
   };
 
@@ -155,7 +202,22 @@ const ProjectExpenses: React.FC = () => {
     }
   };
 
-  const handleStatusCardClick = (status: 'pending' | 'approved' | 'rejected') => {
+  const handleMarkAsPaid = async () => {
+    if (selectedExpense && currentUser) {
+      try {
+        await projectExpensesService.markAsPaid(
+          selectedExpense.id,
+          currentUser.id
+        );
+        setShowModal(false);
+        await loadData();
+      } catch (error) {
+        console.error('Error marking expense as paid:', error);
+      }
+    }
+  };
+
+  const handleStatusCardClick = (status: 'pending' | 'approved' | 'rejected' | 'paid') => {
     setSelectedStatus(status);
     setShowStatusModal(true);
   };
@@ -244,7 +306,50 @@ const ProjectExpenses: React.FC = () => {
     }
 
     try {
-      const expenseData: Omit<ProjectExpense, 'id' | 'created_at' | 'updated_at'> & { bill_drive_link?: string } = {
+      // Upload file to Supabase storage if selected
+      let billUrl = newExpense.bill_drive_link;
+      
+      if (selectedFile) {
+        setUploadingFile(true);
+        try {
+          const fileExt = selectedFile.name.split('.').pop();
+          const userName = currentUser.full_name.replace(/\s+/g, '_');
+          const now = new Date();
+          const dateStr = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
+          const fileName = `${userName}_${dateStr}.${fileExt}`;
+          const filePath = `bills/${fileName}`;
+
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('MTD_Bills')
+            .upload(filePath, selectedFile, {
+              cacheControl: '3600',
+              upsert: false
+            });
+          
+          console.log('Upload result:', { uploadData, uploadError });
+
+          if (uploadError) {
+            console.error('Upload error:', uploadError);
+            throw uploadError;
+          }
+
+          // Get public URL
+          const { data: urlData } = supabase.storage
+            .from('MTD_Bills')
+            .getPublicUrl(filePath);
+
+          billUrl = urlData.publicUrl;
+        } catch (error) {
+          console.error('Error uploading file:', error);
+          alert('Failed to upload bill. Please try again.');
+          setUploadingFile(false);
+          return;
+        } finally {
+          setUploadingFile(false);
+        }
+      }
+
+      const expenseData: Omit<ProjectExpense, 'id' | 'created_at' | 'updated_at'> & { bill_drive_link?: string; csr_partner_id?: string; toll_id?: string } = {
         expense_code: `EXP-${Date.now()}`,
         project_id: newExpense.project_id,
         category_id: validCategoryId, // Use the validated category ID
@@ -257,17 +362,18 @@ const ProjectExpenses: React.FC = () => {
         status: 'pending',
         payment_method: newExpense.payment_method as 'Cash' | 'Cheque' | 'Online' | 'Card',
         submitted_by: currentUser.id,
+        csr_partner_id: selectedCsrPartner,
+        toll_id: hasToll && selectedToll ? selectedToll : undefined,
       };
 
-      // Add bill_drive_link if provided
-      if (newExpense.bill_drive_link) {
-        expenseData.bill_drive_link = newExpense.bill_drive_link;
+      // Add bill_drive_link if uploaded or provided
+      if (billUrl) {
+        expenseData.bill_drive_link = billUrl;
       }
 
       console.log('Submitting expense with data:', expenseData);
       
       // Validate only the critical UUID fields (category_id and project_id)
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       if (!uuidRegex.test(expenseData.category_id)) {
         alert(`Invalid category_id format: ${expenseData.category_id}`);
         return;
@@ -293,6 +399,12 @@ const ProjectExpenses: React.FC = () => {
           bill_drive_link: '',
           payment_method: 'Cash',
         });
+        setSelectedFile(null);
+        setSelectedCsrPartner('');
+        setSelectedToll('');
+        setHasToll(false);
+        setFilteredProjects([]);
+        setTolls([]);
         await loadData();
       }
     } catch (error) {
@@ -343,7 +455,7 @@ const ProjectExpenses: React.FC = () => {
           className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
         >
           <h3 className="text-2xl font-bold text-gray-900 mb-6">MY CLAIM REPORT</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {/* Pending */}
             <button
               onClick={() => handleStatusCardClick('pending')}
@@ -391,6 +503,22 @@ const ProjectExpenses: React.FC = () => {
                 <span className="font-bold text-gray-900">{stats.rejectedAmount.toLocaleString()}</span>
               </div>
             </button>
+
+            {/* Paid */}
+            <button
+              onClick={() => handleStatusCardClick('paid')}
+              className="flex items-center justify-between bg-emerald-50 rounded-2xl p-4 border border-emerald-100 hover:bg-emerald-100 transition-colors cursor-pointer w-full"
+            >
+              <div className="flex items-center space-x-3">
+                <div className="bg-white rounded-full p-3">
+                  <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+                </div>
+                <span className="font-semibold text-gray-900">PAID {stats.paid}</span>
+              </div>
+              <div className="bg-white rounded-full px-4 py-2">
+                <span className="font-bold text-gray-900">{stats.paidAmount.toLocaleString()}</span>
+              </div>
+            </button>
           </div>
         </motion.div>
       </div>
@@ -431,6 +559,7 @@ const ProjectExpenses: React.FC = () => {
                 <option value="">All Status</option>
                 <option value="pending">Pending</option>
                 <option value="approved">Approved</option>
+                <option value="paid">Paid</option>
                 <option value="rejected">Rejected</option>
               </select>
             </div>
@@ -514,6 +643,8 @@ const ProjectExpenses: React.FC = () => {
                           ? 'bg-emerald-100 text-emerald-700' 
                           : expense.status === 'pending' || expense.status === 'submitted'
                           ? 'bg-amber-100 text-amber-700'
+                          : expense.status === 'paid'
+                          ? 'bg-blue-100 text-blue-700'
                           : 'bg-red-100 text-red-700'
                       }`}>
                         {expense.status.charAt(0).toUpperCase() + expense.status.slice(1)}
@@ -583,6 +714,8 @@ const ProjectExpenses: React.FC = () => {
                         ? 'bg-emerald-100 text-emerald-700' 
                         : selectedExpense.status === 'pending' || selectedExpense.status === 'submitted'
                         ? 'bg-amber-100 text-amber-700'
+                        : selectedExpense.status === 'paid'
+                        ? 'bg-blue-100 text-blue-700'
                         : 'bg-red-100 text-red-700'
                     }`}>
                       {selectedExpense.status.charAt(0).toUpperCase() + selectedExpense.status.slice(1)}
@@ -606,32 +739,41 @@ const ProjectExpenses: React.FC = () => {
               )}
               {(selectedExpense as ProjectExpense & { bill_drive_link?: string }).bill_drive_link && (
                 <div>
-                  <label className="text-sm font-medium text-gray-600">Bill Link</label>
-                  <a 
-                    href={(selectedExpense as ProjectExpense & { bill_drive_link?: string }).bill_drive_link} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="text-emerald-600 hover:text-emerald-700 mt-1 block"
+                  <label className="text-sm font-medium text-gray-600">Bill</label>
+                  <button
+                    onClick={() => {
+                      setBillUrl((selectedExpense as ProjectExpense & { bill_drive_link?: string }).bill_drive_link || '');
+                      setShowBillModal(true);
+                    }}
+                    className="text-emerald-600 hover:text-emerald-700 mt-1 block font-medium hover:underline"
                   >
                     View Bill Document
-                  </a>
+                  </button>
                 </div>
               )}
               <div className="flex gap-3 pt-4 border-t">
                 <button
                   onClick={handleApprove}
-                  disabled={selectedExpense.status === 'approved'}
+                  disabled={selectedExpense.status === 'approved' || selectedExpense.status === 'paid'}
                   className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition-colors"
                 >
                   Approve
                 </button>
                 <button
                   onClick={handleReject}
-                  disabled={selectedExpense.status === 'rejected'}
+                  disabled={selectedExpense.status === 'rejected' || selectedExpense.status === 'paid'}
                   className="flex-1 bg-red-500 hover:bg-red-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition-colors"
                 >
                   Reject
                 </button>
+                {selectedExpense.status === 'approved' && (
+                  <button
+                    onClick={handleMarkAsPaid}
+                    className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+                  >
+                    Mark as Paid
+                  </button>
+                )}
                 <button
                   onClick={() => setShowModal(false)}
                   className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-3 px-4 rounded-lg transition-colors"
@@ -657,6 +799,8 @@ const ProjectExpenses: React.FC = () => {
                 ? 'bg-linear-to-r from-emerald-500 to-emerald-600' 
                 : selectedStatus === 'pending'
                 ? 'bg-linear-to-r from-amber-500 to-amber-600'
+                : selectedStatus === 'paid'
+                ? 'bg-linear-to-r from-blue-500 to-blue-600'
                 : 'bg-linear-to-r from-red-500 to-red-600'
             }`}>
               <div className="flex items-center justify-between">
@@ -754,6 +898,75 @@ const ProjectExpenses: React.FC = () => {
             </div>
             <form onSubmit={handleCreateExpense} className="p-6 space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* CSR Partner */}
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">CSR Partner *</label>
+                  <select
+                    value={selectedCsrPartner}
+                    onChange={(e) => {
+                      const partnerId = e.target.value;
+                      setSelectedCsrPartner(partnerId);
+                      setSelectedToll('');
+                      setNewExpense({ ...newExpense, project_id: '' });
+                      setFilteredProjects([]);
+                      
+                      if (partnerId) {
+                        const partner = csrPartners.find(p => p.id === partnerId);
+                        const partnerHasToll = partner?.has_toll || false;
+                        setHasToll(partnerHasToll);
+                        
+                        if (partnerHasToll) {
+                          fetchTollsForPartner(partnerId);
+                        } else {
+                          setTolls([]);
+                          fetchProjectsForPartnerAndToll(partnerId);
+                        }
+                      } else {
+                        setHasToll(false);
+                        setTolls([]);
+                      }
+                    }}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    required
+                  >
+                    <option value="">Select CSR Partner</option>
+                    {csrPartners.map((partner) => (
+                      <option key={partner.id} value={partner.id}>
+                        {partner.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Toll - Conditional */}
+                {hasToll && selectedCsrPartner && (
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Toll *</label>
+                    <select
+                      value={selectedToll}
+                      onChange={(e) => {
+                        const tollId = e.target.value;
+                        setSelectedToll(tollId);
+                        setNewExpense({ ...newExpense, project_id: '' });
+                        if (tollId && selectedCsrPartner) {
+                          fetchProjectsForPartnerAndToll(selectedCsrPartner, tollId);
+                        } else {
+                          setFilteredProjects([]);
+                        }
+                      }}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      required
+                    >
+                      <option value="">Select Toll</option>
+                      {tolls.map((toll) => (
+                        <option key={toll.id} value={toll.id}>
+                          {toll.toll_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
                 {/* Project */}
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Project *</label>
@@ -762,9 +975,10 @@ const ProjectExpenses: React.FC = () => {
                     onChange={(e) => setNewExpense({ ...newExpense, project_id: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     required
+                    disabled={!selectedCsrPartner || (hasToll && !selectedToll)}
                   >
                     <option value="">Select Project</option>
-                    {projects.map((project) => (
+                    {filteredProjects.map((project) => (
                       <option key={project.id} value={project.id}>
                         {project.project_code} - {project.name}
                       </option>
@@ -880,17 +1094,30 @@ const ProjectExpenses: React.FC = () => {
                   />
                 </div>
 
-                {/* Bill Drive Link */}
+                {/* Bill Upload */}
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Bill (Google Drive Link)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Bill</label>
                   <input
-                    type="url"
-                    value={newExpense.bill_drive_link}
-                    onChange={(e) => setNewExpense({ ...newExpense, bill_drive_link: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    placeholder="https://drive.google.com/..."
+                    type="file"
+                    accept="image/*,.pdf"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        // Check file size (max 5MB)
+                        if (file.size > 5 * 1024 * 1024) {
+                          alert('File size must be less than 5MB');
+                          e.target.value = '';
+                          return;
+                        }
+                        setSelectedFile(file);
+                      }
+                    }}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Upload your bill to Google Drive and paste the shareable link here</p>
+                  <p className="text-xs text-gray-500 mt-1">Upload bill image or PDF (max 5MB)</p>
+                  {selectedFile && (
+                    <p className="text-xs text-emerald-600 mt-1">Selected: {selectedFile.name}</p>
+                  )}
                 </div>
               </div>
 
@@ -910,19 +1137,66 @@ const ProjectExpenses: React.FC = () => {
                       bill_drive_link: '',
                       payment_method: 'Cash',
                     });
+                    setSelectedFile(null);
+                    setSelectedCsrPartner('');
+                    setSelectedToll('');
+                    setHasToll(false);
+                    setFilteredProjects([]);
+                    setTolls([]);
                   }}
-                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-3 px-4 rounded-lg transition-colors"
+                  disabled={uploadingFile}
+                  className="flex-1 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-300 disabled:cursor-not-allowed text-gray-700 font-medium py-3 px-4 rounded-lg transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+                  disabled={uploadingFile}
+                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-300 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition-colors"
                 >
-                  Submit Expense
+                  {uploadingFile ? 'Uploading...' : 'Submit Expense'}
                 </button>
               </div>
             </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Bill Preview Modal */}
+      {showBillModal && billUrl && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden"
+          >
+            <div className="bg-linear-to-r from-emerald-500 to-emerald-600 p-6 text-white flex items-center justify-between">
+              <h2 className="text-2xl font-bold">Bill Document</h2>
+              <button
+                onClick={() => {
+                  setShowBillModal(false);
+                  setBillUrl('');
+                }}
+                className="text-white hover:bg-white/20 rounded-full p-2 transition-colors"
+              >
+                <XCircle className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-100px)]">
+              {billUrl.endsWith('.pdf') ? (
+                <iframe
+                  src={billUrl}
+                  className="w-full h-[600px] border border-gray-300 rounded-lg"
+                  title="Bill Document"
+                />
+              ) : (
+                <img
+                  src={billUrl}
+                  alt="Bill Document"
+                  className="w-full h-auto rounded-lg"
+                />
+              )}
+            </div>
           </motion.div>
         </div>
       )}
