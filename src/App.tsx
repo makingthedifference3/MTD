@@ -30,7 +30,7 @@ import UserManagementPage from './pages/UserManagementPage';
 import UtilizationCertificatePage from './pages/UtilizationCertificatePage';
 import ProjectsDashboardPage from './pages/ProjectsDashboardPage';
 import TollManagementPage from './pages/TollManagementPage';
-
+import ResultAnalysisPage from './pages/ResultAnalysisPage';
 
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -92,6 +92,16 @@ function AppRoutes() {
       <Route path="/upcoming-expenses" element={<ProtectedRoute><Sidebar currentPage="upcoming-expenses" onNavigate={() => {}}><UpcomingExpensesPage /></Sidebar></ProtectedRoute>} />
       <Route path="/bills" element={<ProtectedRoute><Sidebar currentPage="bills" onNavigate={() => {}}><Bills /></Sidebar></ProtectedRoute>} />
       <Route path="/analysis-report" element={<ProtectedRoute><Sidebar currentPage="analysis-report" onNavigate={() => {}}><AnalysisReport /></Sidebar></ProtectedRoute>} />
+      <Route
+        path="/result-analysis"
+        element={
+          <ProtectedRoute>
+            <Sidebar currentPage="result-analysis" onNavigate={() => {}}>
+              <ResultAnalysisPage />
+            </Sidebar>
+          </ProtectedRoute>
+        }
+      />
       <Route path="/tasks" element={<ProtectedRoute><Sidebar currentPage="tasks" onNavigate={() => {}}><UserAssignmentPage /></Sidebar></ProtectedRoute>} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/" element={<Navigate to="/admin-dashboard" replace />} />

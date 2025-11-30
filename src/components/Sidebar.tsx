@@ -116,10 +116,11 @@ import type { ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Menu, X, LogOut, LayoutDashboard, Briefcase, CheckSquare, Image, FileText, Users, Calendar,
-  DollarSign, Receipt, CreditCard, BarChart3, FileSpreadsheet, RefreshCw, ClipboardList, Database, TrendingUp, FileCheck
+  DollarSign, Receipt, CreditCard, BarChart3, FileSpreadsheet, RefreshCw, ClipboardList, Database,GraduationCap, TrendingUp, FileCheck
 } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import { useNavigate, useLocation } from 'react-router-dom';
+
 
 interface SidebarProps {
   children: ReactNode;
@@ -146,6 +147,7 @@ const menuItems = [
   { id: 'upcoming-expenses', label: 'Upcoming Expenses', icon: TrendingUp, roles: ['admin', 'project_manager'] },
   { id: 'bills', label: 'Bills', icon: Receipt, roles: ['admin', 'project_manager', 'team_member'] },
   { id: 'analysis-report', label: 'Analysis Report', icon: BarChart3, roles: ['admin', 'project_manager'] },
+  { id: 'result-analysis', label: 'Result Analysis', icon: GraduationCap, roles: ['admin'] },
   { id: 'tasks', label: 'My Tasks', icon: CheckSquare, roles: ['team_member'] },
   // Admin Only
   { id: 'user-management', label: 'User Management', icon: Users, roles: ['admin'] },
@@ -180,6 +182,7 @@ const Sidebar = ({ children, currentPage, onNavigate }: SidebarProps) => {
     'upcoming-expenses': '/upcoming-expenses',
     'bills': '/bills',
     'analysis-report': '/analysis-report',
+    'result-analysis': '/result-analysis',
     'tasks': '/tasks',
     'user-management': '/admin/users',
   };
