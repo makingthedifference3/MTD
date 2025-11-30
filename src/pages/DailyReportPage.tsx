@@ -1,89 +1,213 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Download, Calendar, Loader, FileText } from 'lucide-react';
+import { Download, Calendar, Loader, FileText, Star, CheckCircle, Clock, AlertTriangle, Filter } from 'lucide-react';
 import { type Task } from '@/services/tasksService';
 import { getUserById } from '@/services/usersService';
 import { projectService } from '@/services/projectService';
 import { supabase } from '@/services/supabaseClient';
-import * as taskService from '@/services/taskService';
+import { getAllCSRPartners, type CSRPartner } from '@/services/csrPartnersService';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+
+// Performance status types
+type PerformanceStatus = 'early' | 'on_time' | 'late' | 'pending' | 'no_due_date';
 
 interface TaskWithUser extends Task {
   assignedByName?: string;
   assignedToName?: string;
   projectName?: string;
+  csrPartnerName?: string;
+  csrPartnerId?: string;
+  performanceStatus?: PerformanceStatus;
+  daysVariance?: number; // positive = early, negative = late
+  activityDate?: string;
+  activityLabel?: string;
 }
 
+const getTodayString = () => new Date().toISOString().split('T')[0];
+const getStartOfMonthString = () => {
+  const today = new Date();
+  return new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+};
+const clampDateToToday = (value: string) => {
+  const today = getTodayString();
+  return value > today ? today : value;
+};
+const getYesterdayString = () => {
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  return yesterday.toISOString().split('T')[0];
+};
+const formatDateSectionLabel = (dateKey: string) => {
+  if (dateKey === 'No Date') {
+    return 'No Activity Date';
+  }
+  const parsed = new Date(dateKey);
+  if (Number.isNaN(parsed.getTime())) {
+    return 'Invalid Date';
+  }
+  const todayKey = getTodayString();
+  const yesterdayKey = getYesterdayString();
+  const formattedDate = parsed.toLocaleDateString();
+  const dayName = parsed.toLocaleDateString(undefined, { weekday: 'long' });
+  if (dateKey === todayKey) {
+    return `Today · ${dayName} · ${formattedDate}`;
+  }
+  if (dateKey === yesterdayKey) {
+    return `Yesterday · ${dayName} · ${formattedDate}`;
+  }
+  return `${dayName} · ${formattedDate}`;
+};
+
 const DailyReportPage = () => {
-  const today = new Date().toISOString().split('T')[0];
-  const [dateRange, setDateRange] = useState({ start: today, end: today });
+  const [dateRange, setDateRange] = useState({ start: getStartOfMonthString(), end: getTodayString() });
   const [showExportOptions, setShowExportOptions] = useState(false);
   const [tasks, setTasks] = useState<TaskWithUser[]>([]);
+  const [filteredTasks, setFilteredTasks] = useState<TaskWithUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [projects, setProjects] = useState<Array<{ id: string; name: string; project_code: string }>>([]);
-  const [departments, setDepartments] = useState<string[]>([]);
-  const [teamMembers, setTeamMembers] = useState<Array<{ id: string; full_name: string; department: string }>>([]);
-  const [newTask, setNewTask] = useState({
-    title: '',
-    description: '',
-    project_id: '',
-    assigned_to: '',
-    department: '',
-    priority: 'On Priority',
-    status: 'not_started',
-    due_date: '',
-    task_type: 'Development',
-  });
+  const [projects, setProjects] = useState<Array<{ id: string; name: string; project_code: string; csr_partner_id: string }>>([]);
+  const [csrPartners, setCsrPartners] = useState<CSRPartner[]>([]);
+  
+  // Filters
+  const [selectedProject, setSelectedProject] = useState<string>('');
+  const [selectedCsrPartner, setSelectedCsrPartner] = useState<string>('');
+  const [selectedPerformance, setSelectedPerformance] = useState<string>('');
+
+  // Calculate performance status based on due date and completion date
+  const calculatePerformanceStatus = (task: Task): { status: PerformanceStatus; daysVariance: number } => {
+    if (!task.due_date) {
+      return { status: 'no_due_date', daysVariance: 0 };
+    }
+
+    if (task.status !== 'completed') {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const dueDate = new Date(task.due_date);
+      dueDate.setHours(0, 0, 0, 0);
+      const daysUntilDue = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      return { status: 'pending', daysVariance: daysUntilDue };
+    }
+
+    const dueDate = new Date(task.due_date);
+    dueDate.setHours(0, 0, 0, 0);
+    const completedDate = new Date(task.completed_date || task.updated_at || new Date());
+    completedDate.setHours(0, 0, 0, 0);
+
+    const daysVariance = Math.ceil((dueDate.getTime() - completedDate.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (daysVariance > 0) {
+      return { status: 'early', daysVariance };
+    } else if (daysVariance === 0) {
+      return { status: 'on_time', daysVariance: 0 };
+    } else {
+      return { status: 'late', daysVariance };
+    }
+  };
+
+  // Get performance badge details
+  const getPerformanceBadge = (status: PerformanceStatus, daysVariance: number) => {
+    switch (status) {
+      case 'early':
+        return {
+          icon: Star,
+          label: `🌟 Excellent (${daysVariance} day${daysVariance !== 1 ? 's' : ''} early)`,
+          bgColor: 'bg-green-100',
+          textColor: 'text-green-700',
+          borderColor: 'border-green-300',
+        };
+      case 'on_time':
+        return {
+          icon: CheckCircle,
+          label: '✅ On Time',
+          bgColor: 'bg-blue-100',
+          textColor: 'text-blue-700',
+          borderColor: 'border-blue-300',
+        };
+      case 'late':
+        return {
+          icon: AlertTriangle,
+          label: `⚠️ Delayed (${Math.abs(daysVariance)} day${Math.abs(daysVariance) !== 1 ? 's' : ''} late)`,
+          bgColor: 'bg-red-100',
+          textColor: 'text-red-700',
+          borderColor: 'border-red-300',
+        };
+      case 'pending':
+        return {
+          icon: Clock,
+          label: daysVariance >= 0 
+            ? `⏳ Pending (${daysVariance} day${daysVariance !== 1 ? 's' : ''} left)`
+            : `⏳ Overdue (${Math.abs(daysVariance)} day${Math.abs(daysVariance) !== 1 ? 's' : ''})`,
+          bgColor: daysVariance >= 0 ? 'bg-amber-100' : 'bg-orange-100',
+          textColor: daysVariance >= 0 ? 'text-amber-700' : 'text-orange-700',
+          borderColor: daysVariance >= 0 ? 'border-amber-300' : 'border-orange-300',
+        };
+      case 'no_due_date':
+      default:
+        return {
+          icon: Clock,
+          label: '📅 No Due Date',
+          bgColor: 'bg-gray-100',
+          textColor: 'text-gray-700',
+          borderColor: 'border-gray-300',
+        };
+    }
+  };
 
   useEffect(() => {
     const fetchInitialData = async () => {
       const projectList = await projectService.getAllProjects();
-      setProjects(projectList.map(p => ({ id: p.id, name: p.name, project_code: p.project_code })));
-      
-      const allDepartments = await taskService.getAllDepartments();
-      setDepartments(allDepartments);
-      
-      const { data: members } = await supabase
-        .from('users')
-        .select('id, full_name, department')
-        .eq('role', 'team_member')
-        .order('full_name');
-      setTeamMembers(members || []);
+      setProjects(projectList.map(p => ({ id: p.id, name: p.name, project_code: p.project_code, csr_partner_id: p.csr_partner_id })));
+
+      // Fetch CSR Partners
+      const partners = await getAllCSRPartners();
+      setCsrPartners(partners);
     };
     fetchInitialData();
   }, []);
 
-  const fetchTasksData = useCallback(async () => {
+  const fetchTasksData = useCallback(async (range?: { start: string; end: string }) => {
     try {
       setLoading(true);
       setError(null);
 
-      // Fetch all completed tasks
+      // Fetch all tasks (not just completed) to show to-do list with performance tracking
       const { data: allTasks, error: tasksError } = await supabase
         .from('tasks')
         .select('*')
-        .eq('status', 'completed')
         .order('updated_at', { ascending: false });
 
       if (tasksError) throw tasksError;
 
-      // Filter by date range using updated_at
+      const activeRange = range ?? dateRange;
+      // Filter by date range using due_date, completed_date, or updated_at
       const filteredTasks = (allTasks || []).filter((task) => {
-        const taskDate = task.updated_at?.split('T')[0];
-        if (!taskDate) return false;
-        return taskDate >= dateRange.start && taskDate <= dateRange.end;
+        // Check if task falls within date range based on due_date or completed_date
+        const dueDate = task.due_date;
+        const completedDate = task.completed_date;
+        const updatedDate = task.updated_at?.split('T')[0];
+        
+        // Include if due_date, completed_date, or updated_at falls in range
+        const dateToCheck = completedDate || dueDate || updatedDate;
+        if (!dateToCheck) return false;
+        
+        return dateToCheck >= activeRange.start && dateToCheck <= activeRange.end;
       });
       
-      // Fetch user names and project names
+      // Fetch user names, project names, and CSR partner info
       const tasksWithDetails = await Promise.all(
         filteredTasks.map(async (task) => {
           let assignedByName = 'N/A';
           let assignedToName = 'N/A';
           let projectName = 'N/A';
+          let csrPartnerName = 'N/A';
+          let csrPartnerId = '';
+          const activityBase = task.completed_date || task.updated_at || task.due_date;
+          const activityDate = activityBase ? activityBase.split('T')[0] : undefined;
+          const activityLabel = activityDate
+            ? (task.completed_date ? `Completed on ${new Date(activityDate).toLocaleDateString()}` : `Progress on ${new Date(activityDate).toLocaleDateString()}`)
+            : 'No activity date';
           
           if (task.assigned_by) {
             const user = await getUserById(task.assigned_by);
@@ -98,61 +222,156 @@ const DailyReportPage = () => {
           if (task.project_id) {
             const project = await projectService.getProjectById(task.project_id);
             projectName = project?.name || 'Unknown Project';
+            csrPartnerId = project?.csr_partner_id || '';
+            
+            // Get CSR Partner name
+            if (csrPartnerId) {
+              const partner = csrPartners.find(p => p.id === csrPartnerId);
+              csrPartnerName = partner?.name || 'Unknown Partner';
+            }
           }
+
+          // Calculate performance status
+          const { status: performanceStatus, daysVariance } = calculatePerformanceStatus(task);
           
           return {
             ...task,
             assignedByName,
             assignedToName,
             projectName,
+            csrPartnerName,
+            csrPartnerId,
+            performanceStatus,
+            daysVariance,
+            activityDate,
+            activityLabel,
           };
         })
       );
+          const sortedTasks = [...tasksWithDetails].sort((a, b) => {
+            const aTime = a.activityDate ? new Date(a.activityDate).getTime() : 0;
+            const bTime = b.activityDate ? new Date(b.activityDate).getTime() : 0;
+            return bTime - aTime;
+          });
       
-      setTasks(tasksWithDetails);
+      setTasks(sortedTasks);
+      setFilteredTasks(sortedTasks);
     } catch (err) {
       setError('Failed to load task data');
       console.error('Error fetching task data:', err);
     } finally {
       setLoading(false);
     }
-  }, [dateRange]);
+  }, [dateRange, csrPartners]);
 
   useEffect(() => {
     fetchTasksData();
   }, [fetchTasksData]);
 
-  const handleApplyDateRange = () => {
-    fetchTasksData();
+  // Apply filters whenever filter values or tasks change
+  const sortByActivityDate = (list: TaskWithUser[]) => {
+    return [...list].sort((a, b) => {
+      const aTime = a.activityDate ? new Date(a.activityDate).getTime() : 0;
+      const bTime = b.activityDate ? new Date(b.activityDate).getTime() : 0;
+      return bTime - aTime;
+    });
   };
+
+  useEffect(() => {
+    let result = [...tasks];
+
+    // Filter by Project
+    if (selectedProject) {
+      result = result.filter(task => task.project_id === selectedProject);
+    }
+
+    // Filter by CSR Partner
+    if (selectedCsrPartner) {
+      result = result.filter(task => task.csrPartnerId === selectedCsrPartner);
+    }
+
+    // Filter by Performance Status
+    if (selectedPerformance) {
+      result = result.filter(task => task.performanceStatus === selectedPerformance);
+    }
+
+    setFilteredTasks(sortByActivityDate(result));
+  }, [tasks, selectedProject, selectedCsrPartner, selectedPerformance]);
+
+  const handleApplyDateRange = () => {
+    const newStart = getStartOfMonthString();
+    const clampedEnd = clampDateToToday(dateRange.end);
+    setDateRange({ start: newStart, end: clampedEnd });
+  };
+
+  const handleClearFilters = () => {
+    setSelectedProject('');
+    setSelectedCsrPartner('');
+    setSelectedPerformance('');
+  };
+
+  const groupedTasks = useMemo(() => {
+    const map = new Map<string, TaskWithUser[]>();
+    filteredTasks.forEach((task) => {
+      const key = task.activityDate || 'No Date';
+      if (!map.has(key)) {
+        map.set(key, []);
+      }
+      map.get(key)!.push(task);
+    });
+    return map;
+  }, [filteredTasks]);
+  const groupedEntries = useMemo(() => Array.from(groupedTasks.entries()), [groupedTasks]);
 
   const handleExportPDF = () => {
     const doc = new jsPDF();
     
     // Add title
     doc.setFontSize(18);
-    doc.text('Daily Task Report', 14, 20);
+    doc.text('Daily Task Report - To-Do List', 14, 20);
     
     // Add date range
     doc.setFontSize(11);
     doc.text(`Date Range: ${dateRange.start} to ${dateRange.end}`, 14, 30);
     
-    // Prepare table data
-    const tableData = tasks.map((task) => [
-      task.title,
-      task.projectName || 'N/A',
-      task.completed_date ? new Date(task.completed_date).toLocaleDateString() : 'N/A',
-      'COMPLETED',
-      task.assignedToName || 'N/A',
-      task.assignedByName || 'N/A',
-    ]);
+    // Add filter info
+    let filterText = 'Filters: ';
+    if (selectedProject) {
+      const project = projects.find(p => p.id === selectedProject);
+      filterText += `Project: ${project?.name || 'N/A'}, `;
+    }
+    if (selectedCsrPartner) {
+      const partner = csrPartners.find(p => p.id === selectedCsrPartner);
+      filterText += `CSR Partner: ${partner?.name || 'N/A'}, `;
+    }
+    if (selectedPerformance) {
+      filterText += `Performance: ${selectedPerformance}, `;
+    }
+    if (filterText !== 'Filters: ') {
+      doc.text(filterText.slice(0, -2), 14, 38);
+    }
+    
+    // Prepare table data with performance info
+    const tableData = filteredTasks.map((task) => {
+      const badge = getPerformanceBadge(task.performanceStatus || 'no_due_date', task.daysVariance || 0);
+      return [
+        task.title,
+        task.projectName || 'N/A',
+        task.csrPartnerName || 'N/A',
+        task.due_date ? new Date(task.due_date).toLocaleDateString() : 'N/A',
+        task.completed_date ? new Date(task.completed_date).toLocaleDateString() : 'N/A',
+        task.status.replace(/_/g, ' ').toUpperCase(),
+        badge.label.replace(/[🌟✅⚠️⏳📅]/g, '').trim(),
+        task.assignedToName || 'N/A',
+      ];
+    });
     
     // Add table
     autoTable(doc, {
-      head: [['Task Name', 'Project', 'Completed Date', 'Status', 'Assigned To', 'Assigned By']],
+      head: [['Task Name', 'Project', 'CSR Partner', 'Due Date', 'Completed', 'Status', 'Performance', 'Assigned To']],
       body: tableData,
-      startY: 40,
-      styles: { fontSize: 8 },
+      startY: selectedProject || selectedCsrPartner || selectedPerformance ? 45 : 40,
+      styles: { fontSize: 7 },
       headStyles: { fillColor: [16, 185, 129] },
     });
     
@@ -161,17 +380,24 @@ const DailyReportPage = () => {
   };
 
   const handleExportExcel = () => {
-    const exportData = tasks.map((task) => ({
-      'Task Name': task.title,
-      'Description': task.description || '',
-      'Project': task.projectName || 'N/A',
-      'Completed Date': task.completed_date ? new Date(task.completed_date).toLocaleDateString() : 'N/A',
-      'Status': 'COMPLETED',
-      'Assigned To': task.assignedToName || 'N/A',
-      'Assigned By': task.assignedByName || 'N/A',
-      'Priority': task.priority || 'N/A',
-      'Completion %': 100,
-    }));
+    const exportData = filteredTasks.map((task) => {
+      const badge = getPerformanceBadge(task.performanceStatus || 'no_due_date', task.daysVariance || 0);
+      return {
+        'Task Name': task.title,
+        'Description': task.description || '',
+        'Project': task.projectName || 'N/A',
+        'CSR Partner': task.csrPartnerName || 'N/A',
+        'Due Date': task.due_date ? new Date(task.due_date).toLocaleDateString() : 'N/A',
+        'Completed Date': task.completed_date ? new Date(task.completed_date).toLocaleDateString() : 'N/A',
+        'Status': task.status.replace(/_/g, ' ').toUpperCase(),
+        'Performance': badge.label.replace(/[🌟✅⚠️⏳📅]/g, '').trim(),
+        'Days Variance': task.daysVariance || 0,
+        'Assigned To': task.assignedToName || 'N/A',
+        'Assigned By': task.assignedByName || 'N/A',
+        'Priority': task.priority || 'N/A',
+        'Completion %': task.completion_percentage || 0,
+      };
+    });
     
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
@@ -181,17 +407,24 @@ const DailyReportPage = () => {
   };
 
   const handleExportCSV = () => {
-    const exportData = tasks.map((task) => ({
-      'Task Name': task.title,
-      'Description': task.description || '',
-      'Project': task.projectName || 'N/A',
-      'Completed Date': task.completed_date ? new Date(task.completed_date).toLocaleDateString() : 'N/A',
-      'Status': 'COMPLETED',
-      'Assigned To': task.assignedToName || 'N/A',
-      'Assigned By': task.assignedByName || 'N/A',
-      'Priority': task.priority || 'N/A',
-      'Completion %': 100,
-    }));
+    const exportData = filteredTasks.map((task) => {
+      const badge = getPerformanceBadge(task.performanceStatus || 'no_due_date', task.daysVariance || 0);
+      return {
+        'Task Name': task.title,
+        'Description': task.description || '',
+        'Project': task.projectName || 'N/A',
+        'CSR Partner': task.csrPartnerName || 'N/A',
+        'Due Date': task.due_date ? new Date(task.due_date).toLocaleDateString() : 'N/A',
+        'Completed Date': task.completed_date ? new Date(task.completed_date).toLocaleDateString() : 'N/A',
+        'Status': task.status.replace(/_/g, ' ').toUpperCase(),
+        'Performance': badge.label.replace(/[🌟✅⚠️⏳📅]/g, '').trim(),
+        'Days Variance': task.daysVariance || 0,
+        'Assigned To': task.assignedToName || 'N/A',
+        'Assigned By': task.assignedByName || 'N/A',
+        'Priority': task.priority || 'N/A',
+        'Completion %': task.completion_percentage || 0,
+      };
+    });
     
     const ws = XLSX.utils.json_to_sheet(exportData);
     const csv = XLSX.utils.sheet_to_csv(ws);
@@ -201,51 +434,6 @@ const DailyReportPage = () => {
     link.download = `daily-report-${dateRange.start}-to-${dateRange.end}.csv`;
     link.click();
     setShowExportOptions(false);
-  };
-
-  const handleCreateTask = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!newTask.title || !newTask.assigned_to || !newTask.project_id) {
-      alert('Title, Project, and Assignee are required');
-      return;
-    }
-
-    try {
-      const taskData = {
-        task_code: `TASK-${Date.now()}`,
-        project_id: newTask.project_id,
-        title: newTask.title,
-        description: newTask.description,
-        assigned_to: newTask.assigned_to,
-        status: newTask.status as 'not_started' | 'in_progress' | 'completed',
-        priority: newTask.priority,
-        due_date: newTask.due_date,
-        completion_percentage: 0,
-        department: newTask.department,
-      };
-
-      await taskService.createTask(taskData);
-
-      setShowAddModal(false);
-      setNewTask({
-        title: '',
-        description: '',
-        project_id: '',
-        assigned_to: '',
-        department: '',
-        priority: 'On Priority',
-        status: 'not_started',
-        due_date: '',
-        task_type: 'Development',
-      });
-      
-      alert('Task created successfully!');
-      fetchTasksData();
-    } catch (err) {
-      console.error('Error creating task:', err);
-      alert('Failed to create task');
-    }
   };
 
   const getStatusColor = (status: string) => {
@@ -286,8 +474,10 @@ const DailyReportPage = () => {
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Daily Report</h1>
-          <p className="text-gray-600 mt-2">View completed tasks by date range</p>
+          <h1 className="text-3xl font-bold text-gray-900">Daily Report - To-Do List</h1>
+          <p className="text-gray-600 mt-2">
+            Sorted from today backwards, showing tasks completed or progressed on each date.
+          </p>
         </div>
         <div className="flex items-center space-x-3">
           <div className="relative">
@@ -321,15 +511,6 @@ const DailyReportPage = () => {
               </div>
             )}
           </div>
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setShowAddModal(true)}
-            className="flex items-center space-x-2 bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-lg shadow-lg transition-colors font-medium"
-          >
-            <Plus className="w-5 h-5" />
-            <span>ADD NEW</span>
-          </motion.button>
         </div>
       </div>
 
@@ -343,14 +524,15 @@ const DailyReportPage = () => {
               <input
                 type="date"
                 value={dateRange.start}
-                onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+                disabled
                 className="w-32 focus:outline-none font-medium"
+                title="Start date always set to the 1st"
               />
               <span className="text-gray-400">-</span>
               <input
                 type="date"
                 value={dateRange.end}
-                onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
+                onChange={(e) => setDateRange(prev => ({ ...prev, end: clampDateToToday(e.target.value) }))}
                 className="w-32 focus:outline-none font-medium"
               />
             </div>
@@ -361,236 +543,203 @@ const DailyReportPage = () => {
         </div>
       </div>
 
-      {/* Task List - Card Style */}
-      <div className="space-y-4">
-        {tasks.length > 0 ? (
-          tasks.map((task, index) => (
-            <motion.div
-              key={task.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.05 }}
-              className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow"
+      {/* Filters Section - Project, CSR Partner, Performance */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Filter className="w-5 h-5 text-gray-600" />
+          <h3 className="text-lg font-semibold text-gray-900">Filters</h3>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {/* Project Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Project</label>
+            <select
+              value={selectedProject}
+              onChange={(e) => setSelectedProject(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
             >
-              <div>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">{task.title}</h3>
-                {task.description && (
-                  <p className="text-sm text-gray-600 mb-3">{task.description}</p>
-                )}
-                {task.projectName && (
-                  <p className="text-sm text-teal-600 font-medium mb-4">
-                    <FileText className="w-4 h-4 inline mr-1" />
-                    Project: {task.projectName}
-                  </p>
-                )}
-                <div className="flex items-center flex-wrap gap-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-gray-500">STATUS:</span>
-                    <span className="px-4 py-2 bg-emerald-50 text-emerald-700 rounded-full text-sm font-bold">
-                      COMPLETED
-                    </span>
-                  </div>
-                  <span className={`px-4 py-2 rounded-full text-sm font-bold ${getStatusColor(task.status)}`}>
-                    {task.status.replace(/_/g, ' ').toUpperCase()}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-gray-500">ASSIGNED BY:</span>
-                    <span className="px-4 py-2 bg-white border-2 border-gray-900 rounded-full text-sm font-bold">
-                      {task.assignedByName || 'N/A'}
-                    </span>
-                  </div>
-                  {task.assignedToName && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-gray-500">ASSIGNED TO:</span>
-                      <span className="px-4 py-2 bg-blue-50 text-blue-700 border-2 border-blue-300 rounded-full text-sm font-bold">
-                        {task.assignedToName}
-                      </span>
-                    </div>
-                  )}
-                </div>
+              <option value="">All Projects</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.project_code} - {project.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* CSR Partner Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">CSR Partner</label>
+            <select
+              value={selectedCsrPartner}
+              onChange={(e) => setSelectedCsrPartner(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            >
+              <option value="">All CSR Partners</option>
+              {csrPartners.map((partner) => (
+                <option key={partner.id} value={partner.id}>
+                  {partner.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Performance Status Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Performance</label>
+            <select
+              value={selectedPerformance}
+              onChange={(e) => setSelectedPerformance(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            >
+              <option value="">All Performance</option>
+              <option value="early">🌟 Excellent (Early)</option>
+              <option value="on_time">✅ On Time</option>
+              <option value="late">⚠️ Delayed (Late)</option>
+              <option value="pending">⏳ Pending</option>
+              <option value="no_due_date">📅 No Due Date</option>
+            </select>
+          </div>
+
+          {/* Clear Filters Button */}
+          <div className="flex items-end">
+            <button
+              onClick={handleClearFilters}
+              className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+            >
+              Clear Filters
+            </button>
+          </div>
+        </div>
+
+        {/* Performance Summary Stats */}
+        <div className="mt-6 grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="bg-green-50 rounded-lg p-4 text-center border border-green-200">
+            <div className="text-2xl font-bold text-green-700">
+              {tasks.filter(t => t.performanceStatus === 'early').length}
+            </div>
+            <div className="text-sm text-green-600">🌟 Excellent</div>
+          </div>
+          <div className="bg-blue-50 rounded-lg p-4 text-center border border-blue-200">
+            <div className="text-2xl font-bold text-blue-700">
+              {tasks.filter(t => t.performanceStatus === 'on_time').length}
+            </div>
+            <div className="text-sm text-blue-600">✅ On Time</div>
+          </div>
+          <div className="bg-red-50 rounded-lg p-4 text-center border border-red-200">
+            <div className="text-2xl font-bold text-red-700">
+              {tasks.filter(t => t.performanceStatus === 'late').length}
+            </div>
+            <div className="text-sm text-red-600">⚠️ Delayed</div>
+          </div>
+          <div className="bg-amber-50 rounded-lg p-4 text-center border border-amber-200">
+            <div className="text-2xl font-bold text-amber-700">
+              {tasks.filter(t => t.performanceStatus === 'pending').length}
+            </div>
+            <div className="text-sm text-amber-600">⏳ Pending</div>
+          </div>
+          <div className="bg-gray-50 rounded-lg p-4 text-center border border-gray-200">
+            <div className="text-2xl font-bold text-gray-700">
+              {tasks.filter(t => t.performanceStatus === 'no_due_date').length}
+            </div>
+            <div className="text-sm text-gray-600">📅 No Due Date</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Results Count */}
+      <div className="mb-4 text-sm text-gray-600">
+        Showing {filteredTasks.length} of {tasks.length} tasks
+      </div>
+
+      {/* Task List - Card Style */}
+      <div className="space-y-6">
+        {groupedEntries.length > 0 ? (
+          groupedEntries.map(([dateKey, tasksForDate]) => (
+            <div key={dateKey} className="space-y-4">
+              <div className="text-lg font-semibold text-gray-800 border-b border-gray-200 pb-2">
+                {formatDateSectionLabel(dateKey)}
               </div>
-            </motion.div>
+              <div className="space-y-4">
+                {tasksForDate.map((task, index) => {
+                  const performanceBadge = getPerformanceBadge(task.performanceStatus || 'no_due_date', task.daysVariance || 0);
+                  return (
+                    <motion.div
+                      key={task.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.05 }}
+                      className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow"
+                    >
+                      <div>
+                        <div className="flex items-start justify-between mb-2">
+                          <h3 className="text-xl font-bold text-gray-900">{task.title}</h3>
+                          <span className={`px-4 py-2 rounded-full text-sm font-bold ${performanceBadge.bgColor} ${performanceBadge.textColor} border ${performanceBadge.borderColor}`}>
+                            {performanceBadge.label}
+                          </span>
+                        </div>
+                        {task.description && (
+                          <p className="text-sm text-gray-600 mb-3">{task.description}</p>
+                        )}
+                        {task.activityLabel && (
+                          <p className="text-xs text-gray-500 mb-3">{task.activityLabel}</p>
+                        )}
+                        <div className="flex items-center flex-wrap gap-4 mb-4">
+                          {task.projectName && (
+                            <p className="text-sm text-teal-600 font-medium">
+                              <FileText className="w-4 h-4 inline mr-1" />
+                              Project: {task.projectName}
+                            </p>
+                          )}
+                          {task.csrPartnerName && task.csrPartnerName !== 'N/A' && (
+                            <p className="text-sm text-purple-600 font-medium">
+                              🏢 CSR Partner: {task.csrPartnerName}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center flex-wrap gap-4 mb-4 text-sm text-gray-500">
+                          {task.due_date && (
+                            <span>📅 Due: {new Date(task.due_date).toLocaleDateString()}</span>
+                          )}
+                          {task.completed_date && (
+                            <span>✅ Completed: {new Date(task.completed_date).toLocaleDateString()}</span>
+                          )}
+                        </div>
+                        <div className="flex items-center flex-wrap gap-3">
+                          <span className={`px-4 py-2 rounded-full text-sm font-bold ${getStatusColor(task.status)}`}>
+                            {task.status.replace(/_/g, ' ').toUpperCase()}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-gray-500">ASSIGNED BY:</span>
+                            <span className="px-4 py-2 bg-white border-2 border-gray-900 rounded-full text-sm font-bold">
+                              {task.assignedByName || 'N/A'}
+                            </span>
+                          </div>
+                          {task.assignedToName && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-semibold text-gray-500">ASSIGNED TO:</span>
+                              <span className="px-4 py-2 bg-blue-50 text-blue-700 border-2 border-blue-300 rounded-full text-sm font-bold">
+                                {task.assignedToName}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </div>
           ))
         ) : (
           <div className="text-center py-12 text-gray-500">
             <Calendar className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-            <p className="text-lg font-medium">No completed tasks found for the selected date range</p>
-            <p className="text-sm">Try adjusting your date filter</p>
+            <p className="text-lg font-medium">No tasks found for the selected filters</p>
+            <p className="text-sm">Try adjusting your date range or filters</p>
           </div>
         )}
       </div>
 
-      {/* Create Task Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6"
-          >
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Create New Task</h2>
-
-            <form onSubmit={handleCreateTask} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Project */}
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Project *</label>
-                  <select
-                    value={newTask.project_id}
-                    onChange={(e) => setNewTask({ ...newTask, project_id: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    required
-                  >
-                    <option value="">Select Project</option>
-                    {projects.map((project) => (
-                      <option key={project.id} value={project.id}>
-                        {project.project_code} - {project.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Title */}
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Title *</label>
-                  <input
-                    type="text"
-                    value={newTask.title}
-                    onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    placeholder="Task title"
-                    required
-                  />
-                </div>
-
-                {/* Description */}
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                  <textarea
-                    value={newTask.description}
-                    onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    placeholder="Task description"
-                    rows={3}
-                  />
-                </div>
-
-                {/* Priority */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Priority</label>
-                  <select
-                    value={newTask.priority}
-                    onChange={(e) => setNewTask({ ...newTask, priority: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  >
-                    <option value="On Priority">On Priority</option>
-                    <option value="High Priority">High Priority</option>
-                    <option value="Less Priority">Less Priority</option>
-                  </select>
-                </div>
-
-                {/* Status */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-                  <select
-                    value={newTask.status}
-                    onChange={(e) => setNewTask({ ...newTask, status: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  >
-                    <option value="not_started">Not Started</option>
-                    <option value="in_progress">In Progress</option>
-                    <option value="completed">Completed</option>
-                  </select>
-                </div>
-
-                {/* Due Date */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Due Date</label>
-                  <input
-                    type="date"
-                    value={newTask.due_date}
-                    onChange={(e) => setNewTask({ ...newTask, due_date: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
-
-                {/* Department */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
-                  <select
-                    value={newTask.department}
-                    onChange={(e) => setNewTask({ ...newTask, department: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  >
-                    <option value="">Select Department</option>
-                    {departments.map((dept) => (
-                      <option key={dept} value={dept}>
-                        {dept}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Task Type */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Task Type</label>
-                  <select
-                    value={newTask.task_type}
-                    onChange={(e) => setNewTask({ ...newTask, task_type: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  >
-                    <option value="Development">Development</option>
-                    <option value="Research">Research</option>
-                    <option value="Meeting">Meeting</option>
-                    <option value="Review">Review</option>
-                    <option value="Distribution">Distribution</option>
-                    <option value="Event">Event</option>
-                    <option value="Infrastructure">Infrastructure</option>
-                    <option value="Education">Education</option>
-                    <option value="Logistics">Logistics</option>
-                    <option value="Finance">Finance</option>
-                  </select>
-                </div>
-
-                {/* Assigned To */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Assigned To *</label>
-                  <select
-                    value={newTask.assigned_to}
-                    onChange={(e) => setNewTask({ ...newTask, assigned_to: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    required
-                  >
-                    <option value="">Select Team Member</option>
-                    {teamMembers.map((member) => (
-                      <option key={member.id} value={member.id}>
-                        {member.full_name} - {member.department}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Form Actions */}
-              <div className="flex items-center justify-end space-x-3 pt-6 border-t">
-                <button
-                  type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors"
-                >
-                  Create Task
-                </button>
-              </div>
-            </form>
-          </motion.div>
-        </div>
-      )}
     </div>
   );
 };
