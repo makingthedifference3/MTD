@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Upload, FileText, FolderOpen, BarChart3, Check, X, AlertCircle,
   Download, ChevronRight, ChevronLeft, Loader2, TrendingUp,
-  TrendingDown, Minus, CheckCircle, XCircle, RefreshCw
+  TrendingDown, Minus, CheckCircle, XCircle, RefreshCw, ChevronDown, FileSpreadsheet
 } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import * as geminiService from '../services/geminiService';
@@ -74,6 +74,8 @@ const ResultAnalysisPage = () => {
     averageImprovement: number;
   } | null>(null);
   const [filterStatus, setFilterStatus] = useState<'all' | 'improved' | 'declined' | 'same'>('all');
+  const [showDownloadMenu, setShowDownloadMenu] = useState(false);
+  const downloadMenuRef = useRef<HTMLDivElement>(null);
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -449,6 +451,20 @@ const ResultAnalysisPage = () => {
     }
   }, [selectedProjectId, currentStep]);
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (downloadMenuRef.current && !downloadMenuRef.current.contains(event.target as Node)) {
+        setShowDownloadMenu(false);
+      }
+    };
+
+    if (showDownloadMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showDownloadMenu]);
+
   const loadExistingResults = async () => {
     try {
       const results = await resultAnalysisService.getCampaignResultsByProject(selectedProjectId);
@@ -510,6 +526,118 @@ const ResultAnalysisPage = () => {
     a.download = `campaign-results-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
+  };
+
+  // Export to PDF
+  const exportToPDF = () => {
+    const filteredResults = filterStatus === 'all' 
+      ? campaignResults 
+      : campaignResults.filter(r => r.status === filterStatus);
+
+    // Create PDF content
+    let pdfContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Campaign Results Analysis</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 40px; }
+    h1 { color: #059669; margin-bottom: 10px; }
+    .date { color: #6b7280; margin-bottom: 30px; }
+    .summary { margin-bottom: 30px; }
+    .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 30px; }
+    .summary-card { padding: 20px; border-radius: 8px; }
+    .summary-card.blue { background: #eff6ff; border: 1px solid #bfdbfe; }
+    .summary-card.green { background: #d1fae5; border: 1px solid #a7f3d0; }
+    .summary-card.red { background: #fee2e2; border: 1px solid #fecaca; }
+    .summary-card.purple { background: #f3e8ff; border: 1px solid #e9d5ff; }
+    .summary-label { font-size: 12px; font-weight: 600; margin-bottom: 5px; }
+    .summary-value { font-size: 32px; font-weight: bold; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th { background: #f9fafb; padding: 12px; text-align: left; font-weight: 600; border-bottom: 2px solid #e5e7eb; }
+    td { padding: 12px; border-bottom: 1px solid #e5e7eb; }
+    tr:hover { background: #f9fafb; }
+    .status-badge { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+    .status-improved { background: #d1fae5; color: #065f46; }
+    .status-declined { background: #fee2e2; color: #991b1b; }
+    .status-same { background: #f3f4f6; color: #374151; }
+    .status-incomplete { background: #fef3c7; color: #92400e; }
+    .improvement-positive { color: #059669; font-weight: 600; }
+    .improvement-negative { color: #dc2626; font-weight: 600; }
+    .improvement-neutral { color: #6b7280; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h1>Campaign Results Analysis</h1>
+  <div class="date">Generated on ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
+  
+  ${resultsSummary ? `
+  <div class="summary-grid">
+    <div class="summary-card blue">
+      <div class="summary-label" style="color: #2563eb;">Total Students</div>
+      <div class="summary-value" style="color: #1e3a8a;">${resultsSummary.totalStudents}</div>
+    </div>
+    <div class="summary-card green">
+      <div class="summary-label" style="color: #059669;">Improved</div>
+      <div class="summary-value" style="color: #065f46;">${resultsSummary.studentsImproved}</div>
+    </div>
+    <div class="summary-card red">
+      <div class="summary-label" style="color: #dc2626;">Declined</div>
+      <div class="summary-value" style="color: #991b1b;">${resultsSummary.studentsDeclined}</div>
+    </div>
+    <div class="summary-card purple">
+      <div class="summary-label" style="color: #9333ea;">Avg Improvement</div>
+      <div class="summary-value" style="color: #6b21a8;">${resultsSummary.averageImprovement.toFixed(2)}%</div>
+    </div>
+  </div>
+  ` : ''}
+  
+  <table>
+    <thead>
+      <tr>
+        <th>Student Name</th>
+        <th>Roll Number</th>
+        <th style="text-align: center;">Pre Score</th>
+        <th style="text-align: center;">Pre %</th>
+        <th style="text-align: center;">Post Score</th>
+        <th style="text-align: center;">Post %</th>
+        <th style="text-align: center;">Improvement</th>
+        <th style="text-align: center;">Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${filteredResults.map(r => `
+        <tr>
+          <td>${r.student_name}</td>
+          <td>${r.student_roll_number || '-'}</td>
+          <td style="text-align: center;">${r.pre_score}</td>
+          <td style="text-align: center;">${r.pre_percentage.toFixed(1)}%</td>
+          <td style="text-align: center;">${r.post_score}</td>
+          <td style="text-align: center;">${r.post_percentage.toFixed(1)}%</td>
+          <td style="text-align: center;" class="${r.improvement_percentage > 0 ? 'improvement-positive' : r.improvement_percentage < 0 ? 'improvement-negative' : 'improvement-neutral'}">
+            ${r.improvement_percentage > 0 ? '+' : ''}${r.improvement_percentage.toFixed(1)}%
+          </td>
+          <td style="text-align: center;">
+            <span class="status-badge status-${r.status}">${r.status}</span>
+          </td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
+</body>
+</html>
+    `;
+
+    // Create a new window and print
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(pdfContent);
+      printWindow.document.close();
+      setTimeout(() => {
+        printWindow.print();
+      }, 250);
+    }
   };
 
   // ==================== RENDER ====================
@@ -625,20 +753,18 @@ const ResultAnalysisPage = () => {
               </h2>
               
               {/* Project Selection */}
-              {!selectedProjectId && (
-                <div className="mb-6">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Select Project (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Enter Project ID or leave blank"
-                    value={selectedProjectId}
-                    onChange={(e) => setSelectedProjectId(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  />
-                </div>
-              )}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select Project (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter Project ID or leave blank"
+                  value={selectedProjectId}
+                  onChange={(e) => setSelectedProjectId(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                />
+              </div>
 
               {/* File Upload */}
               <div className="mb-6">
@@ -1293,13 +1419,51 @@ const ResultAnalysisPage = () => {
                       <option value="same">No Change</option>
                     </select>
                   </div>
-                  <button
-                    onClick={exportToCSV}
-                    className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700"
-                  >
-                    <Download className="w-4 h-4" />
-                    Export to CSV
-                  </button>
+                  
+                  {/* Download Dropdown */}
+                  <div className="relative" ref={downloadMenuRef}>
+                    <button
+                      onClick={() => setShowDownloadMenu(!showDownloadMenu)}
+                      className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700"
+                    >
+                      <Download className="w-4 h-4" />
+                      Download Results
+                      <ChevronDown className="w-4 h-4" />
+                    </button>
+                    
+                    {/* Dropdown Menu */}
+                    <AnimatePresence>
+                      {showDownloadMenu && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -10 }}
+                          className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden z-10"
+                        >
+                          <button
+                            onClick={() => {
+                              exportToPDF();
+                              setShowDownloadMenu(false);
+                            }}
+                            className="w-full flex items-center gap-3 px-4 py-3 text-left text-sm text-gray-700 hover:bg-emerald-50 transition-colors"
+                          >
+                            <FileText className="w-4 h-4 text-emerald-600" />
+                            <span>Download as PDF</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              exportToCSV();
+                              setShowDownloadMenu(false);
+                            }}
+                            className="w-full flex items-center gap-3 px-4 py-3 text-left text-sm text-gray-700 hover:bg-emerald-50 transition-colors border-t border-gray-100"
+                          >
+                            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                            <span>Download as CSV</span>
+                          </button>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 </div>
               )}
 
