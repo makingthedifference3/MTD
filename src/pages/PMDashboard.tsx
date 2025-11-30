@@ -169,7 +169,7 @@ const PMDashboardInner = () => {
               </div>
               <div>
                 <h1 className="text-3xl md:text-4xl font-bold bg-linear-to-r from-gray-900 via-emerald-800 to-gray-900 bg-clip-text text-transparent">
-                  Project Command Center
+                  Project  Center
                 </h1>
                 <p className="text-gray-600 mt-1 font-medium">
                   {dashboardView === 'hierarchy' ? (
