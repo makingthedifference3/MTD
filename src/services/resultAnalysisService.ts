@@ -10,6 +10,27 @@ import type { ExtractedQuestion, GradedAnswer } from './geminiService';
 
 // ==================== TYPES ====================
 
+export interface CSRPartner {
+  id: string;
+  name: string;
+  company_name?: string;
+  primary_color?: string;
+  is_active: boolean;
+}
+
+export interface Project {
+  id: string;
+  project_code: string;
+  name: string;
+  description?: string;
+  csr_partner_id: string;
+  status: string;
+  display_color?: string;
+  display_icon?: string;
+  is_active: boolean;
+  csr_partners?: CSRPartner;
+}
+
 export interface QuestionPaper {
   id: string;
   paper_code: string;
@@ -105,12 +126,200 @@ export interface CampaignResult {
   updated_by?: string;
 }
 
+// ==================== CSR PARTNERS & PROJECTS ====================
+
+/**
+ * Get all active CSR Partners
+ */
+export async function getAllCSRPartners(): Promise<CSRPartner[]> {
+  try {
+    const { data, error } = await supabase
+      .from('csr_partners')
+      .select('id, name, company_name, primary_color, is_active')
+      .eq('is_active', true)
+      .order('name');
+
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error('Error fetching CSR partners:', error);
+    return [];
+  }
+}
+
+/**
+ * Get all active projects with their CSR partner information
+ */
+export async function getAllProjectsWithPartners(): Promise<Project[]> {
+  try {
+    const { data, error } = await supabase
+      .from('projects')
+      .select(`
+        id,
+        project_code,
+        name,
+        description,
+        csr_partner_id,
+        status,
+        display_color,
+        display_icon,
+        is_active,
+        csr_partners (
+          id,
+          name,
+          company_name,
+          primary_color
+        )
+      `)
+      .eq('is_active', true)
+      .order('name');
+
+    if (error) throw error;
+    return (data as any) || [];
+  } catch (error) {
+    console.error('Error fetching projects:', error);
+    return [];
+  }
+}
+
+/**
+ * Get all projects for a CSR Partner
+ */
+export async function getProjectsByCSRPartner(csrPartnerId: string): Promise<Project[]> {
+  try {
+    const { data, error} = await supabase
+      .from('projects')
+      .select(`
+        id,
+        project_code,
+        name,
+        description,
+        csr_partner_id,
+        status,
+        display_color,
+        display_icon,
+        is_active,
+        csr_partners (
+          id,
+          name,
+          company_name,
+          primary_color
+        )
+      `)
+      .eq('csr_partner_id', csrPartnerId)
+      .eq('is_active', true)
+      .order('name');
+
+    if (error) throw error;
+    return (data as any) || [];
+  } catch (error) {
+    console.error('Error fetching projects:', error);
+    return [];
+  }
+}
+
+/**
+ * Get project by ID with CSR Partner details
+ */
+export async function getProjectById(projectId: string): Promise<Project | null> {
+  try {
+    const { data, error } = await supabase
+      .from('projects')
+      .select(`
+        id,
+        project_code,
+        name,
+        description,
+        csr_partner_id,
+        status,
+        display_color,
+        display_icon,
+        is_active,
+        csr_partners (
+          id,
+          name,
+          company_name,
+          primary_color
+        )
+      `)
+      .eq('id', projectId)
+      .single();
+
+    if (error) throw error;
+    return data as any;
+  } catch (error) {
+    console.error('Error fetching project:', error);
+    return null;
+  }
+}
+
+/**
+ * Check if a project has existing result analysis data
+ */
+export async function checkProjectHasResults(projectId: string): Promise<{
+  hasResults: boolean;
+  hasPreQuestionPaper: boolean;
+  hasPostQuestionPaper: boolean;
+  hasPreAnswerSheets: boolean;
+  hasPostAnswerSheets: boolean;
+  hasCampaignResults: boolean;
+  preQuestionPaper?: QuestionPaper;
+  postQuestionPaper?: QuestionPaper;
+  totalPreSheets: number;
+  totalPostSheets: number;
+  totalResults: number;
+}> {
+  try {
+    // Check for question papers
+    const [preQuestionPapers, postQuestionPapers] = await Promise.all([
+      getQuestionPapersByProject(projectId, 'pre'),
+      getQuestionPapersByProject(projectId, 'post'),
+    ]);
+
+    // Check for answer sheets
+    const [preSheets, postSheets] = await Promise.all([
+      getAnswerSheetsByProject(projectId, 'pre'),
+      getAnswerSheetsByProject(projectId, 'post'),
+    ]);
+
+    // Check for campaign results
+    const results = await getCampaignResultsByProject(projectId);
+
+    return {
+      hasResults: results.length > 0 || preSheets.length > 0 || postSheets.length > 0,
+      hasPreQuestionPaper: preQuestionPapers.length > 0,
+      hasPostQuestionPaper: postQuestionPapers.length > 0,
+      hasPreAnswerSheets: preSheets.length > 0,
+      hasPostAnswerSheets: postSheets.length > 0,
+      hasCampaignResults: results.length > 0,
+      preQuestionPaper: preQuestionPapers[0],
+      postQuestionPaper: postQuestionPapers[0],
+      totalPreSheets: preSheets.length,
+      totalPostSheets: postSheets.length,
+      totalResults: results.length,
+    };
+  } catch (error) {
+    console.error('Error checking project results:', error);
+    return {
+      hasResults: false,
+      hasPreQuestionPaper: false,
+      hasPostQuestionPaper: false,
+      hasPreAnswerSheets: false,
+      hasPostAnswerSheets: false,
+      hasCampaignResults: false,
+      totalPreSheets: 0,
+      totalPostSheets: 0,
+      totalResults: 0,
+    };
+  }
+}
+
 // ==================== QUESTION PAPERS ====================
 
 /**
  * Create a new question paper
  */
-export async function createQuestionPaper(data: Partial<QuestionPaper>, userId?: string): Promise<QuestionPaper> {
+export async function createQuestionPaper(data: Partial<QuestionPaper>, userId?: string, csrPartnerId?: string): Promise<QuestionPaper> {
   try {
     const insertData: Record<string, unknown> = {};
     
@@ -119,17 +328,12 @@ export async function createQuestionPaper(data: Partial<QuestionPaper>, userId?:
     
     // Copy only valid fields, sanitizing UUID fields
     for (const [key, value] of Object.entries(data)) {
-      // For UUID fields (except project_id which is TEXT in this table), validate UUID format
-      if (['verified_by', 'created_by', 'updated_by'].includes(key)) {
+      // For UUID fields, validate UUID format
+      if (['project_id', 'verified_by', 'created_by', 'updated_by', 'csr_partner_id'].includes(key)) {
         if (value && typeof value === 'string' && value.trim() !== '' && uuidPattern.test(value.trim())) {
           insertData[key] = value.trim();
         }
         // Skip if not a valid UUID
-      } else if (key === 'project_id') {
-        // project_id is TEXT type in this table, just ensure it's not empty
-        if (value && typeof value === 'string' && value.trim() !== '') {
-          insertData[key] = value.trim();
-        }
       } else if (value !== undefined && value !== null) {
         insertData[key] = value;
       }
@@ -139,6 +343,11 @@ export async function createQuestionPaper(data: Partial<QuestionPaper>, userId?:
     if (userId && userId.trim() !== '' && uuidPattern.test(userId.trim())) {
       insertData.created_by = userId.trim();
       insertData.updated_by = userId.trim();
+    }
+    
+    // Add CSR partner ID if provided
+    if (csrPartnerId && csrPartnerId.trim() !== '' && uuidPattern.test(csrPartnerId.trim())) {
+      insertData.csr_partner_id = csrPartnerId.trim();
     }
     
     console.log('Insert data being sent to Supabase:', JSON.stringify(insertData, null, 2));
@@ -377,24 +586,93 @@ export async function getAnswerSheetsByProject(projectId: string, campaignType?:
 
     const { data, error } = await query;
 
-    if (error) throw error;
+    if (error) {
+      console.error(`Error fetching ${campaignType || 'all'} answer sheets for project ${projectId}:`, error);
+      throw error;
+    }
+    
+    console.log(`Found ${data?.length || 0} ${campaignType || 'all'} answer sheets for project ${projectId}`);
     return data || [];
   } catch (error) {
     console.error('Error fetching answer sheets:', error);
-    return [];
+    throw error;
+  }
+}
+
+/**
+ * Update answer sheets to have the correct project_id and csr_partner_id
+ * This fixes any sheets that were created before migration or without proper IDs
+ */
+export async function updateAnswerSheetsProjectId(
+  preQuestionPaperId: string,
+  postQuestionPaperId: string,
+  projectId: string,
+  csrPartnerId?: string
+): Promise<void> {
+  try {
+    console.log('Updating answer sheets with project_id:', projectId);
+    
+    // Update pre-campaign sheets
+    const { error: preError } = await supabase
+      .from('student_answer_sheets')
+      .update({
+        project_id: projectId,
+        csr_partner_id: csrPartnerId || null
+      })
+      .eq('question_paper_id', preQuestionPaperId);
+
+    if (preError) {
+      console.error('Error updating pre-campaign sheets:', preError);
+    } else {
+      console.log('✅ Updated pre-campaign sheets');
+    }
+
+    // Update post-campaign sheets
+    const { error: postError } = await supabase
+      .from('student_answer_sheets')
+      .update({
+        project_id: projectId,
+        csr_partner_id: csrPartnerId || null
+      })
+      .eq('question_paper_id', postQuestionPaperId);
+
+    if (postError) {
+      console.error('Error updating post-campaign sheets:', postError);
+    } else {
+      console.log('✅ Updated post-campaign sheets');
+    }
+
+    // Also update question papers
+    await supabase
+      .from('campaign_question_papers')
+      .update({
+        project_id: projectId,
+        csr_partner_id: csrPartnerId || null
+      })
+      .in('id', [preQuestionPaperId, postQuestionPaperId]);
+
+    console.log('✅ All answer sheets updated with project_id');
+  } catch (error) {
+    console.error('Error updating answer sheets:', error);
+    // Don't throw - just log the error and continue
   }
 }
 
 /**
  * Batch create student answer sheets
  */
-export async function batchCreateStudentAnswerSheets(sheets: Partial<StudentAnswerSheet>[], userId?: string): Promise<StudentAnswerSheet[]> {
+export async function batchCreateStudentAnswerSheets(sheets: Partial<StudentAnswerSheet>[], userId?: string, csrPartnerId?: string): Promise<StudentAnswerSheet[]> {
   try {
     const sheetsWithUser = sheets.map(sheet => {
       const sheetData: Record<string, unknown> = { ...sheet };
       if (userId && userId.trim() !== '') {
         sheetData.created_by = userId;
         sheetData.updated_by = userId;
+      }
+      
+      // Add CSR partner ID if provided
+      if (csrPartnerId && csrPartnerId.trim() !== '') {
+        sheetData.csr_partner_id = csrPartnerId;
       }
       
       // Remove undefined fields to avoid Supabase errors
@@ -536,11 +814,22 @@ export async function getCampaignResultsByProject(projectId: string): Promise<Ca
 /**
  * Generate campaign results by comparing pre and post answer sheets
  */
-export async function generateCampaignResults(projectId: string, userId?: string): Promise<CampaignResult[]> {
+export async function generateCampaignResults(projectId: string, userId?: string, csrPartnerId?: string): Promise<CampaignResult[]> {
   try {
+    console.log('Generating campaign results for project:', projectId);
+    
     // Get pre and post answer sheets
     const preSheets = await getAnswerSheetsByProject(projectId, 'pre');
     const postSheets = await getAnswerSheetsByProject(projectId, 'post');
+    
+    console.log(`Found ${preSheets.length} pre-campaign sheets and ${postSheets.length} post-campaign sheets`);
+    
+    if (preSheets.length === 0) {
+      throw new Error('No pre-campaign answer sheets found for this project. Please ensure you have completed Step 4 (Pre-Campaign Student Responses) and that the data was saved with the correct project ID.');
+    }
+    if (postSheets.length === 0) {
+      throw new Error('No post-campaign answer sheets found for this project. Please ensure you have completed Step 6 (Post-Campaign Student Responses) and that the data was saved with the correct project ID.');
+    }
 
     // Helper function to calculate string similarity (Levenshtein distance ratio)
     const calculateSimilarity = (str1: string, str2: string): number => {
@@ -755,19 +1044,36 @@ export async function generateCampaignResults(projectId: string, userId?: string
     if (results.length > 0) {
       const resultsWithUser = results.map(result => {
         const resultData: Record<string, unknown> = { ...result };
+        
+        // Remove fields that might cause issues or are backup columns
+        delete resultData.detailed_comparison;
+        delete resultData.project_id_old;
+        
         if (userId && userId.trim() !== '') {
           resultData.created_by = userId;
           resultData.updated_by = userId;
         }
+        if (csrPartnerId && csrPartnerId.trim() !== '') {
+          resultData.csr_partner_id = csrPartnerId;
+        }
+        
         return resultData;
       });
+
+      console.log('Inserting results:', resultsWithUser.length, 'records');
+      console.log('Sample result:', JSON.stringify(resultsWithUser[0], null, 2));
 
       const { data, error } = await supabase
         .from('campaign_results')
         .insert(resultsWithUser)
         .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase insert error:', error);
+        throw new Error(`Failed to save results: ${error.message}`);
+      }
+      
+      console.log('✅ Successfully inserted', data?.length || 0, 'results');
       return data || [];
     }
 
@@ -849,6 +1155,13 @@ export async function getCampaignResultsSummary(projectId: string): Promise<{
 }
 
 export default {
+  // CSR Partners & Projects
+  getAllCSRPartners,
+  getAllProjectsWithPartners,
+  getProjectsByCSRPartner,
+  getProjectById,
+  checkProjectHasResults,
+  
   // Question Papers
   createQuestionPaper,
   updateQuestionPaper,

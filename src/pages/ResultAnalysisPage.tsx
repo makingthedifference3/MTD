@@ -12,7 +12,7 @@ import type { StudentAnswerSheet, CampaignResult } from '../services/resultAnaly
 
 // ==================== TYPES ====================
 
-type Step = 1 | 2 | 3 | 4 | 5;
+type Step = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
 interface UploadedPaper {
   file: File;
@@ -28,14 +28,38 @@ interface UploadedPaper {
 
 const ResultAnalysisPage = () => {
   const { currentUser } = useAuth();
-  const [currentStep, setCurrentStep] = useState<Step>(1);
+  const [currentStep, setCurrentStep] = useState<Step>(0);
+  
+  // Step 0: CSR Partner Selection
+  const [csrPartners, setCSRPartners] = useState<resultAnalysisService.CSRPartner[]>([]);
+  const [selectedCSRPartnerId, setSelectedCSRPartnerId] = useState<string>('');
+  const [selectedCSRPartner, setSelectedCSRPartner] = useState<resultAnalysisService.CSRPartner | null>(null);
+  const [partnerSearchQuery, setPartnerSearchQuery] = useState<string>('');
+  
+  // Step 1: Project Selection
+  const [projects, setProjects] = useState<resultAnalysisService.Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const [selectedProject, setSelectedProject] = useState<resultAnalysisService.Project | null>(null);
+  const [projectSearchQuery, setProjectSearchQuery] = useState<string>('');
+  
+  // Step 2: Existing Data Check
+  const [projectResultsStatus, setProjectResultsStatus] = useState<{
+    hasResults: boolean;
+    hasPreQuestionPaper: boolean;
+    hasPostQuestionPaper: boolean;
+    hasPreAnswerSheets: boolean;
+    hasPostAnswerSheets: boolean;
+    hasCampaignResults: boolean;
+    totalPreSheets: number;
+    totalPostSheets: number;
+    totalResults: number;
+  } | null>(null);
 
-  // Step 1: Pre-Campaign Question Paper
+  // Step 3: Pre-Campaign Question Paper
   const [preQuestionPaper, setPreQuestionPaper] = useState<UploadedPaper | null>(null);
   const [preQuestionPaperId, setPreQuestionPaperId] = useState<string>('');
 
-  // Step 2: Pre-Campaign Student Responses
+  // Step 4: Pre-Campaign Student Responses
   const [preStudentFiles, setPreStudentFiles] = useState<File[]>([]);
   const [preStudentSheets, setPreStudentSheets] = useState<StudentAnswerSheet[]>([]);
   const [preProcessingStatus, setPreProcessingStatus] = useState<{
@@ -46,11 +70,11 @@ const ResultAnalysisPage = () => {
     error?: string;
   }>({ total: 0, processed: 0, status: 'idle' });
 
-  // Step 3: Post-Campaign Question Paper
+  // Step 5: Post-Campaign Question Paper
   const [postQuestionPaper, setPostQuestionPaper] = useState<UploadedPaper | null>(null);
   const [postQuestionPaperId, setPostQuestionPaperId] = useState<string>('');
 
-  // Step 4: Post-Campaign Student Responses
+  // Step 6: Post-Campaign Student Responses
   const [postStudentFiles, setPostStudentFiles] = useState<File[]>([]);
   const [postStudentSheets, setPostStudentSheets] = useState<StudentAnswerSheet[]>([]);
   const [postProcessingStatus, setPostProcessingStatus] = useState<{
@@ -61,7 +85,7 @@ const ResultAnalysisPage = () => {
     error?: string;
   }>({ total: 0, processed: 0, status: 'idle' });
 
-  // Step 5: Analysis Results
+  // Step 7: Analysis Results
   const [campaignResults, setCampaignResults] = useState<CampaignResult[]>([]);
   const [resultsSummary, setResultsSummary] = useState<{
     totalStudents: number;
@@ -80,7 +104,98 @@ const ResultAnalysisPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // ==================== STEP 1: PRE-CAMPAIGN QUESTION PAPER ====================
+  // Load CSR Partners on mount
+  useEffect(() => {
+    loadCSRPartners();
+  }, []);
+
+  // Load projects when CSR Partner is selected
+  useEffect(() => {
+    if (selectedCSRPartnerId) {
+      loadProjects();
+    }
+  }, [selectedCSRPartnerId]);
+
+  // Check existing results when project is selected
+  useEffect(() => {
+    if (selectedProjectId) {
+      checkExistingResults();
+    }
+  }, [selectedProjectId]);
+
+  // ==================== DATA LOADING FUNCTIONS ====================
+
+  const loadCSRPartners = async () => {
+    try {
+      setIsLoading(true);
+      const partners = await resultAnalysisService.getAllCSRPartners();
+      setCSRPartners(partners);
+      setIsLoading(false);
+    } catch (err) {
+      console.error('Error loading CSR partners:', err);
+      setError('Failed to load CSR partners');
+      setIsLoading(false);
+    }
+  };
+
+  const loadProjects = async () => {
+    try {
+      setIsLoading(true);
+      const projectList = await resultAnalysisService.getProjectsByCSRPartner(selectedCSRPartnerId);
+      setProjects(projectList);
+      setIsLoading(false);
+    } catch (err) {
+      console.error('Error loading projects:', err);
+      setError('Failed to load projects');
+      setIsLoading(false);
+    }
+  };
+
+  const checkExistingResults = async () => {
+    try {
+      setIsLoading(true);
+      const status = await resultAnalysisService.checkProjectHasResults(selectedProjectId);
+      setProjectResultsStatus(status);
+      
+      // Load existing data if available
+      if (status.hasPreQuestionPaper && status.preQuestionPaper) {
+        setPreQuestionPaperId(status.preQuestionPaper.id);
+      }
+      if (status.hasPostQuestionPaper && status.postQuestionPaper) {
+        setPostQuestionPaperId(status.postQuestionPaper.id);
+      }
+      
+      // If results exist, load the summary
+      if (status.hasCampaignResults && status.totalResults > 0) {
+        const summary = await resultAnalysisService.getCampaignResultsSummary(selectedProjectId);
+        setResultsSummary(summary);
+      }
+      
+      setIsLoading(false);
+    } catch (err) {
+      console.error('Error checking existing results:', err);
+      setError('Failed to check existing results');
+      setIsLoading(false);
+    }
+  };
+
+  const handleCSRPartnerSelect = (partnerId: string) => {
+    setSelectedCSRPartnerId(partnerId);
+    const partner = csrPartners.find(p => p.id === partnerId);
+    setSelectedCSRPartner(partner || null);
+    setSelectedProjectId('');
+    setSelectedProject(null);
+    setProjects([]);
+    setProjectResultsStatus(null);
+  };
+
+  const handleProjectSelect = (projectId: string) => {
+    setSelectedProjectId(projectId);
+    const project = projects.find(p => p.id === projectId);
+    setSelectedProject(project || null);
+  };
+
+  // ==================== STEP 3: PRE-CAMPAIGN QUESTION PAPER ====================
 
   const handlePreQuestionPaperUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -133,7 +248,8 @@ const ResultAnalysisPage = () => {
           extraction_status: 'completed',
           is_verified: false,
         },
-        currentUser?.id
+        currentUser?.id,
+        selectedCSRPartnerId
       );
 
       setPreQuestionPaperId(savedPaper.id);
@@ -152,7 +268,7 @@ const ResultAnalysisPage = () => {
     }
   };
 
-  // ==================== STEP 2: PRE-CAMPAIGN STUDENT RESPONSES ====================
+  // ==================== STEP 4: PRE-CAMPAIGN STUDENT RESPONSES ====================
 
   const processPreStudentSheets = async () => {
     if (preStudentFiles.length === 0 || !preQuestionPaperId || !preQuestionPaper?.extractedData) return;
@@ -228,7 +344,8 @@ const ResultAnalysisPage = () => {
         
         const savedSheets = await resultAnalysisService.batchCreateStudentAnswerSheets(
           processedSheets,
-          currentUser?.id
+          currentUser?.id,
+          selectedCSRPartnerId
         );
         setPreStudentSheets(savedSheets);
       } else {
@@ -249,7 +366,7 @@ const ResultAnalysisPage = () => {
     }
   };
 
-  // ==================== STEP 3: POST-CAMPAIGN QUESTION PAPER ====================
+  // ==================== STEP 5: POST-CAMPAIGN QUESTION PAPER ====================
 
   const handlePostQuestionPaperUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -293,7 +410,8 @@ const ResultAnalysisPage = () => {
           extraction_status: 'completed',
           is_verified: false,
         },
-        currentUser?.id
+        currentUser?.id,
+        selectedCSRPartnerId
       );
 
       setPostQuestionPaperId(savedPaper.id);
@@ -310,7 +428,7 @@ const ResultAnalysisPage = () => {
     }
   };
 
-  // ==================== STEP 4: POST-CAMPAIGN STUDENT RESPONSES ====================
+  // ==================== STEP 6: POST-CAMPAIGN STUDENT RESPONSES ====================
 
   const processPostStudentSheets = async () => {
     console.log('processPostStudentSheets called');
@@ -394,7 +512,8 @@ const ResultAnalysisPage = () => {
         
         const savedSheets = await resultAnalysisService.batchCreateStudentAnswerSheets(
           processedSheets,
-          currentUser?.id
+          currentUser?.id,
+          selectedCSRPartnerId
         );
         setPostStudentSheets(savedSheets);
         console.log('Post-campaign sheets saved successfully:', savedSheets.length);
@@ -416,20 +535,57 @@ const ResultAnalysisPage = () => {
     }
   };
 
-  // ==================== STEP 5: GENERATE AND VIEW ANALYSIS ====================
+  // ==================== STEP 7: GENERATE AND VIEW ANALYSIS ====================
 
   const generateAnalysis = async () => {
-    if (!selectedProjectId) return;
+    if (!selectedProjectId) {
+      setError('No project selected');
+      return;
+    }
 
     try {
       setIsLoading(true);
       setError(null);
 
+      console.log('Generating analysis for:', {
+        projectId: selectedProjectId,
+        csrPartnerId: selectedCSRPartnerId,
+        userId: currentUser?.id
+      });
+
+      // Validate we have the required data
+      if (!preQuestionPaperId) {
+        throw new Error('Pre-campaign question paper is missing. Please complete Step 3.');
+      }
+      if (preStudentSheets.length === 0) {
+        throw new Error('Pre-campaign student sheets are missing. Please complete Step 4.');
+      }
+      if (!postQuestionPaperId) {
+        throw new Error('Post-campaign question paper is missing. Please complete Step 5.');
+      }
+      if (postStudentSheets.length === 0) {
+        throw new Error('Post-campaign student sheets are missing. Please complete Step 6.');
+      }
+
+      // CRITICAL FIX: Update all answer sheets to have the correct project_id
+      console.log('Updating answer sheets with project_id...');
+      await resultAnalysisService.updateAnswerSheetsProjectId(
+        preQuestionPaperId,
+        postQuestionPaperId,
+        selectedProjectId,
+        selectedCSRPartnerId
+      );
+
       // Generate campaign results
       const results = await resultAnalysisService.generateCampaignResults(
         selectedProjectId,
-        currentUser?.id
+        currentUser?.id,
+        selectedCSRPartnerId
       );
+
+      if (!results || results.length === 0) {
+        throw new Error('No results were generated. Please check that you have both pre and post campaign data.');
+      }
 
       // Get summary statistics
       const summary = await resultAnalysisService.getCampaignResultsSummary(selectedProjectId);
@@ -439,14 +595,15 @@ const ResultAnalysisPage = () => {
       setIsLoading(false);
     } catch (err) {
       console.error('Error generating analysis:', err);
-      setError(err instanceof Error ? err.message : 'Failed to generate analysis');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to generate analysis';
+      setError(errorMessage);
       setIsLoading(false);
     }
   };
 
   // Load existing data on mount if needed
   useEffect(() => {
-    if (selectedProjectId && currentStep === 5) {
+    if (selectedProjectId && currentStep === 7) {
       loadExistingResults();
     }
   }, [selectedProjectId, currentStep]);
@@ -643,11 +800,14 @@ const ResultAnalysisPage = () => {
   // ==================== RENDER ====================
 
   const steps = [
-    { number: 1, title: 'Pre-Campaign Q&A', icon: FileText },
-    { number: 2, title: 'Pre-Campaign Students', icon: FolderOpen },
-    { number: 3, title: 'Post-Campaign Q&A', icon: FileText },
-    { number: 4, title: 'Post-Campaign Students', icon: FolderOpen },
-    { number: 5, title: 'Analysis Results', icon: BarChart3 },
+    { number: 0, title: 'Select Partner', icon: FolderOpen },
+    { number: 1, title: 'Select Project', icon: FolderOpen },
+    { number: 2, title: 'Existing Data', icon: BarChart3 },
+    { number: 3, title: 'Pre Q&A', icon: FileText },
+    { number: 4, title: 'Pre Students', icon: FolderOpen },
+    { number: 5, title: 'Post Q&A', icon: FileText },
+    { number: 6, title: 'Post Students', icon: FolderOpen },
+    { number: 7, title: 'Results', icon: BarChart3 },
   ];
 
   return (
@@ -745,27 +905,418 @@ const ResultAnalysisPage = () => {
           exit={{ opacity: 0, x: -20 }}
           className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8"
         >
-          {/* Step 1: Pre-Campaign Question Paper */}
+          {/* Step 0: CSR Partner Selection */}
+          {currentStep === 0 && (
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-6">
+                Select CSR Partner
+              </h2>
+              <p className="text-gray-600 mb-6">
+                Choose the CSR partner organization for this result analysis
+              </p>
+
+              {/* Search/Filter Bar */}
+              <div className="mb-6">
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search partners by name..."
+                    value={partnerSearchQuery}
+                    onChange={(e) => setPartnerSearchQuery(e.target.value)}
+                    className="w-full px-4 py-3 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  />
+                  <svg
+                    className="absolute left-3 top-3.5 w-5 h-5 text-gray-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                    />
+                  </svg>
+                </div>
+              </div>
+
+              {isLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
+                </div>
+              ) : csrPartners.filter(p => 
+                  p.name.toLowerCase().includes(partnerSearchQuery.toLowerCase()) ||
+                  p.company_name?.toLowerCase().includes(partnerSearchQuery.toLowerCase())
+                ).length === 0 ? (
+                <div className="text-center py-12">
+                  <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600">
+                    {partnerSearchQuery ? 'No partners found matching your search' : 'No CSR partners found'}
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {csrPartners
+                    .filter(p => 
+                      p.name.toLowerCase().includes(partnerSearchQuery.toLowerCase()) ||
+                      p.company_name?.toLowerCase().includes(partnerSearchQuery.toLowerCase())
+                    )
+                    .map((partner) => (
+                      <button
+                        key={partner.id}
+                        onClick={() => {
+                          handleCSRPartnerSelect(partner.id);
+                          setCurrentStep(1);
+                        }}
+                        className={`p-6 rounded-xl border-2 transition-all text-left hover:shadow-lg ${
+                          selectedCSRPartnerId === partner.id
+                            ? 'border-emerald-500 bg-emerald-50'
+                            : 'border-gray-200 hover:border-emerald-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 mb-2">
+                          <div
+                            className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-xl"
+                            style={{
+                              backgroundColor: partner.primary_color || '#059669',
+                            }}
+                          >
+                            {partner.name.charAt(0)}
+                          </div>
+                          <div className="flex-1">
+                            <h3 className="font-semibold text-gray-900">{partner.name}</h3>
+                            {partner.company_name && (
+                              <p className="text-sm text-gray-500">{partner.company_name}</p>
+                            )}
+                          </div>
+                        </div>
+                        {selectedCSRPartnerId === partner.id && (
+                          <CheckCircle className="w-5 h-5 text-emerald-600 ml-auto" />
+                        )}
+                      </button>
+                    ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Step 1: Project Selection */}
           {currentStep === 1 && (
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-6">
+                Select Project
+              </h2>
+              <p className="text-gray-600 mb-6">
+                Choose the project for which you want to conduct result analysis
+              </p>
+
+              {selectedCSRPartner && (
+                <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                  <p className="text-sm text-gray-600">Selected Partner:</p>
+                  <p className="font-semibold text-gray-900">{selectedCSRPartner.name}</p>
+                  {selectedCSRPartner.company_name && (
+                    <p className="text-sm text-gray-500">{selectedCSRPartner.company_name}</p>
+                  )}
+                </div>
+              )}
+
+              {/* Search/Filter Bar */}
+              <div className="mb-6">
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search projects by name or code..."
+                    value={projectSearchQuery}
+                    onChange={(e) => setProjectSearchQuery(e.target.value)}
+                    className="w-full px-4 py-3 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  />
+                  <svg
+                    className="absolute left-3 top-3.5 w-5 h-5 text-gray-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                    />
+                  </svg>
+                </div>
+              </div>
+
+              {isLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
+                </div>
+              ) : projects.filter(p =>
+                  p.name.toLowerCase().includes(projectSearchQuery.toLowerCase()) ||
+                  p.project_code.toLowerCase().includes(projectSearchQuery.toLowerCase())
+                ).length === 0 ? (
+                <div className="text-center py-12">
+                  <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600">
+                    {projectSearchQuery ? 'No projects found matching your search' : 'No projects found for this partner'}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {projects
+                    .filter(p =>
+                      p.name.toLowerCase().includes(projectSearchQuery.toLowerCase()) ||
+                      p.project_code.toLowerCase().includes(projectSearchQuery.toLowerCase())
+                    )
+                    .map((project) => (
+                      <button
+                        key={project.id}
+                        onClick={() => {
+                          handleProjectSelect(project.id);
+                          setCurrentStep(2);
+                        }}
+                        className={`w-full p-5 rounded-xl border-2 transition-all text-left hover:shadow-lg ${
+                          selectedProjectId === project.id
+                            ? 'border-emerald-500 bg-emerald-50'
+                            : 'border-gray-200 hover:border-emerald-300'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <h3 className="font-semibold text-gray-900 mb-1">{project.name}</h3>
+                            <p className="text-sm text-gray-500 mb-2">
+                              Code: {project.project_code}
+                            </p>
+                            {project.description && (
+                              <p className="text-sm text-gray-600 line-clamp-2">
+                                {project.description}
+                              </p>
+                            )}
+                            <div className="flex items-center gap-2 mt-2">
+                              <span
+                                className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                                  project.status === 'active'
+                                    ? 'bg-green-100 text-green-700'
+                                    : project.status === 'completed'
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : 'bg-gray-100 text-gray-700'
+                                }`}
+                              >
+                                {project.status}
+                              </span>
+                            </div>
+                          </div>
+                          {selectedProjectId === project.id && (
+                            <CheckCircle className="w-6 h-6 text-emerald-600 ml-4" />
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Step 2: Check Existing Data */}
+          {currentStep === 2 && (
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-6">
+                Check Existing Campaign Data
+              </h2>
+
+              {selectedProject && (
+                <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                  <p className="text-sm text-gray-600">Selected Project:</p>
+                  <p className="font-semibold text-gray-900">{selectedProject.name}</p>
+                  <p className="text-sm text-gray-500">{selectedProject.project_code}</p>
+                </div>
+              )}
+
+              {isLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
+                </div>
+              ) : projectResultsStatus ? (
+                <div className="space-y-4">
+                  {projectResultsStatus.hasResults ? (
+                    <>
+                      {/* Existing Analysis Results Summary */}
+                      {resultsSummary && (
+                        <div className="space-y-4">
+                          <div className="p-6 bg-gradient-to-r from-emerald-50 to-blue-50 border-2 border-emerald-200 rounded-xl">
+                            <div className="flex items-center gap-3 mb-4">
+                              <BarChart3 className="w-6 h-6 text-emerald-600" />
+                              <h3 className="text-lg font-semibold text-gray-900">
+                                Analysis Results Available
+                              </h3>
+                            </div>
+
+                            {/* Summary Statistics Grid */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                              <div className="p-3 bg-white rounded-lg border border-gray-200">
+                                <p className="text-xs text-gray-600 mb-1">Total Students</p>
+                                <p className="text-2xl font-bold text-gray-900">{resultsSummary.totalStudents}</p>
+                              </div>
+                              <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-200">
+                                <p className="text-xs text-emerald-700 mb-1">Improved</p>
+                                <p className="text-2xl font-bold text-emerald-900">{resultsSummary.studentsImproved}</p>
+                              </div>
+                              <div className="p-3 bg-red-50 rounded-lg border border-red-200">
+                                <p className="text-xs text-red-700 mb-1">Declined</p>
+                                <p className="text-2xl font-bold text-red-900">{resultsSummary.studentsDeclined}</p>
+                              </div>
+                              <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
+                                <p className="text-xs text-purple-700 mb-1">Avg Improvement</p>
+                                <p className="text-2xl font-bold text-purple-900">{resultsSummary.averageImprovement.toFixed(1)}%</p>
+                              </div>
+                            </div>
+
+                            {/* Performance Comparison */}
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="p-3 bg-white rounded-lg border border-gray-200">
+                                <p className="text-xs text-gray-600 mb-1">Pre-Campaign Avg</p>
+                                <p className="text-lg font-bold text-gray-900">{resultsSummary.averagePrePercentage.toFixed(1)}%</p>
+                              </div>
+                              <div className="p-3 bg-white rounded-lg border border-gray-200">
+                                <p className="text-xs text-gray-600 mb-1">Post-Campaign Avg</p>
+                                <p className="text-lg font-bold text-gray-900">{resultsSummary.averagePostPercentage.toFixed(1)}%</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Action Buttons */}
+                          <div className="flex gap-3">
+                            <button
+                              onClick={() => {
+                                loadExistingResults();
+                                setCurrentStep(7);
+                              }}
+                              className="flex-1 py-3 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 flex items-center justify-center gap-2"
+                            >
+                              <BarChart3 className="w-5 h-5" />
+                              View Full Results
+                            </button>
+                            <button
+                              onClick={() => setCurrentStep(3)}
+                              className="flex-1 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 flex items-center justify-center gap-2"
+                            >
+                              <ChevronRight className="w-5 h-5" />
+                              Update Data
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* If no summary loaded, show basic info */}
+                      {!resultsSummary && (
+                        <div className="p-6 bg-amber-50 border-2 border-amber-200 rounded-xl">
+                          <div className="flex items-center gap-3 mb-4">
+                            <AlertCircle className="w-6 h-6 text-amber-600" />
+                            <h3 className="text-lg font-semibold text-amber-900">
+                              Existing Campaign Data Found
+                            </h3>
+                          </div>
+                          
+                          <div className="space-y-3 text-sm mb-4">
+                            {projectResultsStatus.hasPreQuestionPaper && (
+                              <div className="flex items-center gap-2 text-amber-800">
+                                <CheckCircle className="w-4 h-4" />
+                                <span>Pre-Campaign Question Paper exists</span>
+                              </div>
+                            )}
+                            {projectResultsStatus.hasPreAnswerSheets && (
+                              <div className="flex items-center gap-2 text-amber-800">
+                                <CheckCircle className="w-4 h-4" />
+                                <span>{projectResultsStatus.totalPreSheets} Pre-Campaign Student Sheets</span>
+                              </div>
+                            )}
+                            {projectResultsStatus.hasPostQuestionPaper && (
+                              <div className="flex items-center gap-2 text-amber-800">
+                                <CheckCircle className="w-4 h-4" />
+                                <span>Post-Campaign Question Paper exists</span>
+                              </div>
+                            )}
+                            {projectResultsStatus.hasPostAnswerSheets && (
+                              <div className="flex items-center gap-2 text-amber-800">
+                                <CheckCircle className="w-4 h-4" />
+                                <span>{projectResultsStatus.totalPostSheets} Post-Campaign Student Sheets</span>
+                              </div>
+                            )}
+                            {projectResultsStatus.hasCampaignResults && (
+                              <div className="flex items-center gap-2 text-amber-800">
+                                <CheckCircle className="w-4 h-4" />
+                                <span>{projectResultsStatus.totalResults} Analysis Results available</span>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex gap-3">
+                            <button
+                              onClick={() => setCurrentStep(7)}
+                              className="flex-1 py-3 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 flex items-center justify-center gap-2"
+                            >
+                              <BarChart3 className="w-5 h-5" />
+                              View Results
+                            </button>
+                            <button
+                              onClick={() => setCurrentStep(3)}
+                              className="flex-1 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 flex items-center justify-center gap-2"
+                            >
+                              <ChevronRight className="w-5 h-5" />
+                              Continue
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="p-6 bg-emerald-50 border-2 border-emerald-200 rounded-xl">
+                      <div className="flex items-center gap-3 mb-3">
+                        <CheckCircle className="w-6 h-6 text-emerald-600" />
+                        <h3 className="text-lg font-semibold text-emerald-900">
+                          Ready to Start New Campaign
+                        </h3>
+                      </div>
+                      <p className="text-emerald-800">
+                        No existing data found for this project. You can proceed with uploading campaign materials.
+                      </p>
+                      <button
+                        onClick={() => setCurrentStep(3)}
+                        className="w-full mt-4 py-3 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 flex items-center justify-center gap-2"
+                      >
+                        Start New Campaign
+                        <ChevronRight className="w-5 h-5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <button
+                  onClick={checkExistingResults}
+                  className="w-full py-3 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 flex items-center justify-center gap-2"
+                >
+                  Check for Existing Data
+                  <RefreshCw className="w-5 h-5" />
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Step 3: Pre-Campaign Question Paper */}
+          {currentStep === 3 && (
             <div>
               <h2 className="text-2xl font-bold text-gray-900 mb-6">
                 Pre-Campaign Question Paper Upload
               </h2>
-              
-              {/* Project Selection */}
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Select Project (Optional)
-                </label>
-                <input
-                  type="text"
-                  placeholder="Enter Project ID or leave blank"
-                  value={selectedProjectId}
-                  onChange={(e) => setSelectedProjectId(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                />
-              </div>
 
+              {selectedProject && (
+                <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                  <p className="text-sm text-gray-600">Project:</p>
+                  <p className="font-semibold text-gray-900">{selectedProject.name}</p>
+                  <p className="text-sm text-gray-500">{selectedProject.project_code}</p>
+                </div>
+              )}
+              
               {/* File Upload */}
               <div className="mb-6">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -882,8 +1433,8 @@ const ResultAnalysisPage = () => {
             </div>
           )}
 
-          {/* Step 2: Pre-Campaign Student Responses */}
-          {currentStep === 2 && (
+          {/* Step 4: Pre-Campaign Student Responses */}
+          {currentStep === 4 && (
             <div>
               <h2 className="text-2xl font-bold text-gray-900 mb-6">
                 Pre-Campaign Student Answer Sheets
@@ -928,7 +1479,7 @@ const ResultAnalysisPage = () => {
                   <div className="flex items-center gap-3">
                     <AlertCircle className="w-5 h-5 text-yellow-600" />
                     <p className="text-sm text-yellow-800">
-                      Please upload and process the Pre-Campaign Question Paper (Step 1) first before processing student sheets.
+                      Please upload and process the Pre-Campaign Question Paper (Step 3) first before processing student sheets.
                     </p>
                   </div>
                 </div>
@@ -1069,8 +1620,8 @@ const ResultAnalysisPage = () => {
             </div>
           )}
 
-          {/* Step 3: Post-Campaign Question Paper */}
-          {currentStep === 3 && (
+          {/* Step 5: Post-Campaign Question Paper */}
+          {currentStep === 5 && (
             <div>
               <h2 className="text-2xl font-bold text-gray-900 mb-6">
                 Post-Campaign Question Paper Upload
@@ -1164,8 +1715,8 @@ const ResultAnalysisPage = () => {
             </div>
           )}
 
-          {/* Step 4: Post-Campaign Student Responses */}
-          {currentStep === 4 && (
+          {/* Step 6: Post-Campaign Student Responses */}
+          {currentStep === 6 && (
             <div>
               <h2 className="text-2xl font-bold text-gray-900 mb-6">
                 Post-Campaign Student Answer Sheets
@@ -1210,7 +1761,7 @@ const ResultAnalysisPage = () => {
                   <div className="flex items-center gap-3">
                     <AlertCircle className="w-5 h-5 text-yellow-600" />
                     <p className="text-sm text-yellow-800">
-                      Please upload and process the Post-Campaign Question Paper (Step 3) first before processing student sheets.
+                      Please upload and process the Post-Campaign Question Paper (Step 5) first before processing student sheets.
                     </p>
                   </div>
                 </div>
@@ -1351,8 +1902,9 @@ const ResultAnalysisPage = () => {
             </div>
           )}
 
-          {/* Step 5: Analysis Results */}
-          {currentStep === 5 && (
+          {/* Step 6: Analysis Results */}
+          {/* Step 7: Performance Analysis & Results */}
+          {currentStep === 7 && (
             <div>
               <h2 className="text-2xl font-bold text-gray-900 mb-6">
                 Performance Analysis & Comparison
@@ -1562,24 +2114,26 @@ const ResultAnalysisPage = () => {
           {/* Navigation Buttons */}
           <div className="flex items-center justify-between mt-8 pt-6 border-t border-gray-200">
             <button
-              onClick={() => setCurrentStep((prev) => Math.max(1, prev - 1) as Step)}
-              disabled={currentStep === 1}
+              onClick={() => setCurrentStep((prev) => Math.max(0, prev - 1) as Step)}
+              disabled={currentStep === 0}
               className="flex items-center gap-2 px-6 py-3 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <ChevronLeft className="w-5 h-5" />
               Previous
             </button>
             
-            {currentStep < 5 && (
+            {currentStep < 7 && (
               <button
-                onClick={() => setCurrentStep((prev) => Math.min(5, prev + 1) as Step)}
+                onClick={() => setCurrentStep((prev) => Math.min(7, prev + 1) as Step)}
                 disabled={
-                  (currentStep === 1 && !preQuestionPaper) ||
-                  (currentStep === 1 && preQuestionPaper && preQuestionPaper.status !== 'completed') ||
-                  (currentStep === 2 && preProcessingStatus.status !== 'completed') ||
-                  (currentStep === 3 && !postQuestionPaper) ||
-                  (currentStep === 3 && postQuestionPaper && postQuestionPaper.status !== 'completed') ||
-                  (currentStep === 4 && postProcessingStatus.status !== 'completed')
+                  (currentStep === 0 && !selectedCSRPartnerId) ||
+                  (currentStep === 1 && !selectedProjectId) ||
+                  (currentStep === 3 && !preQuestionPaper) ||
+                  (currentStep === 3 && preQuestionPaper && preQuestionPaper.status !== 'completed') ||
+                  (currentStep === 4 && preProcessingStatus.status !== 'completed') ||
+                  (currentStep === 5 && !postQuestionPaper) ||
+                  (currentStep === 5 && postQuestionPaper && postQuestionPaper.status !== 'completed') ||
+                  (currentStep === 6 && postProcessingStatus.status !== 'completed')
                 }
                 className="flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
