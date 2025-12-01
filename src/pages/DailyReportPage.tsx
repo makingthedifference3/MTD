@@ -5,7 +5,6 @@ import { type Task } from '@/services/tasksService';
 import { getUserById } from '@/services/usersService';
 import { projectService } from '@/services/projectService';
 import { supabase } from '@/services/supabaseClient';
-import { getAllCSRPartners, type CSRPartner } from '@/services/csrPartnersService';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -215,7 +214,7 @@ const DailyReportPage = () => {
   useEffect(() => {
     const fetchInitialData = async () => {
       const projectList = await projectService.getAllProjects();
-      setProjects(projectList.map(p => ({ id: p.id, name: p.name, project_code: p.project_code, csr_partner_id: p.csr_partner_id, toll_id: p.toll_id })));
+      setProjects(projectList.map(p => ({ id: p.id, name: p.name, project_code: p.project_code, csr_partner_id: p.csr_partner_id })));
 
       // Fetch CSR Partners with has_toll
       await fetchCsrPartners();
