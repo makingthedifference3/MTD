@@ -52,6 +52,16 @@ const getIconComponent = (iconName?: string): LucideIcon => {
   return iconMap[iconName || 'FolderKanban'] || FolderKanban;
 };
 
+// Helper function to format large metric values
+const formatMetricValue = (value: number): string => {
+  if (value >= 1000000) {
+    return `${(value / 1000000).toFixed(1)}M`;
+  } else if (value >= 1000) {
+    return `${(value / 1000).toFixed(1)}K`;
+  }
+  return value.toLocaleString();
+};
+
 interface ProjectWithBeneficiaries extends Project {
   displayName?: string;
   total_budget?: number;
@@ -70,7 +80,7 @@ interface PMDashboardInnerProps {
 const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = {}) => {
   // Lock filters when viewing from project context (only for non-admin)
   // Always call the hook, but it will check shouldLockContext internally
-  const contextLockHook = useProjectContextLock();
+  useProjectContextLock();
   
   // Disable the lock effect for admin
   useEffect(() => {
@@ -141,6 +151,22 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
   console.log('PMDashboard - selectedPartner:', selectedPartner);
   console.log('PMDashboard - partnerProjects count:', partnerProjects.length);
   console.log('PMDashboard - partnerProjects:', partnerProjects);
+  
+  // Debug: Check if impact metrics data is being loaded
+  useEffect(() => {
+    if (filteredProjects.length > 0) {
+      const sampleProject = filteredProjects[0] as ProjectWithBeneficiaries;
+      console.log('PMDashboard - Sample project impact data:', {
+        name: sampleProject.name,
+        meals_served: sampleProject.meals_served,
+        pads_distributed: sampleProject.pads_distributed,
+        students_enrolled: sampleProject.students_enrolled,
+        trees_planted: sampleProject.trees_planted,
+        schools_renovated: sampleProject.schools_renovated,
+        impact_metrics: sampleProject.impact_metrics,
+      });
+    }
+  }, [filteredProjects]);
 
   const handlePartnerClick = (partnerId: string) => {
     setSelectedPartner(partnerId);
@@ -247,9 +273,9 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
             <FilterBar />
           </div>
 
-          {/* Summary Stats */}
+          {/* Summary Stats - Updates with filters */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Active Projects Card */}
+            {/* Total Projects Card */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -258,15 +284,15 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
             >
               <div className="flex items-start justify-between mb-4">
                 <div className="p-3 bg-emerald-200 rounded-xl">
-                  <Target className="w-6 h-6 text-emerald-700" />
+                  <FolderKanban className="w-6 h-6 text-emerald-700" />
                 </div>
-                <span className="text-xs font-bold text-emerald-700 bg-emerald-200 px-3 py-1 rounded-full">ACTIVE</span>
+                <span className="text-xs font-bold text-emerald-700 bg-emerald-200 px-3 py-1 rounded-full">TOTAL</span>
               </div>
               <p className="text-3xl font-black text-emerald-900 mb-1">{filteredProjects.length}</p>
-              <p className="text-sm text-emerald-700 font-semibold">Active Projects</p>
+              <p className="text-sm text-emerald-700 font-semibold">All Projects</p>
             </motion.div>
 
-            {/* Total Beneficiaries Card */}
+            {/* Active Projects Card */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -275,14 +301,12 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
             >
               <div className="flex items-start justify-between mb-4">
                 <div className="p-3 bg-blue-200 rounded-xl">
-                  <Users className="w-6 h-6 text-blue-700" />
+                  <Target className="w-6 h-6 text-blue-700" />
                 </div>
-                <span className="text-xs font-bold text-blue-700 bg-blue-200 px-3 py-1 rounded-full">REACH</span>
+                <span className="text-xs font-bold text-blue-700 bg-blue-200 px-3 py-1 rounded-full">ACTIVE</span>
               </div>
-              <p className="text-3xl font-black text-blue-900 mb-1">
-                {(filteredProjects.reduce((sum: number, p: Project) => sum + (p.direct_beneficiaries || 0), 0) / 1000).toFixed(1)}K
-              </p>
-              <p className="text-sm text-blue-700 font-semibold">Total Beneficiaries</p>
+              <p className="text-3xl font-black text-blue-900 mb-1">{filteredProjects.filter((p: Project) => p.status === 'active').length}</p>
+              <p className="text-sm text-blue-700 font-semibold">Active Projects</p>
             </motion.div>
 
             {/* Total Budget Card */}
@@ -304,7 +328,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
               <p className="text-sm text-purple-700 font-semibold">Total Budget</p>
             </motion.div>
 
-            {/* Completed Projects Card */}
+            {/* Total Beneficiaries Card */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -313,14 +337,14 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
             >
               <div className="flex items-start justify-between mb-4">
                 <div className="p-3 bg-orange-200 rounded-xl">
-                  <CheckCircle2 className="w-6 h-6 text-orange-700" />
+                  <Users className="w-6 h-6 text-orange-700" />
                 </div>
-                <span className="text-xs font-bold text-orange-700 bg-orange-200 px-3 py-1 rounded-full">DONE</span>
+                <span className="text-xs font-bold text-orange-700 bg-orange-200 px-3 py-1 rounded-full">PEOPLE</span>
               </div>
               <p className="text-3xl font-black text-orange-900 mb-1">
-                {filteredProjects.filter((p: Project) => p.status === 'completed').length}
+                {formatMetricValue(filteredProjects.reduce((sum: number, p: Project) => sum + (p.direct_beneficiaries || 0), 0))}
               </p>
-              <p className="text-sm text-orange-700 font-semibold">Completed Projects</p>
+              <p className="text-sm text-orange-700 font-semibold">Beneficiaries</p>
             </motion.div>
           </div>
 
@@ -423,11 +447,11 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                   <span className="text-sm font-bold text-emerald-700 uppercase">Total Beneficiaries</span>
                 </div>
                 <p className="text-3xl font-black text-emerald-900">
-                  {(filteredProjects.reduce((sum: number, p: Project) => sum + (p.direct_beneficiaries || 0), 0) / 1000).toFixed(1)}K
+                  {formatMetricValue(filteredProjects.reduce((sum: number, p: Project) => sum + (p.direct_beneficiaries || 0), 0))}
                 </p>
               </div>
 
-              {/* Meals Served */}
+              {/* Meals Served - from columns + impact_metrics JSON */}
               <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-6 hover:shadow-lg transition-all">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="p-3 bg-orange-200 rounded-lg">
@@ -436,7 +460,13 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                   <span className="text-sm font-bold text-orange-700 uppercase">Meals Served</span>
                 </div>
                 <p className="text-3xl font-black text-orange-900">
-                  {(filteredProjects.reduce((sum: number, p: Project) => sum + ((p as ProjectWithBeneficiaries).meals_served || 0), 0) / 1000000).toFixed(1)}M
+                  {formatMetricValue(
+                    filteredProjects.reduce((sum: number, p: Project) => {
+                      const fromColumn = (p as ProjectWithBeneficiaries).meals_served || 0;
+                      const fromJson = getImpactMetricValue(p.impact_metrics, 'meals_served');
+                      return sum + Math.max(fromColumn, fromJson);
+                    }, 0)
+                  )}
                 </p>
               </div>
 
@@ -449,7 +479,13 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                   <span className="text-sm font-bold text-pink-700 uppercase">Pads Distributed</span>
                 </div>
                 <p className="text-3xl font-black text-pink-900">
-                  {(filteredProjects.reduce((sum: number, p: Project) => sum + ((p as ProjectWithBeneficiaries).pads_distributed || 0), 0) / 1000000).toFixed(1)}M
+                  {formatMetricValue(
+                    filteredProjects.reduce((sum: number, p: Project) => {
+                      const fromColumn = (p as ProjectWithBeneficiaries).pads_distributed || 0;
+                      const fromJson = getImpactMetricValue(p.impact_metrics, 'pads_distributed');
+                      return sum + Math.max(fromColumn, fromJson);
+                    }, 0)
+                  )}
                 </p>
               </div>
 
@@ -462,7 +498,13 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                   <span className="text-sm font-bold text-blue-700 uppercase">Students Enrolled</span>
                 </div>
                 <p className="text-3xl font-black text-blue-900">
-                  {(filteredProjects.reduce((sum: number, p: Project) => sum + ((p as ProjectWithBeneficiaries).students_enrolled || 0), 0) / 1000).toFixed(1)}K
+                  {formatMetricValue(
+                    filteredProjects.reduce((sum: number, p: Project) => {
+                      const fromColumn = (p as ProjectWithBeneficiaries).students_enrolled || 0;
+                      const fromJson = getImpactMetricValue(p.impact_metrics, 'students_enrolled');
+                      return sum + Math.max(fromColumn, fromJson);
+                    }, 0)
+                  )}
                 </p>
               </div>
 
@@ -475,7 +517,13 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                   <span className="text-sm font-bold text-green-700 uppercase">Trees Planted</span>
                 </div>
                 <p className="text-3xl font-black text-green-900">
-                  {(filteredProjects.reduce((sum: number, p: Project) => sum + ((p as ProjectWithBeneficiaries).trees_planted || 0), 0) / 1000).toFixed(1)}K
+                  {formatMetricValue(
+                    filteredProjects.reduce((sum: number, p: Project) => {
+                      const fromColumn = (p as ProjectWithBeneficiaries).trees_planted || 0;
+                      const fromJson = getImpactMetricValue(p.impact_metrics, 'trees_planted');
+                      return sum + Math.max(fromColumn, fromJson);
+                    }, 0)
+                  )}
                 </p>
               </div>
 
@@ -488,9 +536,53 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                   <span className="text-sm font-bold text-purple-700 uppercase">Schools Renovated</span>
                 </div>
                 <p className="text-3xl font-black text-purple-900">
-                  {filteredProjects.reduce((sum: number, p: Project) => sum + ((p as ProjectWithBeneficiaries).schools_renovated || 0), 0)}
+                  {filteredProjects.reduce((sum: number, p: Project) => {
+                    const fromColumn = (p as ProjectWithBeneficiaries).schools_renovated || 0;
+                    const fromJson = getImpactMetricValue(p.impact_metrics, 'schools_renovated');
+                    return sum + Math.max(fromColumn, fromJson);
+                  }, 0)}
                 </p>
               </div>
+
+              {/* Custom Metrics from impact_metrics JSON */}
+              {(() => {
+                // Aggregate all custom metrics from all projects
+                const customMetrics: Record<string, number> = {};
+                filteredProjects.forEach((p: Project) => {
+                  const metrics = p.impact_metrics || [];
+                  metrics.forEach((metric) => {
+                    if (metric.key === 'custom' && metric.customLabel && metric.value > 0) {
+                      const label = metric.customLabel;
+                      customMetrics[label] = (customMetrics[label] || 0) + metric.value;
+                    }
+                  });
+                });
+
+                const customColors = [
+                  { bg: 'bg-cyan-50', border: 'border-cyan-200', iconBg: 'bg-cyan-200', text: 'text-cyan-700', value: 'text-cyan-900' },
+                  { bg: 'bg-amber-50', border: 'border-amber-200', iconBg: 'bg-amber-200', text: 'text-amber-700', value: 'text-amber-900' },
+                  { bg: 'bg-rose-50', border: 'border-rose-200', iconBg: 'bg-rose-200', text: 'text-rose-700', value: 'text-rose-900' },
+                  { bg: 'bg-indigo-50', border: 'border-indigo-200', iconBg: 'bg-indigo-200', text: 'text-indigo-700', value: 'text-indigo-900' },
+                  { bg: 'bg-teal-50', border: 'border-teal-200', iconBg: 'bg-teal-200', text: 'text-teal-700', value: 'text-teal-900' },
+                ];
+
+                return Object.entries(customMetrics).map(([label, value], index) => {
+                  const color = customColors[index % customColors.length];
+                  return (
+                    <div key={label} className={`${color.bg} border-2 ${color.border} rounded-xl p-6 hover:shadow-lg transition-all`}>
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className={`p-3 ${color.iconBg} rounded-lg`}>
+                          <Target className={`w-5 h-5 ${color.text}`} />
+                        </div>
+                        <span className={`text-sm font-bold ${color.text} uppercase`}>{label}</span>
+                      </div>
+                      <p className={`text-3xl font-black ${color.value}`}>
+                        {formatMetricValue(value)}
+                      </p>
+                    </div>
+                  );
+                });
+              })()}
             </div>
           </motion.div>
         </motion.div>

@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Menu, X, LogOut, LayoutDashboard, Briefcase, CheckSquare, Image, FileText, Users, Calendar,
-  DollarSign, Receipt, CreditCard, BarChart3, FileSpreadsheet, RefreshCw, ClipboardList, Database,GraduationCap, TrendingUp, FileCheck
+  DollarSign, Receipt, CreditCard, BarChart3, FileSpreadsheet, RefreshCw, ClipboardList, GraduationCap, TrendingUp, FileCheck, CalendarClock
 } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -17,20 +17,19 @@ interface SidebarProps {
 
 const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'accountant', 'project_manager'] },
-  { id: 'csr-partners', label: 'CSR Partners', icon: Briefcase, roles: ['admin', 'project_manager'] },
-  { id: 'projects', label: 'Projects', icon: Briefcase, roles: ['admin',  'project_manager'] },
+  { id: 'csr-partners', label: 'CSR Partners', icon: Briefcase, roles: ['admin', 'accountant', 'project_manager'] },
+  { id: 'projects', label: 'Projects', icon: Briefcase, roles: ['admin', 'accountant', 'project_manager'] },
+  { id: 'project-timeline', label: 'Project Timeline', icon: CalendarClock, roles: ['admin', 'project_manager'] },
   { id: 'todo', label: 'To-Do List Assignment', icon: CheckSquare, roles: ['admin', 'accountant', 'project_manager'] },
   { id: 'real-time-update', label: 'Real Time Update', icon: RefreshCw, roles: ['admin', 'project_manager'] },
   { id: 'media', label: 'Media', icon: Image, roles: ['admin', 'project_manager'] },
   { id: 'article', label: 'Article', icon: FileText, roles: ['admin', 'project_manager'] },
-  { id: 'team-members', label: 'Team Members', icon: Users, roles: ['admin', 'project_manager'] },
   { id: 'dashboard-forms', label: 'Dashboard Forms', icon: FileSpreadsheet, roles: ['admin', 'project_manager'] },
   { id: 'calendar', label: 'Calendar', icon: Calendar, roles: ['admin', 'accountant', 'project_manager'] },
   { id: 'project-expenses', label: 'Project Expenses', icon: DollarSign, roles: ['admin', 'accountant', 'project_manager'] },
   { id: 'admin-expenses', label: 'Admin Expenses', icon: Receipt, roles: ['admin'] },
   { id: 'acc-expense', label: 'Accountant Expenses', icon: FileText, roles: ['accountant'] },
   { id: 'daily-report', label: 'Daily Report', icon: ClipboardList, roles: ['admin', 'accountant', 'project_manager'] },
-  { id: 'data-entry', label: 'Data Entry', icon: Database, roles: ['admin', 'project_manager'] },
   { id: 'result-analysis', label: 'Result Analysis', icon: GraduationCap, roles: ['admin', 'project_manager'] },
   { id: 'upcoming-expenses', label: 'Upcoming Expenses', icon: TrendingUp, roles: ['admin', 'project_manager'] },
   { id: 'bills', label: 'Bills', icon: Receipt, roles: ['admin', 'project_manager'] },
@@ -87,18 +86,17 @@ const Sidebar = ({ children, currentPage, onNavigate }: SidebarProps) => {
                  effectiveRole === 'project_manager' ? '/pm-dashboard' : '/team-member-dashboard',
     'csr-partners': '/csr-partners',
     'projects': '/projects',
+    'project-timeline': '/project-timeline',
     'todo': '/todo',
     'real-time-update': '/real-time-update',
     'media': '/media',
     'article': '/article',
-    'team-members': '/team-members',
     'dashboard-forms': '/dashboard-forms',
     'calendar': '/calendar',
     'project-expenses': '/project-expenses',
     'admin-expenses': '/admin-expenses',
     'acc-expense': '/acc-expense',
     'daily-report': '/daily-report',
-    'data-entry': '/data-entry',
     'csr-budget': '/csr-budget',
     'utilization-certificate': '/utilization-certificate',
     'upcoming-expenses': '/upcoming-expenses',

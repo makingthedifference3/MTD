@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Dispatch, SetStateAction, FormEvent, ReactNode } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Plus, Building2, MapPin, Phone, Mail, Loader, X, User2, Globe, Info, Settings, Eye, EyeOff } from 'lucide-react';
+import { Search, Plus, Building2, MapPin, Phone, Mail, Loader, X, User2, Info, Settings, Eye, EyeOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { INDIAN_STATES } from '@/constants/indianStates';
 import {
@@ -1099,7 +1099,6 @@ const PartnerDetailsModal = ({ partner, isLoading, error, budgetTotal, directBud
                 label="Location"
                 value={[partner.city, partner.state].filter(Boolean).join(', ') || '—'}
               />
-              <DetailRow icon={<Globe className="w-4 h-4" />} label="Website" value={partner.website || '—'} />
               <DetailRow
                 icon={<Info className="w-4 h-4" />}
                 label="Project Budget"

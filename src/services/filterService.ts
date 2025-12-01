@@ -23,6 +23,11 @@ const PROJECT_SELECT_FIELDS = `
   beneficiary_name,
   metadata,
   impact_metrics,
+  meals_served,
+  pads_distributed,
+  trees_planted,
+  students_enrolled,
+  schools_renovated,
   toll:csr_partner_tolls!projects_toll_id_fkey(id, toll_name, poc_name, city, state)
 `;
 
@@ -84,6 +89,12 @@ export interface Project {
   children_beneficiaries?: number;
   // Impact metrics from database
   impact_metrics?: ImpactMetricEntry[];
+  // Predefined impact metric columns
+  meals_served?: number;
+  pads_distributed?: number;
+  trees_planted?: number;
+  students_enrolled?: number;
+  schools_renovated?: number;
   // UI display properties from database
   display_color?: string;
   display_icon?: string;
@@ -175,7 +186,7 @@ export const fetchProjectById = async (projectId: string): Promise<Project | nul
     const { data, error } = await supabase
         .from('projects')
         .select(
-          `id, name, project_code, csr_partner_id, toll_id, description, location, state, status, is_active, total_beneficiaries, direct_beneficiaries, indirect_beneficiaries, male_beneficiaries, female_beneficiaries, children_beneficiaries, beneficiary_type, beneficiary_name, metadata, impact_metrics,
+          `id, name, project_code, csr_partner_id, toll_id, description, location, state, status, is_active, total_beneficiaries, direct_beneficiaries, indirect_beneficiaries, male_beneficiaries, female_beneficiaries, children_beneficiaries, beneficiary_type, beneficiary_name, metadata, impact_metrics, meals_served, pads_distributed, trees_planted, students_enrolled, schools_renovated,
           toll:csr_partner_tolls!projects_toll_id_fkey(id, toll_name, poc_name, city, state)`
         )
       .eq('id', projectId)

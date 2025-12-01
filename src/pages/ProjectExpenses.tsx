@@ -18,9 +18,14 @@ const ProjectExpenses: React.FC = () => {
   const [showBillModal, setShowBillModal] = useState(false);
   const [billUrl, setBillUrl] = useState<string>('');
   const [selectedStatus, setSelectedStatus] = useState<'pending' | 'approved' | 'rejected' | 'paid' | null>(null);
-  const [selectedExpense, setSelectedExpense] = useState<ProjectExpense | null>(null);
-  const [userMap, setUserMap] = useState<UserMap>({});
-  const [showModal, setShowModal] = useState(false);
+  const [_selectedExpense, setSelectedExpense] = useState<ProjectExpense | null>(null);
+  const [_userMap, setUserMap] = useState<UserMap>({});
+  const [_showModal, setShowModal] = useState(false);
+  
+  // Suppress unused variable warnings
+  void _selectedExpense;
+  void _userMap;
+  void _showModal;
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
   const [stats, setStats] = useState<ExpenseStats>({
     total: 0,

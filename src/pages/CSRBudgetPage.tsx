@@ -1,8 +1,8 @@
 import { motion } from 'framer-motion';
 import { 
-  IndianRupee, TrendingUp, TrendingDown, FolderKanban, Building2, 
+  TrendingUp, FolderKanban, Building2, 
   Wallet, Activity, ArrowUpRight, ArrowDownRight, Edit2, Check, X,
-  FolderOpen, FileText, Users, MapPin, Briefcase
+  FolderOpen, FileText, MapPin
 } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { useFilter } from '../context/useFilter';

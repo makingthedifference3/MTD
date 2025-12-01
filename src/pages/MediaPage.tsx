@@ -22,6 +22,7 @@ const MediaPage = () => {
   const [filterType, setFilterType] = useState<string>('all');
   const [filterNewsChannel, setFilterNewsChannel] = useState<string>('all');
   const [filterPartner, setFilterPartner] = useState<string>('all');
+  const [filterProject, setFilterProject] = useState<string>('all');
   const [filterToll, setFilterToll] = useState<string>('all');
   const [selectedMedia, setSelectedMedia] = useState<MediaItem | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -38,10 +39,11 @@ const MediaPage = () => {
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [editingMediaId, setEditingMediaId] = useState<string | null>(null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [customChannel, setCustomChannel] = useState('');
   const [uploadForm, setUploadForm] = useState({
     title: '',
     description: '',
-    media_type: 'photo' as 'photo' | 'video' | 'document' | 'pdf' | 'newspaper_cutting' | 'certificate' | 'report',
+    media_type: 'photo' as 'photo' | 'video',
     drive_link: '',
     news_channel: '',
     project_id: '',
@@ -128,28 +130,36 @@ const MediaPage = () => {
         filtered = filtered.filter(article => article.is_article === false);
         filtered = filtered.filter(article => article.is_article !== true);
 
-        if (filterNewsChannel !== 'all' && filtered.length > 0) {
-          const channelFiltered = filtered.filter(item => item.sub_category === filterNewsChannel);
-          filtered = channelFiltered;
+        if (filterNewsChannel !== 'all') {
+          filtered = filtered.filter(item => item.sub_category === filterNewsChannel);
         }
 
-        if (filterPartner !== 'all' && filtered.length > 0) {
-          const partnerFiltered = filtered.filter(item => {
+        // Filter by CSR Partner - check direct field, metadata, or via project relationship
+        if (filterPartner !== 'all') {
+          const partnerProjectIds = projects
+            .filter(p => p.csr_partner_id === filterPartner)
+            .map(p => p.id);
+          
+          filtered = filtered.filter(item => {
             const metadata = item.metadata as Record<string, unknown> | undefined;
             const itemPartnerId = item.csr_parter_id || (metadata?.csr_partner_id as string | undefined);
-            return itemPartnerId === filterPartner;
+            // Match by direct partner ID or by project belonging to partner
+            return itemPartnerId === filterPartner || partnerProjectIds.includes(item.project_id as string);
           });
-          filtered = partnerFiltered;
+        }
+
+        // Filter by project
+        if (filterProject !== 'all') {
+          filtered = filtered.filter(item => item.project_id === filterProject);
         }
 
         // Filter by toll (using metadata or direct field)
-        if (filterToll !== 'all' && filtered.length > 0) {
-          const tollFiltered = filtered.filter(item => {
+        if (filterToll !== 'all') {
+          filtered = filtered.filter(item => {
             const metadata = item.metadata as Record<string, unknown> | undefined;
             const itemTollId = item.toll_id || (metadata?.toll_id as string | undefined);
             return itemTollId === filterToll;
           });
-          filtered = tollFiltered;
         }
 
         const formattedArticles: MediaItem[] = filtered.map(article => ({
@@ -165,9 +175,11 @@ const MediaPage = () => {
     };
 
     applyFilters();
-  }, [filterType, filterNewsChannel, filterToll, filterPartner]);
+  }, [filterType, filterNewsChannel, filterToll, filterPartner, filterProject, projects]);
 
+  // Reset project and toll when partner changes
   useEffect(() => {
+    setFilterProject('all');
     setFilterToll('all');
   }, [filterPartner]);
 
@@ -198,7 +210,7 @@ const MediaPage = () => {
         title: uploadForm.title,
         description: uploadForm.description,
         media_type: uploadForm.media_type,
-        sub_category: uploadForm.news_channel,
+        sub_category: uploadForm.news_channel === 'Other' ? customChannel : uploadForm.news_channel,
         drive_link: uploadForm.drive_link,
         is_public: true,
         project_id: uploadForm.project_id as unknown as string,
@@ -252,6 +264,7 @@ const MediaPage = () => {
       csr_partner_id: '',
       toll_id: '',
     });
+    setCustomChannel('');
     setEditingMediaId(null);
   };
 
@@ -260,16 +273,25 @@ const MediaPage = () => {
     const metadata = item.metadata as Record<string, unknown> | undefined;
     const existingPartnerId = item.csr_parter_id || (metadata?.csr_partner_id as string | undefined) || '';
     const existingTollId = item.toll_id || (metadata?.toll_id as string | undefined) || '';
+    
+    // Check if the channel is a custom one (not in predefined list)
+    const predefinedChannels = ['News Channel', 'Social Media', 'Internal Updates', 'Client Reports', 'General'];
+    const channelValue = item.sub_category || '';
+    const isCustomChannel = channelValue && !predefinedChannels.includes(channelValue);
+    
     setUploadForm({
       title: item.title || '',
       description: item.description || '',
-      media_type: item.media_type as 'photo' | 'video' | 'document' | 'pdf' | 'newspaper_cutting' | 'certificate' | 'report',
+      media_type: (item.media_type === 'photo' || item.media_type === 'video') ? item.media_type : 'photo',
       drive_link: item.drive_link || '',
-      news_channel: item.sub_category || '',
+      news_channel: isCustomChannel ? 'Other' : channelValue,
       project_id: item.project_id || '',
       csr_partner_id: existingPartnerId,
       toll_id: existingTollId,
     });
+    if (isCustomChannel) {
+      setCustomChannel(channelValue);
+    }
     setEditingMediaId(item.id);
     setShowUpdateModal(true);
     setShowDetailModal(false);
@@ -323,9 +345,21 @@ const MediaPage = () => {
     return driveLink;
   };
 
-  const mediaTypeOptions = ['photo', 'video', 'document', 'pdf', 'newspaper_cutting', 'certificate', 'report'];
-  const newsChannelOptions = ['News Channel', 'Social Media', 'Internal Updates', 'Client Reports', 'General'];
+  const mediaTypeOptions = ['photo', 'video'];
+  const channelOptions = ['News Channel', 'Social Media', 'Internal Updates', 'Client Reports', 'General', 'Other'];
+  
+  // Get unique channels from media items (includes custom channels entered via "Other")
+  const allUniqueChannels = useMemo(() => {
+    const predefinedChannels = ['News Channel', 'Social Media', 'Internal Updates', 'Client Reports', 'General'];
+    const customChannelsFromData = mediaItems
+      .map(item => item.sub_category || item.newsChannel)
+      .filter(channel => channel && !predefinedChannels.includes(channel));
+    const uniqueCustomChannels = [...new Set(customChannelsFromData)];
+    return [...predefinedChannels, ...uniqueCustomChannels.sort()];
+  }, [mediaItems]);
+  
   const availableFilterTolls = filterPartner === 'all' ? [] : tolls.filter(toll => toll.csr_partner_id === filterPartner);
+  const availableFilterProjects = filterPartner === 'all' ? projects : projects.filter(project => project.csr_partner_id === filterPartner);
   const uploadFormTolls = uploadForm.csr_partner_id ? tolls.filter(toll => toll.csr_partner_id === uploadForm.csr_partner_id) : [];
   const uploadProjectsForPartner = useMemo(() => {
     if (!uploadForm.csr_partner_id) return [];
@@ -349,7 +383,7 @@ const MediaPage = () => {
 
       {/* Filters */}
       <div className="bg-white rounded-2xl shadow-lg p-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Media Type</label>
             <select
@@ -364,14 +398,14 @@ const MediaPage = () => {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">News Channel</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Channel</label>
             <select
               value={filterNewsChannel}
               onChange={(e) => setFilterNewsChannel(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
             >
               <option value="all">All Channels</option>
-              {newsChannelOptions.map(channel => (
+              {allUniqueChannels.map(channel => (
                 <option key={channel} value={channel}>{channel}</option>
               ))}
             </select>
@@ -394,6 +428,45 @@ const MediaPage = () => {
                 <option disabled>No partners available</option>
               )}
             </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Project</label>
+            {filterPartner === 'all' ? (
+              <select
+                value={filterProject}
+                onChange={(e) => setFilterProject(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="all">All Projects</option>
+                {projectsLoading ? (
+                  <option disabled>Loading projects...</option>
+                ) : projects.length > 0 ? (
+                  projects.map(project => (
+                    <option key={project.id} value={project.id}>{project.name} ({project.project_code})</option>
+                  ))
+                ) : (
+                  <option disabled>No projects available</option>
+                )}
+              </select>
+            ) : availableFilterProjects.length === 0 ? (
+              <select
+                disabled
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-400 cursor-not-allowed"
+              >
+                <option>No projects for this partner</option>
+              </select>
+            ) : (
+              <select
+                value={filterProject}
+                onChange={(e) => setFilterProject(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="all">All Projects</option>
+                {availableFilterProjects.map(project => (
+                  <option key={project.id} value={project.id}>{project.name} ({project.project_code})</option>
+                ))}
+              </select>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Toll</label>
@@ -446,26 +519,40 @@ const MediaPage = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Media Type</label>
                 <select
                   value={uploadForm.media_type}
-                  onChange={(e) => setUploadForm({...uploadForm, media_type: e.target.value as 'photo' | 'video' | 'document' | 'pdf' | 'newspaper_cutting' | 'certificate' | 'report'})}
+                  onChange={(e) => setUploadForm({...uploadForm, media_type: e.target.value as 'photo' | 'video'})}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
                 >
                   {mediaTypeOptions.map(type => (
-                    <option key={type} value={type}>{type.charAt(0).toUpperCase() + type.slice(1).replace('_', ' ')}</option>
+                    <option key={type} value={type}>{type.charAt(0).toUpperCase() + type.slice(1)}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">News Channel</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Channel</label>
                 <select
                   value={uploadForm.news_channel}
-                  onChange={(e) => setUploadForm({...uploadForm, news_channel: e.target.value})}
+                  onChange={(e) => {
+                    setUploadForm({...uploadForm, news_channel: e.target.value});
+                    if (e.target.value !== 'Other') {
+                      setCustomChannel('');
+                    }
+                  }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
                 >
                   <option value="">Select Channel</option>
-                  {newsChannelOptions.map(channel => (
+                  {channelOptions.map(channel => (
                     <option key={channel} value={channel}>{channel}</option>
                   ))}
                 </select>
+                {uploadForm.news_channel === 'Other' && (
+                  <input
+                    type="text"
+                    placeholder="Enter custom channel name"
+                    value={customChannel}
+                    onChange={(e) => setCustomChannel(e.target.value)}
+                    className="w-full mt-2 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                  />
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Drive Link *</label>
@@ -820,26 +907,40 @@ const MediaPage = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-1">Media Type</label>
                       <select
                         value={uploadForm.media_type}
-                        onChange={(e) => setUploadForm({...uploadForm, media_type: e.target.value as 'photo' | 'video' | 'document' | 'pdf' | 'newspaper_cutting' | 'certificate' | 'report'})}
+                        onChange={(e) => setUploadForm({...uploadForm, media_type: e.target.value as 'photo' | 'video'})}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
                       >
                         {mediaTypeOptions.map(type => (
-                          <option key={type} value={type}>{type.charAt(0).toUpperCase() + type.slice(1).replace('_', ' ')}</option>
+                          <option key={type} value={type}>{type.charAt(0).toUpperCase() + type.slice(1)}</option>
                         ))}
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">News Channel</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Channel</label>
                       <select
                         value={uploadForm.news_channel}
-                        onChange={(e) => setUploadForm({...uploadForm, news_channel: e.target.value})}
+                        onChange={(e) => {
+                          setUploadForm({...uploadForm, news_channel: e.target.value});
+                          if (e.target.value !== 'Other') {
+                            setCustomChannel('');
+                          }
+                        }}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
                       >
                         <option value="">Select Channel</option>
-                        {newsChannelOptions.map(channel => (
+                        {channelOptions.map(channel => (
                           <option key={channel} value={channel}>{channel}</option>
                         ))}
                       </select>
+                      {uploadForm.news_channel === 'Other' && (
+                        <input
+                          type="text"
+                          placeholder="Enter custom channel name"
+                          value={customChannel}
+                          onChange={(e) => setCustomChannel(e.target.value)}
+                          className="w-full mt-2 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                        />
+                      )}
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Drive Link *</label>

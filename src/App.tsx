@@ -33,6 +33,7 @@ import UtilizationCertificatePage from './pages/UtilizationCertificatePage';
 import ProjectsDashboardPage from './pages/ProjectsDashboardPage';
 import TollManagementPage from './pages/TollManagementPage';
 import ResultAnalysisPage from './pages/ResultAnalysisPage';
+import ProjectTimelinePage from './pages/ProjectTimelinePage';
 
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -80,6 +81,7 @@ function AppRoutes() {
       <Route path="/csr-partners/:partnerId/tolls" element={<ProtectedRoute><Sidebar currentPage="csr-partners" onNavigate={() => {}}><TollManagementPage /></Sidebar></ProtectedRoute>} />
       <Route path="/utilization-certificate" element={<ProtectedRoute><Sidebar currentPage="utilization-certificate" onNavigate={() => {}}><UtilizationCertificatePage /></Sidebar></ProtectedRoute>} />
       <Route path="/projects" element={<ProtectedRoute><Sidebar currentPage="projects" onNavigate={() => {}}><ProjectsPage /></Sidebar></ProtectedRoute>} />
+      <Route path="/project-timeline" element={<ProtectedRoute><Sidebar currentPage="project-timeline" onNavigate={() => {}}><ProjectTimelinePage /></Sidebar></ProtectedRoute>} />
       <Route path="/todo" element={<ProtectedRoute><Sidebar currentPage="todo" onNavigate={() => {}}><ToDoList /></Sidebar></ProtectedRoute>} />
       <Route path="/real-time-update" element={<ProtectedRoute><Sidebar currentPage="real-time-update" onNavigate={() => {}}><RealTimeUpdate /></Sidebar></ProtectedRoute>} />
       <Route path="/media" element={<ProtectedRoute><Sidebar currentPage="media" onNavigate={() => {}}><MediaPage /></Sidebar></ProtectedRoute>} />

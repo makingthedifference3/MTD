@@ -14,6 +14,7 @@ const ToDoList = () => {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterDepartment, setFilterDepartment] = useState<string>('all');
   const [departments, setDepartments] = useState<string[]>([]);
+  const [customDepartment, setCustomDepartment] = useState<string>('');
   const [showModal, setShowModal] = useState(false);
   const [newTask, setNewTask] = useState({
     title: '',
@@ -226,7 +227,7 @@ const ToDoList = () => {
         priority: newTask.priority,
         due_date: newTask.due_date,
         completion_percentage: 0,
-        department: newTask.department,
+        department: newTask.department === 'other' ? customDepartment : newTask.department,
       };
 
       const created = await taskService.createTask(taskData);
@@ -244,6 +245,7 @@ const ToDoList = () => {
           due_date: '',
           task_type: 'Development',
         });
+        setCustomDepartment('');
         setSelectedCsrPartner('');
         setSelectedProject('');
         setSelectedToll('');
@@ -652,7 +654,12 @@ const ToDoList = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
                   <select
                     value={newTask.department}
-                    onChange={(e) => setNewTask({ ...newTask, department: e.target.value })}
+                    onChange={(e) => {
+                      setNewTask({ ...newTask, department: e.target.value });
+                      if (e.target.value !== 'other') {
+                        setCustomDepartment('');
+                      }
+                    }}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   >
                     <option value="">Select Department</option>
@@ -661,7 +668,17 @@ const ToDoList = () => {
                         {dept}
                       </option>
                     ))}
+                    <option value="other">Other</option>
                   </select>
+                  {newTask.department === 'other' && (
+                    <input
+                      type="text"
+                      placeholder="Enter custom department name"
+                      value={customDepartment}
+                      onChange={(e) => setCustomDepartment(e.target.value)}
+                      className="w-full mt-2 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  )}
                 </div>
 
                 {/* Task Type */}

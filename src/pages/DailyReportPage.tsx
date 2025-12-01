@@ -67,13 +67,17 @@ const DailyReportPage = () => {
   const [filteredTasks, setFilteredTasks] = useState<TaskWithUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [projects, setProjects] = useState<Array<{ id: string; name: string; project_code: string; csr_partner_id: string }>>([]);
-  const [csrPartners, setCsrPartners] = useState<CSRPartner[]>([]);
+  const [projects, setProjects] = useState<Array<{ id: string; name: string; project_code: string; csr_partner_id: string; toll_id?: string }>>([]);
+  const [csrPartners, setCsrPartners] = useState<Array<{ id: string; name: string; has_toll: boolean }>>([]);
+  const [tolls, setTolls] = useState<Array<{ id: string; toll_name: string }>>([]);
   
   // Filters
   const [selectedProject, setSelectedProject] = useState<string>('');
   const [selectedCsrPartner, setSelectedCsrPartner] = useState<string>('');
+  const [selectedToll, setSelectedToll] = useState<string>('');
   const [selectedPerformance, setSelectedPerformance] = useState<string>('');
+  const [hasToll, setHasToll] = useState(false);
+  const [filteredProjects, setFilteredProjects] = useState<Array<{ id: string; name: string; project_code: string; toll_id?: string }>>([]);
 
   // Calculate performance status based on due date and completion date
   const calculatePerformanceStatus = (task: Task): { status: PerformanceStatus; daysVariance: number } => {
@@ -155,17 +159,103 @@ const DailyReportPage = () => {
     }
   };
 
+  // Fetch CSR Partners with has_toll field
+  const fetchCsrPartners = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('csr_partners')
+        .select('id, name, has_toll')
+        .eq('is_active', true);
+      if (error) throw error;
+      setCsrPartners(data || []);
+    } catch (error) {
+      console.error('Error fetching CSR partners:', error);
+      setCsrPartners([]);
+    }
+  };
+
+  // Fetch Tolls for selected CSR Partner
+  const fetchTollsForPartner = async (partnerId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('csr_partner_tolls')
+        .select('id, toll_name')
+        .eq('csr_partner_id', partnerId)
+        .eq('is_active', true);
+      if (error) throw error;
+      setTolls(data || []);
+    } catch (error) {
+      console.error('Error fetching tolls:', error);
+      setTolls([]);
+    }
+  };
+
+  // Fetch Projects for selected CSR Partner (and optionally Toll)
+  const fetchProjectsForPartner = async (partnerId: string, tollId?: string) => {
+    try {
+      let query = supabase
+        .from('projects')
+        .select('id, name, project_code, toll_id')
+        .eq('csr_partner_id', partnerId)
+        .eq('is_active', true);
+      
+      if (tollId) {
+        query = query.eq('toll_id', tollId);
+      }
+      
+      const { data, error } = await query;
+      if (error) throw error;
+      setFilteredProjects(data || []);
+    } catch (error) {
+      console.error('Error fetching projects:', error);
+      setFilteredProjects([]);
+    }
+  };
+
   useEffect(() => {
     const fetchInitialData = async () => {
       const projectList = await projectService.getAllProjects();
-      setProjects(projectList.map(p => ({ id: p.id, name: p.name, project_code: p.project_code, csr_partner_id: p.csr_partner_id })));
+      setProjects(projectList.map(p => ({ id: p.id, name: p.name, project_code: p.project_code, csr_partner_id: p.csr_partner_id, toll_id: p.toll_id })));
 
-      // Fetch CSR Partners
-      const partners = await getAllCSRPartners();
-      setCsrPartners(partners);
+      // Fetch CSR Partners with has_toll
+      await fetchCsrPartners();
     };
     fetchInitialData();
   }, []);
+
+  // Handle CSR Partner change - fetch tolls and projects
+  useEffect(() => {
+    if (selectedCsrPartner) {
+      const partner = csrPartners.find(p => p.id === selectedCsrPartner);
+      const partnerHasToll = partner?.has_toll || false;
+      setHasToll(partnerHasToll);
+      
+      if (partnerHasToll) {
+        fetchTollsForPartner(selectedCsrPartner);
+      } else {
+        setTolls([]);
+        setSelectedToll('');
+        fetchProjectsForPartner(selectedCsrPartner);
+      }
+      setSelectedProject('');
+    } else {
+      setHasToll(false);
+      setTolls([]);
+      setSelectedToll('');
+      setFilteredProjects([]);
+      setSelectedProject('');
+    }
+  }, [selectedCsrPartner, csrPartners]);
+
+  // Handle Toll change - fetch projects for toll
+  useEffect(() => {
+    if (selectedCsrPartner && selectedToll) {
+      fetchProjectsForPartner(selectedCsrPartner, selectedToll);
+      setSelectedProject('');
+    } else if (selectedCsrPartner && !hasToll) {
+      // If no toll required, projects already loaded
+    }
+  }, [selectedToll, selectedCsrPartner, hasToll]);
 
   const fetchTasksData = useCallback(async (range?: { start: string; end: string }) => {
     try {
@@ -280,14 +370,14 @@ const DailyReportPage = () => {
   useEffect(() => {
     let result = [...tasks];
 
-    // Filter by Project
-    if (selectedProject) {
-      result = result.filter(task => task.project_id === selectedProject);
-    }
-
     // Filter by CSR Partner
     if (selectedCsrPartner) {
       result = result.filter(task => task.csrPartnerId === selectedCsrPartner);
+    }
+
+    // Filter by Project
+    if (selectedProject) {
+      result = result.filter(task => task.project_id === selectedProject);
     }
 
     // Filter by Performance Status
@@ -299,15 +389,29 @@ const DailyReportPage = () => {
   }, [tasks, selectedProject, selectedCsrPartner, selectedPerformance]);
 
   const handleApplyDateRange = () => {
-    const newStart = getStartOfMonthString();
     const clampedEnd = clampDateToToday(dateRange.end);
-    setDateRange({ start: newStart, end: clampedEnd });
+    const newRange = { start: dateRange.start, end: clampedEnd };
+    setDateRange(newRange);
+    fetchTasksData(newRange);
   };
 
   const handleClearFilters = () => {
     setSelectedProject('');
     setSelectedCsrPartner('');
+    setSelectedToll('');
     setSelectedPerformance('');
+    setHasToll(false);
+    setTolls([]);
+    setFilteredProjects([]);
+  };
+
+  // Handle card click to filter by performance
+  const handleCardClick = (performanceType: string) => {
+    if (selectedPerformance === performanceType) {
+      setSelectedPerformance('');
+    } else {
+      setSelectedPerformance(performanceType);
+    }
   };
 
   const groupedTasks = useMemo(() => {
@@ -524,9 +628,8 @@ const DailyReportPage = () => {
               <input
                 type="date"
                 value={dateRange.start}
-                disabled
+                onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
                 className="w-32 focus:outline-none font-medium"
-                title="Start date always set to the 1st"
               />
               <span className="text-gray-400">-</span>
               <input
@@ -543,30 +646,13 @@ const DailyReportPage = () => {
         </div>
       </div>
 
-      {/* Filters Section - Project, CSR Partner, Performance */}
+      {/* Filters Section - CSR Partner, Toll, Project, Performance */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
         <div className="flex items-center gap-2 mb-4">
           <Filter className="w-5 h-5 text-gray-600" />
           <h3 className="text-lg font-semibold text-gray-900">Filters</h3>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {/* Project Filter */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Project</label>
-            <select
-              value={selectedProject}
-              onChange={(e) => setSelectedProject(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            >
-              <option value="">All Projects</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.project_code} - {project.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           {/* CSR Partner Filter */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">CSR Partner</label>
@@ -579,6 +665,42 @@ const DailyReportPage = () => {
               {csrPartners.map((partner) => (
                 <option key={partner.id} value={partner.id}>
                   {partner.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Toll Filter - Conditional */}
+          {hasToll && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Toll</label>
+              <select
+                value={selectedToll}
+                onChange={(e) => setSelectedToll(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="">All Tolls</option>
+                {tolls.map((toll) => (
+                  <option key={toll.id} value={toll.id}>
+                    {toll.toll_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Project Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Project</label>
+            <select
+              value={selectedProject}
+              onChange={(e) => setSelectedProject(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            >
+              <option value="">All Projects</option>
+              {(selectedCsrPartner ? filteredProjects : projects).map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.project_code} - {project.name}
                 </option>
               ))}
             </select>
@@ -612,35 +734,70 @@ const DailyReportPage = () => {
           </div>
         </div>
 
-        {/* Performance Summary Stats */}
+        {/* Performance Summary Stats - Clickable */}
         <div className="mt-6 grid grid-cols-2 md:grid-cols-5 gap-4">
-          <div className="bg-green-50 rounded-lg p-4 text-center border border-green-200">
+          <div 
+            onClick={() => handleCardClick('early')}
+            className={`rounded-lg p-4 text-center border cursor-pointer transition-all hover:shadow-md ${
+              selectedPerformance === 'early' 
+                ? 'bg-green-200 border-green-400 ring-2 ring-green-500' 
+                : 'bg-green-50 border-green-200 hover:bg-green-100'
+            }`}
+          >
             <div className="text-2xl font-bold text-green-700">
-              {tasks.filter(t => t.performanceStatus === 'early').length}
+              {filteredTasks.filter(t => t.performanceStatus === 'early').length}
             </div>
             <div className="text-sm text-green-600">🌟 Excellent</div>
           </div>
-          <div className="bg-blue-50 rounded-lg p-4 text-center border border-blue-200">
+          <div 
+            onClick={() => handleCardClick('on_time')}
+            className={`rounded-lg p-4 text-center border cursor-pointer transition-all hover:shadow-md ${
+              selectedPerformance === 'on_time' 
+                ? 'bg-blue-200 border-blue-400 ring-2 ring-blue-500' 
+                : 'bg-blue-50 border-blue-200 hover:bg-blue-100'
+            }`}
+          >
             <div className="text-2xl font-bold text-blue-700">
-              {tasks.filter(t => t.performanceStatus === 'on_time').length}
+              {filteredTasks.filter(t => t.performanceStatus === 'on_time').length}
             </div>
             <div className="text-sm text-blue-600">✅ On Time</div>
           </div>
-          <div className="bg-red-50 rounded-lg p-4 text-center border border-red-200">
+          <div 
+            onClick={() => handleCardClick('late')}
+            className={`rounded-lg p-4 text-center border cursor-pointer transition-all hover:shadow-md ${
+              selectedPerformance === 'late' 
+                ? 'bg-red-200 border-red-400 ring-2 ring-red-500' 
+                : 'bg-red-50 border-red-200 hover:bg-red-100'
+            }`}
+          >
             <div className="text-2xl font-bold text-red-700">
-              {tasks.filter(t => t.performanceStatus === 'late').length}
+              {filteredTasks.filter(t => t.performanceStatus === 'late').length}
             </div>
             <div className="text-sm text-red-600">⚠️ Delayed</div>
           </div>
-          <div className="bg-amber-50 rounded-lg p-4 text-center border border-amber-200">
+          <div 
+            onClick={() => handleCardClick('pending')}
+            className={`rounded-lg p-4 text-center border cursor-pointer transition-all hover:shadow-md ${
+              selectedPerformance === 'pending' 
+                ? 'bg-amber-200 border-amber-400 ring-2 ring-amber-500' 
+                : 'bg-amber-50 border-amber-200 hover:bg-amber-100'
+            }`}
+          >
             <div className="text-2xl font-bold text-amber-700">
-              {tasks.filter(t => t.performanceStatus === 'pending').length}
+              {filteredTasks.filter(t => t.performanceStatus === 'pending').length}
             </div>
             <div className="text-sm text-amber-600">⏳ Pending</div>
           </div>
-          <div className="bg-gray-50 rounded-lg p-4 text-center border border-gray-200">
+          <div 
+            onClick={() => handleCardClick('no_due_date')}
+            className={`rounded-lg p-4 text-center border cursor-pointer transition-all hover:shadow-md ${
+              selectedPerformance === 'no_due_date' 
+                ? 'bg-gray-200 border-gray-400 ring-2 ring-gray-500' 
+                : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+            }`}
+          >
             <div className="text-2xl font-bold text-gray-700">
-              {tasks.filter(t => t.performanceStatus === 'no_due_date').length}
+              {filteredTasks.filter(t => t.performanceStatus === 'no_due_date').length}
             </div>
             <div className="text-sm text-gray-600">📅 No Due Date</div>
           </div>
