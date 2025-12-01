@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Menu, X, LogOut, LayoutDashboard, Briefcase, CheckSquare, Image, FileText, Users, Calendar,
-  DollarSign, Receipt, CreditCard, BarChart3, FileSpreadsheet, RefreshCw, ClipboardList, GraduationCap, TrendingUp, FileCheck, CalendarClock
+  DollarSign, Receipt, CreditCard, FileSpreadsheet, RefreshCw, ClipboardList, GraduationCap, TrendingUp, FileCheck, CalendarClock
 } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -35,7 +35,6 @@ const menuItems = [
   { id: 'bills', label: 'Bills', icon: Receipt, roles: ['admin', 'project_manager'] },
   { id: 'csr-budget', label: 'CSR Budget', icon: CreditCard, roles: ['admin'] },
   { id: 'utilization-certificate', label: 'Utilization Certificate', icon: FileCheck, roles: ['admin', 'accountant'] },
-  { id: 'analysis-report', label: 'Analysis Report', icon: BarChart3, roles: ['admin'] },
   { id: 'tasks', label: 'My Tasks', icon: CheckSquare, roles: ['team_member'] },
   // Admin Only
   { id: 'user-management', label: 'User Management', icon: Users, roles: ['admin'] },
@@ -101,7 +100,6 @@ const Sidebar = ({ children, currentPage, onNavigate }: SidebarProps) => {
     'utilization-certificate': '/utilization-certificate',
     'upcoming-expenses': '/upcoming-expenses',
     'bills': '/bills',
-    'analysis-report': '/analysis-report',
     'result-analysis': '/result-analysis',
     'tasks': '/tasks',
     'user-management': '/admin/users',
