@@ -33,11 +33,13 @@ const ProjectExpenses: React.FC = () => {
     approved: 0,
     rejected: 0,
     paid: 0,
+    accepted: 0,
     totalAmount: 0,
     pendingAmount: 0,
     approvedAmount: 0,
     rejectedAmount: 0,
     paidAmount: 0,
+    acceptedAmount: 0,
   });
 
   const [newExpense, setNewExpense] = useState({
@@ -50,6 +52,7 @@ const ProjectExpenses: React.FC = () => {
     description: '',
     bill_drive_link: '',
     payment_method: 'Cash',
+    budget_category_id: '',
   });
   
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -58,10 +61,17 @@ const ProjectExpenses: React.FC = () => {
   // Cascading dropdown states
   const [csrPartners, setCSRPartners] = useState<Array<{id: string; name: string; has_toll: boolean}>>([]);
   const [selectedCsrPartner, setSelectedCsrPartner] = useState('');
+  const [customCsrPartner, setCustomCsrPartner] = useState('');
   const [hasToll, setHasToll] = useState(false);
   const [tolls, setTolls] = useState<Array<{id: string; toll_name: string}>>([]);
   const [selectedToll, setSelectedToll] = useState('');
   const [filteredProjects, setFilteredProjects] = useState<Array<{id: string; name: string; project_code: string}>>([]);
+  const [customProject, setCustomProject] = useState('');
+  const [budgetCategories, setBudgetCategories] = useState<Array<{id: string; name: string; parent_id: string | null}>>([]);
+  const [budgetSubcategories, setBudgetSubcategories] = useState<Array<{id: string; name: string; parent_id: string | null}>>([]);
+  const [budgetSubSubcategories, setBudgetSubSubcategories] = useState<Array<{id: string; name: string; parent_id: string | null}>>([]);
+  const [selectedBudgetCategory, setSelectedBudgetCategory] = useState('');
+  const [selectedBudgetSubcategory, setSelectedBudgetSubcategory] = useState('');
 
   useEffect(() => {
     if (currentUser) {
@@ -165,6 +175,67 @@ const ProjectExpenses: React.FC = () => {
     } catch (error) {
       console.error('Error fetching projects:', error);
       setFilteredProjects([]);
+    }
+  };
+
+  const fetchBudgetCategories = async (projectId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('budget_categories')
+        .select('id, name, parent_id')
+        .eq('project_id', projectId)
+        .order('name');
+      
+      if (error) throw error;
+      
+      // Split into categories, subcategories, and sub-subcategories
+      const categories = (data || []).filter(cat => !cat.parent_id);
+      setBudgetCategories(categories);
+      
+      // Reset lower levels
+      setBudgetSubcategories([]);
+      setBudgetSubSubcategories([]);
+      setSelectedBudgetCategory('');
+      setSelectedBudgetSubcategory('');
+    } catch (error) {
+      console.error('Error fetching budget categories:', error);
+      setBudgetCategories([]);
+    }
+  };
+
+  const fetchBudgetSubcategories = async (projectId: string, parentId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('budget_categories')
+        .select('id, name, parent_id')
+        .eq('project_id', projectId)
+        .eq('parent_id', parentId)
+        .order('name');
+      
+      if (error) throw error;
+      setBudgetSubcategories(data || []);
+      setBudgetSubSubcategories([]);
+      setSelectedBudgetSubcategory('');
+    } catch (error) {
+      console.error('Error fetching budget subcategories:', error);
+      setBudgetSubcategories([]);
+    }
+  };
+
+  const fetchBudgetSubSubcategories = async (projectId: string, parentId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('budget_categories')
+        .select('id, name, parent_id')
+        .eq('project_id', projectId)
+        .eq('parent_id', parentId)
+        .order('name');
+      
+      if (error) throw error;
+      setBudgetSubSubcategories(data || []);
+    } catch (error) {
+      console.error('Error fetching budget sub-subcategories:', error);
+      setBudgetSubSubcategories([]);
     }
   };
   const handleStatusCardClick = (status: 'pending' | 'approved' | 'rejected' | 'paid') => {
@@ -283,21 +354,46 @@ const ProjectExpenses: React.FC = () => {
         }
       }
 
-      const expenseData: Omit<ProjectExpense, 'id' | 'created_at' | 'updated_at'> & { bill_drive_link?: string; csr_partner_id?: string; toll_id?: string } = {
+      // Handle custom project - need to use first available project as placeholder
+      let finalProjectId = newExpense.project_id;
+      let descriptionAdditions = newExpense.description || '';
+      
+      if (newExpense.project_id === 'others') {
+        // Use the first project from filtered projects or any project as placeholder
+        if (filteredProjects.length > 0) {
+          finalProjectId = filteredProjects[0].id;
+        } else {
+          // Fallback: get any project
+          const { data: anyProject } = await supabase
+            .from('projects')
+            .select('id')
+            .limit(1)
+            .single();
+          finalProjectId = anyProject?.id || '';
+        }
+        descriptionAdditions += ` [Custom Project: ${customProject}]`;
+      }
+      
+      if (customCsrPartner) {
+        descriptionAdditions += ` [Custom CSR Partner: ${customCsrPartner}]`;
+      }
+
+      const expenseData: Omit<ProjectExpense, 'id' | 'created_at' | 'updated_at'> & { bill_drive_link?: string; csr_partner_id?: string; toll_id?: string; budget_category_id?: string } = {
         expense_code: `EXP-${Date.now()}`,
-        project_id: newExpense.project_id,
+        project_id: finalProjectId,
         category_id: validCategoryId, // Use the validated category ID
         merchant_name: newExpense.merchant_name,
         date: newExpense.date,
         category: newExpense.category,
-        description: newExpense.description,
+        description: descriptionAdditions,
         total_amount: parseFloat(newExpense.total_amount),
         base_amount: parseFloat(newExpense.total_amount),
         status: 'pending',
         payment_method: newExpense.payment_method as 'Cash' | 'Cheque' | 'Online' | 'Card',
         submitted_by: currentUser.id,
-        csr_partner_id: selectedCsrPartner,
+        csr_partner_id: selectedCsrPartner === 'others' ? undefined : selectedCsrPartner,
         toll_id: hasToll && selectedToll ? selectedToll : undefined,
+        budget_category_id: newExpense.budget_category_id || undefined,
       };
 
       // Add bill_drive_link if uploaded or provided
@@ -312,7 +408,7 @@ const ProjectExpenses: React.FC = () => {
         alert(`Invalid category_id format: ${expenseData.category_id}`);
         return;
       }
-      if (!uuidRegex.test(expenseData.project_id)) {
+      if (expenseData.project_id && !uuidRegex.test(expenseData.project_id)) {
         alert(`Invalid project_id format: ${expenseData.project_id}`);
         return;
       }
@@ -332,6 +428,7 @@ const ProjectExpenses: React.FC = () => {
           description: '',
           bill_drive_link: '',
           payment_method: 'Cash',
+          budget_category_id: '',
         });
         setSelectedFile(null);
         setSelectedCsrPartner('');
@@ -578,11 +675,13 @@ const ProjectExpenses: React.FC = () => {
                     onChange={(e) => {
                       const partnerId = e.target.value;
                       setSelectedCsrPartner(partnerId);
+                      setCustomCsrPartner('');
                       setSelectedToll('');
-                      setNewExpense({ ...newExpense, project_id: '' });
+                      setNewExpense({ ...newExpense, project_id: '', budget_category_id: '' });
                       setFilteredProjects([]);
+                      setBudgetCategories([]);
                       
-                      if (partnerId) {
+                      if (partnerId && partnerId !== 'others') {
                         const partner = csrPartners.find(p => p.id === partnerId);
                         const partnerHasToll = partner?.has_toll || false;
                         setHasToll(partnerHasToll);
@@ -607,11 +706,22 @@ const ProjectExpenses: React.FC = () => {
                         {partner.name}
                       </option>
                     ))}
+                    <option value="others">Others (Custom)</option>
                   </select>
+                  {selectedCsrPartner === 'others' && (
+                    <input
+                      type="text"
+                      value={customCsrPartner}
+                      onChange={(e) => setCustomCsrPartner(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 mt-2"
+                      placeholder="Enter custom CSR partner name"
+                      required
+                    />
+                  )}
                 </div>
 
                 {/* Toll - Conditional */}
-                {hasToll && selectedCsrPartner && (
+                {hasToll && selectedCsrPartner && selectedCsrPartner !== 'others' && (
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-2">Toll *</label>
                     <select
@@ -644,10 +754,20 @@ const ProjectExpenses: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Project *</label>
                   <select
                     value={newExpense.project_id}
-                    onChange={(e) => setNewExpense({ ...newExpense, project_id: e.target.value })}
+                    onChange={(e) => {
+                      const projectId = e.target.value;
+                      setNewExpense({ ...newExpense, project_id: projectId, budget_category_id: '' });
+                      setCustomProject('');
+                      setBudgetCategories([]);
+                      setBudgetSubcategories([]);
+                      setBudgetSubSubcategories([]);
+                      if (projectId && projectId !== 'others') {
+                        fetchBudgetCategories(projectId);
+                      }
+                    }}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     required
-                    disabled={!selectedCsrPartner || (hasToll && !selectedToll)}
+                    disabled={selectedCsrPartner === 'others' ? false : (!selectedCsrPartner || (hasToll && !selectedToll))}
                   >
                     <option value="">Select Project</option>
                     {filteredProjects.map((project) => (
@@ -655,8 +775,108 @@ const ProjectExpenses: React.FC = () => {
                         {project.project_code} - {project.name}
                       </option>
                     ))}
+                    <option value="others">Others (Custom)</option>
                   </select>
+                  {newExpense.project_id === 'others' && (
+                    <input
+                      type="text"
+                      value={customProject}
+                      onChange={(e) => setCustomProject(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 mt-2"
+                      placeholder="Enter custom project name"
+                      required
+                    />
+                  )}
                 </div>
+
+                {/* Budget Category - Only show if project selected and not "others" */}
+                {newExpense.project_id && newExpense.project_id !== 'others' && budgetCategories.length > 0 && (
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Budget Category</label>
+                    <select
+                      value={selectedBudgetCategory}
+                      onChange={(e) => {
+                        const categoryId = e.target.value;
+                        setSelectedBudgetCategory(categoryId);
+                        setSelectedBudgetSubcategory('');
+                        setBudgetSubcategories([]);
+                        setBudgetSubSubcategories([]);
+                        if (categoryId && categoryId !== 'others') {
+                          fetchBudgetSubcategories(newExpense.project_id, categoryId);
+                          setNewExpense({ ...newExpense, budget_category_id: categoryId });
+                        } else {
+                          setNewExpense({ ...newExpense, budget_category_id: '' });
+                        }
+                      }}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    >
+                      <option value="">Select Budget Category</option>
+                      {budgetCategories.map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </option>
+                      ))}
+                      <option value="others">Others</option>
+                    </select>
+                  </div>
+                )}
+
+                {/* Budget Subcategory */}
+                {budgetSubcategories.length > 0 && selectedBudgetCategory && selectedBudgetCategory !== 'others' && (
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Budget Subcategory</label>
+                    <select
+                      value={selectedBudgetSubcategory}
+                      onChange={(e) => {
+                        const subcategoryId = e.target.value;
+                        setSelectedBudgetSubcategory(subcategoryId);
+                        setBudgetSubSubcategories([]);
+                        if (subcategoryId && subcategoryId !== 'others') {
+                          fetchBudgetSubSubcategories(newExpense.project_id, subcategoryId);
+                          setNewExpense({ ...newExpense, budget_category_id: subcategoryId });
+                        } else {
+                          setNewExpense({ ...newExpense, budget_category_id: selectedBudgetCategory });
+                        }
+                      }}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    >
+                      <option value="">Select Budget Subcategory</option>
+                      {budgetSubcategories.map((subcat) => (
+                        <option key={subcat.id} value={subcat.id}>
+                          {subcat.name}
+                        </option>
+                      ))}
+                      <option value="others">Others</option>
+                    </select>
+                  </div>
+                )}
+
+                {/* Budget Sub-Subcategory */}
+                {budgetSubSubcategories.length > 0 && selectedBudgetSubcategory && selectedBudgetSubcategory !== 'others' && (
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Budget Sub-Subcategory</label>
+                    <select
+                      value={newExpense.budget_category_id}
+                      onChange={(e) => {
+                        const subSubcategoryId = e.target.value;
+                        if (subSubcategoryId && subSubcategoryId !== 'others') {
+                          setNewExpense({ ...newExpense, budget_category_id: subSubcategoryId });
+                        } else {
+                          setNewExpense({ ...newExpense, budget_category_id: selectedBudgetSubcategory });
+                        }
+                      }}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    >
+                      <option value="">Select Budget Sub-Subcategory</option>
+                      {budgetSubSubcategories.map((subsubcat) => (
+                        <option key={subsubcat.id} value={subsubcat.id}>
+                          {subsubcat.name}
+                        </option>
+                      ))}
+                      <option value="others">Others</option>
+                    </select>
+                  </div>
+                )}
 
                 {/* Merchant Name */}
                 <div>
@@ -808,6 +1028,7 @@ const ProjectExpenses: React.FC = () => {
                       description: '',
                       bill_drive_link: '',
                       payment_method: 'Cash',
+                      budget_category_id: '',
                     });
                     setSelectedFile(null);
                     setSelectedCsrPartner('');
