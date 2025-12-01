@@ -543,30 +543,13 @@ const DailyReportPage = () => {
         </div>
       </div>
 
-      {/* Filters Section - Project, CSR Partner, Performance */}
+      {/* Filters Section - CSR Partner, Project, Performance */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
         <div className="flex items-center gap-2 mb-4">
           <Filter className="w-5 h-5 text-gray-600" />
           <h3 className="text-lg font-semibold text-gray-900">Filters</h3>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {/* Project Filter */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Project</label>
-            <select
-              value={selectedProject}
-              onChange={(e) => setSelectedProject(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            >
-              <option value="">All Projects</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.project_code} - {project.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
           {/* CSR Partner Filter */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">CSR Partner</label>
@@ -579,6 +562,23 @@ const DailyReportPage = () => {
               {csrPartners.map((partner) => (
                 <option key={partner.id} value={partner.id}>
                   {partner.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Project Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Project</label>
+            <select
+              value={selectedProject}
+              onChange={(e) => setSelectedProject(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            >
+              <option value="">All Projects</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.project_code} - {project.name}
                 </option>
               ))}
             </select>

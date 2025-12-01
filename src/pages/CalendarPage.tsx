@@ -22,6 +22,44 @@ const CalendarPage = () => {
   const [upcomingPage, setUpcomingPage] = useState(0);
   const ITEMS_PER_PAGE = 4;
 
+  // Stats modal state
+  const [statsModalOpen, setStatsModalOpen] = useState(false);
+  const [statsModalType, setStatsModalType] = useState<'total' | 'completed' | 'in_progress' | 'not_started'>('total');
+
+  // Get tasks based on stats modal type
+  const getStatsTasks = () => {
+    switch (statsModalType) {
+      case 'completed':
+        return tasks.filter(t => t.status === 'completed');
+      case 'in_progress':
+        return tasks.filter(t => t.status === 'in_progress');
+      case 'not_started':
+        return tasks.filter(t => t.status === 'not_started');
+      case 'total':
+      default:
+        return tasks;
+    }
+  };
+
+  const getStatsModalTitle = () => {
+    switch (statsModalType) {
+      case 'completed':
+        return 'Completed Tasks';
+      case 'in_progress':
+        return 'In Progress Tasks';
+      case 'not_started':
+        return 'Not Started Tasks';
+      case 'total':
+      default:
+        return 'All Tasks';
+    }
+  };
+
+  const handleStatCardClick = (type: 'total' | 'completed' | 'in_progress' | 'not_started') => {
+    setStatsModalType(type);
+    setStatsModalOpen(true);
+  };
+
   // Filter states
   const [filterPriority, setFilterPriority] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -331,7 +369,8 @@ const CalendarPage = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0 }}
-            className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
+            onClick={() => handleStatCardClick('total')}
+            className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md hover:border-emerald-200 transition-all"
           >
             <div className="flex items-center justify-between mb-4">
               <div className="p-3 bg-emerald-50 rounded-xl">
@@ -346,7 +385,8 @@ const CalendarPage = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
+            onClick={() => handleStatCardClick('completed')}
+            className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md hover:border-emerald-200 transition-all"
           >
             <div className="flex items-center justify-between mb-4">
               <div className="p-3 bg-emerald-50 rounded-xl">
@@ -363,7 +403,8 @@ const CalendarPage = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
+            onClick={() => handleStatCardClick('in_progress')}
+            className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md hover:border-emerald-200 transition-all"
           >
             <div className="flex items-center justify-between mb-4">
               <div className="p-3 bg-emerald-50 rounded-xl">
@@ -380,7 +421,8 @@ const CalendarPage = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
-            className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
+            onClick={() => handleStatCardClick('not_started')}
+            className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md hover:border-emerald-200 transition-all"
           >
             <div className="flex items-center justify-between mb-4">
               <div className="p-3 bg-emerald-50 rounded-xl">
@@ -646,6 +688,102 @@ const CalendarPage = () => {
           )}
         </>
       )}
+
+      {/* Stats Modal */}
+      <AnimatePresence>
+        {statsModalOpen && (
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+            onClick={() => setStatsModalOpen(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl shadow-2xl p-6 max-w-3xl w-full max-h-[80vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-2xl font-bold text-gray-900">
+                  {getStatsModalTitle()} ({getStatsTasks().length})
+                </h3>
+                <button
+                  onClick={() => setStatsModalOpen(false)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <X className="w-6 h-6 text-gray-600" />
+                </button>
+              </div>
+
+              {getStatsTasks().length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  No tasks found
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {getStatsTasks().map((task) => (
+                    <motion.div
+                      key={task.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-gray-50 border border-gray-200 rounded-lg p-4"
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <h4 className="font-bold text-gray-900 text-lg flex-1">{task.title}</h4>
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusBadgeColor(task.status)}`}>
+                          {formatStatus(task.status)}
+                        </span>
+                      </div>
+                      
+                      {task.description && (
+                        <p className="text-gray-600 text-sm mb-3 leading-relaxed">{task.description}</p>
+                      )}
+
+                      <div className="flex flex-wrap gap-3 text-sm">
+                        {task.due_date && (
+                          <div className="flex items-center gap-1 text-gray-600">
+                            <Clock className="w-4 h-4 text-emerald-600" />
+                            <span className="font-medium">Due:</span> {new Date(task.due_date).toLocaleDateString()}
+                          </div>
+                        )}
+                        
+                        {task.assignedToName && (
+                          <div className="flex items-center gap-1 text-gray-600">
+                            <User className="w-4 h-4 text-blue-600" />
+                            <span className="font-medium">Assigned to:</span> {task.assignedToName}
+                          </div>
+                        )}
+                        
+                        {task.assignedByName && (
+                          <div className="flex items-center gap-1 text-gray-600">
+                            <User className="w-4 h-4 text-purple-600" />
+                            <span className="font-medium">Assigned by:</span> {task.assignedByName}
+                          </div>
+                        )}
+
+                        {task.department && (
+                          <div className="flex items-center gap-1 text-gray-600">
+                            <Calendar className="w-4 h-4 text-orange-600" />
+                            <span className="font-medium">Dept:</span> {task.department}
+                          </div>
+                        )}
+                      </div>
+
+                      {task.task_type && (
+                        <div className="mt-3">
+                          <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+                            {task.task_type}
+                          </span>
+                        </div>
+                      )}
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Day Tasks Modal */}
       <AnimatePresence>

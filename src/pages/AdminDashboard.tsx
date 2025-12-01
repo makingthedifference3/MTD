@@ -1,9 +1,8 @@
 import { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { User2, Mail, CalendarDays, FolderKanban, Target, DollarSign } from 'lucide-react';
+import { User2, Mail, CalendarDays } from 'lucide-react';
 import { getAllUsers } from '../services/authService';
 import type { AuthUser } from '../services/authService';
-import { useFilter } from '../context/useFilter';
 import { PMDashboardInner } from './PMDashboard';
 
 const formatRoleLabel = (role?: string) => {
@@ -18,7 +17,6 @@ const formatRoleLabel = (role?: string) => {
 
 const AdminDashboard = () => {
   const [dbUsers, setDbUsers] = useState<AuthUser[]>([]);
-  const { projects } = useFilter();
 
   useEffect(() => {
     const loadUsers = async () => {
@@ -46,99 +44,8 @@ const AdminDashboard = () => {
     [dbUsers]
   );
 
-  // Calculate admin stats from all projects
-  const adminStats = useMemo(() => {
-    const activeProjects = projects.filter(p => p.status === 'active').length;
-    const totalBudget = projects.reduce((sum, p) => sum + (p.total_budget || 0), 0);
-    const totalBeneficiaries = projects.reduce((sum, p) => sum + (p.direct_beneficiaries || 0), 0);
-    
-    return {
-      totalProjects: projects.length,
-      activeProjects,
-      totalBudget,
-      totalBeneficiaries,
-    };
-  }, [projects]);
-
   return (
     <div className="min-h-screen bg-linear-to-br from-gray-50 via-emerald-50/20 to-gray-50 p-4 md:p-8">
-      {/* All Projects Overview */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="mb-8"
-      >
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Total Projects Card */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="bg-linear-to-br from-emerald-50 to-emerald-100 border-2 border-emerald-200 rounded-2xl p-6 shadow-lg hover:shadow-emerald-500/20 transition-all"
-          >
-            <div className="flex items-start justify-between mb-4">
-              <div className="p-3 bg-emerald-200 rounded-xl">
-                <FolderKanban className="w-6 h-6 text-emerald-700" />
-              </div>
-              <span className="text-xs font-bold text-emerald-700 bg-emerald-200 px-3 py-1 rounded-full">TOTAL</span>
-            </div>
-            <p className="text-3xl font-black text-emerald-900 mb-1">{adminStats.totalProjects}</p>
-            <p className="text-sm text-emerald-700 font-semibold">All Projects</p>
-          </motion.div>
-
-          {/* Active Projects Card */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="bg-linear-to-br from-blue-50 to-blue-100 border-2 border-blue-200 rounded-2xl p-6 shadow-lg hover:shadow-blue-500/20 transition-all"
-          >
-            <div className="flex items-start justify-between mb-4">
-              <div className="p-3 bg-blue-200 rounded-xl">
-                <Target className="w-6 h-6 text-blue-700" />
-              </div>
-              <span className="text-xs font-bold text-blue-700 bg-blue-200 px-3 py-1 rounded-full">ACTIVE</span>
-            </div>
-            <p className="text-3xl font-black text-blue-900 mb-1">{adminStats.activeProjects}</p>
-            <p className="text-sm text-blue-700 font-semibold">Active Projects</p>
-          </motion.div>
-
-          {/* Total Budget Card */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="bg-linear-to-br from-purple-50 to-purple-100 border-2 border-purple-200 rounded-2xl p-6 shadow-lg hover:shadow-purple-500/20 transition-all"
-          >
-            <div className="flex items-start justify-between mb-4">
-              <div className="p-3 bg-purple-200 rounded-xl">
-                <DollarSign className="w-6 h-6 text-purple-700" />
-              </div>
-              <span className="text-xs font-bold text-purple-700 bg-purple-200 px-3 py-1 rounded-full">BUDGET</span>
-            </div>
-            <p className="text-3xl font-black text-purple-900 mb-1">₹{(adminStats.totalBudget / 1000000).toFixed(1)}M</p>
-            <p className="text-sm text-purple-700 font-semibold">Total Budget</p>
-          </motion.div>
-
-          {/* Total Beneficiaries Card */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="bg-linear-to-br from-orange-50 to-orange-100 border-2 border-orange-200 rounded-2xl p-6 shadow-lg hover:shadow-orange-500/20 transition-all"
-          >
-            <div className="flex items-start justify-between mb-4">
-              <div className="p-3 bg-orange-200 rounded-xl">
-                <User2 className="w-6 h-6 text-orange-700" />
-              </div>
-              <span className="text-xs font-bold text-orange-700 bg-orange-200 px-3 py-1 rounded-full">PEOPLE</span>
-            </div>
-            <p className="text-3xl font-black text-orange-900 mb-1">{(adminStats.totalBeneficiaries / 1000).toFixed(0)}K</p>
-            <p className="text-sm text-orange-700 font-semibold">Beneficiaries</p>
-          </motion.div>
-        </div>
-      </motion.div>
-
       {/* PMDashboard Inner - will show all projects when no partner selected */}
       <PMDashboardInner shouldLockContext={false} />
 

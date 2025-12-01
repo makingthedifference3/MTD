@@ -14,7 +14,6 @@ const AdminCSRPartnerManagement = () => {
     company_name: '',
     city: '',
     state: '',
-    website: '',
   });
   const [tollFormData, setTollFormData] = useState({
     poc_name: '',
@@ -56,14 +55,14 @@ const AdminCSRPartnerManagement = () => {
         company_name: formData.company_name,
         city: formData.city,
         state: formData.state,
-        website: formData.website,
+
         is_active: true,
       });
 
       if (newPartner) {
         setCSRPartners([...csrPartners, newPartner]);
         setTolls({ ...tolls, [newPartner.id]: [] });
-        setFormData({ company_name: '', city: '', state: '', website: '' });
+        setFormData({ company_name: '', city: '', state: '' });
         setShowPartnerForm(false);
         alert('CSR Partner added successfully!');
       }
@@ -196,13 +195,6 @@ const AdminCSRPartnerManagement = () => {
                   className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
                   required
                 />
-                <input
-                  type="url"
-                  placeholder="Website (Optional)"
-                  value={formData.website}
-                  onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-                />
               </div>
               <div className="flex justify-end space-x-3">
                 <button
@@ -257,11 +249,6 @@ const AdminCSRPartnerManagement = () => {
                   <MapPin className="w-4 h-4" />
                   <span>{partner.city}, {partner.state}</span>
                 </div>
-                {partner.website && (
-                  <a href={partner.website} target="_blank" rel="noopener noreferrer" className="text-emerald-600 hover:underline">
-                    {partner.website}
-                  </a>
-                )}
               </div>
 
               {/* Tolls for this partner */}

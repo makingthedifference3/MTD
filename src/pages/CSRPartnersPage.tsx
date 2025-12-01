@@ -1099,7 +1099,6 @@ const PartnerDetailsModal = ({ partner, isLoading, error, budgetTotal, directBud
                 label="Location"
                 value={[partner.city, partner.state].filter(Boolean).join(', ') || '—'}
               />
-              <DetailRow icon={<Globe className="w-4 h-4" />} label="Website" value={partner.website || '—'} />
               <DetailRow
                 icon={<Info className="w-4 h-4" />}
                 label="Project Budget"
