@@ -27,8 +27,6 @@ interface FilterContextType {
 
 const FilterContext = createContext<FilterContextType | undefined>(undefined);
 
-export { FilterContext, type FilterContextType };
-
 export const FilterProvider = ({ children }: { children: ReactNode }) => {
   const { currentRole, currentUser } = useAuth();
   const [selectedPartner, setSelectedPartner] = useState<string | null>(() => {
@@ -120,6 +118,7 @@ export const FilterProvider = ({ children }: { children: ReactNode }) => {
       try {
         const allProjects = await fetchAllProjects();
         console.log('FilterContext - LoadAllProjects returned:', allProjects.length, 'projects');
+        console.log('FilterContext - First 3 projects:', allProjects.slice(0, 3).map(p => ({ id: p.id, name: p.name })));
         
         // Filter projects based on user role
         let visibleProjects = allProjects;
@@ -128,6 +127,7 @@ export const FilterProvider = ({ children }: { children: ReactNode }) => {
           console.log('FilterContext - Filtered to user projects:', visibleProjects.length);
         }
         
+        console.log('FilterContext - Setting projects state to:', visibleProjects.length, 'projects');
         setProjects(visibleProjects);
       } catch (err) {
         console.error('Failed to load projects:', err);
@@ -162,27 +162,54 @@ export const FilterProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     let filtered = [...projects];
 
-    if (selectedPartner) {
-      console.log('FilterContext - Filtering with selectedPartner:', selectedPartner);
-      filtered = filtered.filter((p) => p.csr_partner_id === selectedPartner);
+    console.log('FilterContext - Filtering effect - projects.length:', projects.length, 'currentRole:', currentRole);
 
-      if (selectedToll) {
+    // For admin with no active selections, show all projects
+    // For other roles, apply filters as normal
+    if (currentRole === 'admin') {
+      // Admin can see everything unfiltered unless they explicitly select something
+      if (selectedPartner) {
+        console.log('FilterContext - Filtering with selectedPartner:', selectedPartner);
+        filtered = filtered.filter((p) => p.csr_partner_id === selectedPartner);
+
+        if (selectedToll) {
+          filtered = filtered.filter((p) => p.toll_id === selectedToll);
+        }
+
+        if (selectedProject) {
+          filtered = filtered.filter((p) => p.id === selectedProject);
+        }
+      } else if (selectedProject) {
+        console.log('FilterContext - Filtering with selectedProject only:', selectedProject);
+        filtered = filtered.filter((p) => p.id === selectedProject);
+      } else if (selectedToll) {
         filtered = filtered.filter((p) => p.toll_id === selectedToll);
       }
+      // If nothing is selected, show all projects (no filtering)
+    } else {
+      // For non-admin users, always apply filters
+      if (selectedPartner) {
+        console.log('FilterContext - Filtering with selectedPartner:', selectedPartner);
+        filtered = filtered.filter((p) => p.csr_partner_id === selectedPartner);
 
-      if (selectedProject) {
+        if (selectedToll) {
+          filtered = filtered.filter((p) => p.toll_id === selectedToll);
+        }
+
+        if (selectedProject) {
+          filtered = filtered.filter((p) => p.id === selectedProject);
+        }
+      } else if (selectedProject) {
+        console.log('FilterContext - Filtering with selectedProject only:', selectedProject);
         filtered = filtered.filter((p) => p.id === selectedProject);
+      } else if (selectedToll) {
+        filtered = filtered.filter((p) => p.toll_id === selectedToll);
       }
-    } else if (selectedProject) {
-      console.log('FilterContext - Filtering with selectedProject only:', selectedProject);
-      filtered = filtered.filter((p) => p.id === selectedProject);
-    } else if (selectedToll) {
-      filtered = filtered.filter((p) => p.toll_id === selectedToll);
     }
 
-    console.log('FilterContext - Filtered projects count:', filtered.length);
+    console.log('FilterContext - Final filtered.length:', filtered.length);
     setFilteredProjects(filtered);
-  }, [selectedPartner, selectedProject, selectedToll, projects]);
+  }, [selectedPartner, selectedProject, selectedToll, projects, currentRole]);
 
   const resetFilters = () => {
     if (!filtersLocked) {
@@ -245,5 +272,7 @@ export const FilterProvider = ({ children }: { children: ReactNode }) => {
     </FilterContext.Provider>
   );
 };
+
+export { FilterContext, type FilterContextType };
 
 
