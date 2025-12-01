@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Menu, X, LogOut, LayoutDashboard, Briefcase, CheckSquare, Image, FileText, Users, Calendar,
-  DollarSign, Receipt, CreditCard, FileSpreadsheet, RefreshCw, ClipboardList, GraduationCap, TrendingUp, FileCheck, CalendarClock
+  DollarSign, Receipt, CreditCard, RefreshCw, ClipboardList, GraduationCap, TrendingUp, FileCheck, CalendarClock
 } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -24,7 +24,6 @@ const menuItems = [
   { id: 'real-time-update', label: 'Real Time Update', icon: RefreshCw, roles: ['admin', 'project_manager'] },
   { id: 'media', label: 'Media', icon: Image, roles: ['admin', 'project_manager'] },
   { id: 'article', label: 'Article', icon: FileText, roles: ['admin', 'project_manager'] },
-  { id: 'dashboard-forms', label: 'Dashboard Forms', icon: FileSpreadsheet, roles: ['admin', 'project_manager'] },
   { id: 'calendar', label: 'Calendar', icon: Calendar, roles: ['admin', 'accountant', 'project_manager'] },
   { id: 'project-expenses', label: 'Project Expenses', icon: DollarSign, roles: ['admin', 'accountant', 'project_manager'] },
   { id: 'admin-expenses', label: 'Admin Expenses', icon: Receipt, roles: ['admin'] },
@@ -90,7 +89,6 @@ const Sidebar = ({ children, currentPage, onNavigate }: SidebarProps) => {
     'real-time-update': '/real-time-update',
     'media': '/media',
     'article': '/article',
-    'dashboard-forms': '/dashboard-forms',
     'calendar': '/calendar',
     'project-expenses': '/project-expenses',
     'admin-expenses': '/admin-expenses',
