@@ -16,7 +16,7 @@ export interface ProjectExpense {
   total_amount: number;
   base_amount: number;
   tax_amount?: number;
-  status: 'draft' | 'submitted' | 'pending' | 'approved' | 'rejected' | 'reimbursed' | 'paid';
+  status: 'draft' | 'submitted' | 'pending' | 'accepted' | 'approved' | 'rejected' | 'reimbursed' | 'paid';
   payment_method: 'Cash' | 'Cheque' | 'Online' | 'Card';
   submitted_by?: string;
   approved_by?: string;
@@ -30,11 +30,13 @@ export interface ProjectExpense {
 export interface ExpenseStats {
   total: number;
   pending: number;
+  accepted: number;
   approved: number;
   rejected: number;
   paid: number;
   totalAmount: number;
   pendingAmount: number;
+  acceptedAmount: number;
   approvedAmount: number;
   rejectedAmount: number;
   paidAmount: number;
@@ -48,7 +50,7 @@ export interface ExpenseSummary {
   amount: number;
   date: string;
   submitted_by: string;
-  status: 'draft' | 'submitted' | 'pending' | 'approved' | 'rejected' | 'reimbursed' | 'paid';
+  status: 'draft' | 'submitted' | 'pending' | 'accepted' | 'approved' | 'rejected' | 'reimbursed' | 'paid';
   description: string;
 }
 
@@ -128,6 +130,7 @@ export const projectExpensesService = {
     try {
       const total = expenses.length;
       const pending = expenses.filter(e => e.status === 'pending' || e.status === 'submitted').length;
+      const accepted = expenses.filter(e => e.status === 'accepted').length;
       const approved = expenses.filter(e => e.status === 'approved').length;
       const rejected = expenses.filter(e => e.status === 'rejected').length;
       const paid = expenses.filter(e => e.status === 'paid').length;
@@ -135,6 +138,9 @@ export const projectExpensesService = {
       const totalAmount = expenses.reduce((sum, e) => sum + e.total_amount, 0);
       const pendingAmount = expenses
         .filter(e => e.status === 'pending' || e.status === 'submitted')
+        .reduce((sum, e) => sum + e.total_amount, 0);
+      const acceptedAmount = expenses
+        .filter(e => e.status === 'accepted')
         .reduce((sum, e) => sum + e.total_amount, 0);
       const approvedAmount = expenses
         .filter(e => e.status === 'approved')
@@ -149,11 +155,13 @@ export const projectExpensesService = {
       return {
         total,
         pending,
+        accepted,
         approved,
         rejected,
         paid,
         totalAmount,
         pendingAmount,
+        acceptedAmount,
         approvedAmount,
         rejectedAmount,
         paidAmount,
@@ -163,11 +171,13 @@ export const projectExpensesService = {
       return {
         total: 0,
         pending: 0,
+        accepted: 0,
         approved: 0,
         rejected: 0,
         paid: 0,
         totalAmount: 0,
         pendingAmount: 0,
+        acceptedAmount: 0,
         approvedAmount: 0,
         rejectedAmount: 0,
         paidAmount: 0,
@@ -260,6 +270,43 @@ export const projectExpensesService = {
     } catch (error) {
       console.error('Error rejecting expense:', error);
       return null;
+    }
+  },
+
+  async acceptExpense(expenseId: string, acceptedBy: string): Promise<ProjectExpense | null> {
+    try {
+      const { data, error } = await supabase
+        .from('project_expenses')
+        .update({
+          status: 'accepted',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', expenseId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      console.log('Expense accepted by:', acceptedBy);
+      return data;
+    } catch (error) {
+      console.error('Error accepting expense:', error);
+      return null;
+    }
+  },
+
+  async getAcceptedExpenses(): Promise<ProjectExpense[]> {
+    try {
+      const { data, error } = await supabase
+        .from('project_expenses')
+        .select('*')
+        .eq('status', 'accepted')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching accepted expenses:', error);
+      return [];
     }
   },
 

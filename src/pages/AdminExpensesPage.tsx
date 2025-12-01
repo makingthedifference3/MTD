@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { XCircle } from 'lucide-react';
+import { XCircle, CheckCircle2, Ban, DollarSign } from 'lucide-react';
 import { projectExpensesService } from '../services/projectExpensesService';
 import type { ProjectExpense } from '../services/projectExpensesService';
 import { supabase } from '../services/supabaseClient';
@@ -8,6 +8,21 @@ import { useAuth } from '../context/useAuth';
 
 interface UserMap {
   [key: string]: string;
+}
+
+interface CSRPartner {
+  id: string;
+  name: string;
+}
+
+interface Toll {
+  id: string;
+  toll_name: string;
+}
+
+interface Project {
+  id: string;
+  name: string;
 }
 
 const AdminExpensesPage: React.FC = () => {
@@ -19,9 +34,15 @@ const AdminExpensesPage: React.FC = () => {
   const [selectedExpense, setSelectedExpense] = useState<ProjectExpense | null>(null);
   const [userMap, setUserMap] = useState<UserMap>({});
   const [filterCategory, setFilterCategory] = useState<string>('');
-  const [filterStatus, setFilterStatus] = useState<string>('');
   const [filterDateFrom, setFilterDateFrom] = useState<string>('');
   const [filterDateTo, setFilterDateTo] = useState<string>('');
+  const [filterCSRPartner, setFilterCSRPartner] = useState<string>('');
+  const [filterProject, setFilterProject] = useState<string>('');
+  const [filterToll, setFilterToll] = useState<string>('');
+  const [csrPartners, setCSRPartners] = useState<CSRPartner[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [tolls, setTolls] = useState<Toll[]>([]);
+  const [selectedExpenses, setSelectedExpenses] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (currentUser) {
@@ -32,13 +53,24 @@ const AdminExpensesPage: React.FC = () => {
 
   const loadData = async () => {
     try {
-      const [allExpenses, users] = await Promise.all([
+      const [allExpenses, users, partners, projectsList, tollsList] = await Promise.all([
         projectExpensesService.getAllExpenses(),
         fetchUsers(),
+        fetchCSRPartners(),
+        fetchProjects(),
+        fetchTolls(),
       ]);
       
-      setExpenses(allExpenses);
+      // Filter to show only accepted, approved, and rejected expenses
+      const relevantExpenses = allExpenses.filter(exp => 
+        exp.status === 'accepted' || exp.status === 'approved' || exp.status === 'rejected'
+      );
+      
+      setExpenses(relevantExpenses);
       setUserMap(users);
+      setCSRPartners(partners);
+      setProjects(projectsList);
+      setTolls(tollsList);
     } catch (error) {
       console.error('Error loading data:', error);
     }
@@ -63,6 +95,48 @@ const AdminExpensesPage: React.FC = () => {
     }
   };
 
+  const fetchCSRPartners = async (): Promise<CSRPartner[]> => {
+    try {
+      const { data, error } = await supabase
+        .from('csr_partners')
+        .select('id, name')
+        .order('name');
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching CSR partners:', error);
+      return [];
+    }
+  };
+
+  const fetchProjects = async (): Promise<Project[]> => {
+    try {
+      const { data, error } = await supabase
+        .from('projects')
+        .select('id, name')
+        .order('name');
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching projects:', error);
+      return [];
+    }
+  };
+
+  const fetchTolls = async (): Promise<Toll[]> => {
+    try {
+      const { data, error } = await supabase
+        .from('csr_partner_tolls')
+        .select('id, toll_name')
+        .order('toll_name');
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching tolls:', error);
+      return [];
+    }
+  };
+
   const handleViewDetails = (expense: ProjectExpense) => {
     setSelectedExpense(expense);
     setShowModal(true);
@@ -76,10 +150,63 @@ const AdminExpensesPage: React.FC = () => {
           currentUser.id
         );
         setShowModal(false);
+        // Update local state immediately
+        setExpenses(prev => prev.map(exp => 
+          exp.id === selectedExpense.id ? { ...exp, status: 'approved' as const, approved_by: currentUser.id } : exp
+        ));
         await loadData();
       } catch (error) {
         console.error('Error approving expense:', error);
       }
+    }
+  };
+
+  const handleBulkApprove = async () => {
+    if (selectedExpenses.size === 0) {
+      alert('Please select at least one expense to approve');
+      return;
+    }
+
+    const count = selectedExpenses.size;
+    const confirmed = window.confirm(`Are you sure you want to approve ${count} expense(s)?`);
+    
+    if (!confirmed || !currentUser) return;
+
+    try {
+      // Approve all selected expenses
+      await Promise.all(
+        Array.from(selectedExpenses).map(expenseId =>
+          projectExpensesService.approveExpense(expenseId, currentUser.id)
+        )
+      );
+      
+      setSelectedExpenses(new Set());
+      await loadData();
+      alert(`Successfully approved ${count} expense(s)`);
+    } catch (error) {
+      console.error('Error bulk approving expenses:', error);
+      alert('Failed to approve some expenses. Please try again.');
+    }
+  };
+
+  const toggleExpenseSelection = (expenseId: string) => {
+    setSelectedExpenses(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(expenseId)) {
+        newSet.delete(expenseId);
+      } else {
+        newSet.add(expenseId);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    const acceptedExpenses = getFilteredExpenses().filter(exp => exp.status === 'accepted');
+    if (selectedExpenses.size === acceptedExpenses.length) {
+      setSelectedExpenses(new Set());
+    } else {
+      setSelectedExpenses(new Set(acceptedExpenses.map(exp => exp.id)));
     }
   };
 
@@ -98,37 +225,100 @@ const AdminExpensesPage: React.FC = () => {
     }
   };
 
-  const handleMarkAsPaid = async () => {
-    if (selectedExpense && currentUser) {
-      try {
-        await projectExpensesService.markAsPaid(
-          selectedExpense.id,
-          currentUser.id
-        );
-        setShowModal(false);
-        await loadData();
-      } catch (error) {
-        console.error('Error marking expense as paid:', error);
-      }
-    }
-  };
-
   const getFilteredExpenses = () => {
     return expenses.filter(expense => {
       if (filterCategory && expense.category !== filterCategory) return false;
-      if (filterStatus && expense.status !== filterStatus) return false;
       if (filterDateFrom && new Date(expense.date) < new Date(filterDateFrom)) return false;
       if (filterDateTo && new Date(expense.date) > new Date(filterDateTo)) return false;
+      if (filterCSRPartner && expense.csr_partner_id !== filterCSRPartner) return false;
+      if (filterProject && expense.project_id !== filterProject) return false;
+      if (filterToll && expense.toll_id !== filterToll) return false;
       return true;
     });
   };
+
+  const getStats = () => {
+    const stats = {
+      accepted: 0,
+      approved: 0,
+      rejected: 0,
+      acceptedAmount: 0,
+      approvedAmount: 0,
+      rejectedAmount: 0,
+    };
+
+    expenses.forEach(expense => {
+      switch (expense.status) {
+        case 'accepted':
+          stats.accepted++;
+          stats.acceptedAmount += expense.total_amount;
+          break;
+        case 'approved':
+          stats.approved++;
+          stats.approvedAmount += expense.total_amount;
+          break;
+        case 'rejected':
+          stats.rejected++;
+          stats.rejectedAmount += expense.total_amount;
+          break;
+      }
+    });
+
+    return stats;
+  };
+
+  const stats = getStats();
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Admin - All Expenses</h1>
-        <p className="text-gray-600 mt-2">Review and manage all project expenses</p>
+        <h1 className="text-3xl font-bold text-gray-900">Admin - Accepted Expenses</h1>
+        <p className="text-gray-600 mt-2">Review and approve expenses accepted by accountant</p>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <DollarSign className="w-8 h-8 text-blue-500" />
+            <span className="text-2xl font-bold text-gray-900">{stats.accepted}</span>
+          </div>
+          <h3 className="text-sm font-medium text-gray-600">Accepted (Pending Review)</h3>
+          <p className="text-lg font-semibold text-blue-600">₹{stats.acceptedAmount.toLocaleString()}</p>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <CheckCircle2 className="w-8 h-8 text-emerald-500" />
+            <span className="text-2xl font-bold text-gray-900">{stats.approved}</span>
+          </div>
+          <h3 className="text-sm font-medium text-gray-600">Approved</h3>
+          <p className="text-lg font-semibold text-emerald-600">₹{stats.approvedAmount.toLocaleString()}</p>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <Ban className="w-8 h-8 text-red-500" />
+            <span className="text-2xl font-bold text-gray-900">{stats.rejected}</span>
+          </div>
+          <h3 className="text-sm font-medium text-gray-600">Rejected</h3>
+          <p className="text-lg font-semibold text-red-600">₹{stats.rejectedAmount.toLocaleString()}</p>
+        </motion.div>
       </div>
 
       {/* Expenses Table */}
@@ -138,10 +328,63 @@ const AdminExpensesPage: React.FC = () => {
         className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"
       >
         <div className="p-6 border-b border-gray-100">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">All Expenses</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-gray-900">Accepted Expenses</h2>
+            {selectedExpenses.size > 0 && (
+              <button
+                onClick={handleBulkApprove}
+                className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium flex items-center gap-2"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                Approve Selected ({selectedExpenses.size})
+              </button>
+            )}
+          </div>
           
           {/* Filters */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">CSR Partner</label>
+              <select
+                value={filterCSRPartner}
+                onChange={(e) => setFilterCSRPartner(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+              >
+                <option value="">All CSR Partners</option>
+                {csrPartners.map(partner => (
+                  <option key={partner.id} value={partner.id}>{partner.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Project</label>
+              <select
+                value={filterProject}
+                onChange={(e) => setFilterProject(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+              >
+                <option value="">All Projects</option>
+                {projects.map(project => (
+                  <option key={project.id} value={project.id}>{project.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Toll</label>
+              <select
+                value={filterToll}
+                onChange={(e) => setFilterToll(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+              >
+                <option value="">All Tolls</option>
+                {tolls.map(toll => (
+                  <option key={toll.id} value={toll.id}>{toll.toll_name}</option>
+                ))}
+              </select>
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
               <select
@@ -155,22 +398,9 @@ const AdminExpensesPage: React.FC = () => {
                 ))}
               </select>
             </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
-              >
-                <option value="">All Status</option>
-                <option value="pending">Pending</option>
-                <option value="approved">Approved</option>
-                <option value="paid">Paid</option>
-                <option value="rejected">Rejected</option>
-              </select>
-            </div>
-            
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Date From</label>
               <input
@@ -192,13 +422,15 @@ const AdminExpensesPage: React.FC = () => {
             </div>
           </div>
           
-          {(filterCategory || filterStatus || filterDateFrom || filterDateTo) && (
+          {(filterCategory || filterDateFrom || filterDateTo || filterCSRPartner || filterProject || filterToll) && (
             <button
               onClick={() => {
                 setFilterCategory('');
-                setFilterStatus('');
                 setFilterDateFrom('');
                 setFilterDateTo('');
+                setFilterCSRPartner('');
+                setFilterProject('');
+                setFilterToll('');
               }}
               className="mt-3 text-sm text-emerald-600 hover:text-emerald-700 font-medium"
             >
@@ -211,6 +443,14 @@ const AdminExpensesPage: React.FC = () => {
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
+                <th className="px-6 py-4 text-left">
+                  <input
+                    type="checkbox"
+                    checked={selectedExpenses.size > 0 && selectedExpenses.size === getFilteredExpenses().filter(exp => exp.status === 'accepted').length}
+                    onChange={toggleSelectAll}
+                    className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
+                  />
+                </th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Expense Code</th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Merchant</th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Category</th>
@@ -237,6 +477,16 @@ const AdminExpensesPage: React.FC = () => {
                     transition={{ delay: index * 0.05 }}
                     className="hover:bg-emerald-50/50 transition-colors"
                   >
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {expense.status === 'accepted' && (
+                        <input
+                          type="checkbox"
+                          checked={selectedExpenses.has(expense.id)}
+                          onChange={() => toggleExpenseSelection(expense.id)}
+                          className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
+                        />
+                      )}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{expense.expense_code}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{expense.merchant_name}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{expense.category}</td>
@@ -249,9 +499,7 @@ const AdminExpensesPage: React.FC = () => {
                       <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                         expense.status === 'approved' 
                           ? 'bg-emerald-100 text-emerald-700' 
-                          : expense.status === 'pending' || expense.status === 'submitted'
-                          ? 'bg-amber-100 text-amber-700'
-                          : expense.status === 'paid'
+                          : expense.status === 'accepted'
                           ? 'bg-blue-100 text-blue-700'
                           : 'bg-red-100 text-red-700'
                       }`}>
@@ -320,9 +568,7 @@ const AdminExpensesPage: React.FC = () => {
                     <span className={`px-3 py-1 rounded-full text-sm font-medium ${
                       selectedExpense.status === 'approved' 
                         ? 'bg-emerald-100 text-emerald-700' 
-                        : selectedExpense.status === 'pending' || selectedExpense.status === 'submitted'
-                        ? 'bg-amber-100 text-amber-700'
-                        : selectedExpense.status === 'paid'
+                        : selectedExpense.status === 'accepted'
                         ? 'bg-blue-100 text-blue-700'
                         : 'bg-red-100 text-red-700'
                     }`}>
@@ -362,26 +608,18 @@ const AdminExpensesPage: React.FC = () => {
               <div className="flex gap-3 pt-4 border-t">
                 <button
                   onClick={handleApprove}
-                  disabled={selectedExpense.status === 'approved' || selectedExpense.status === 'paid'}
+                  disabled={selectedExpense.status === 'approved' || selectedExpense.status === 'rejected'}
                   className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition-colors"
                 >
                   Approve
                 </button>
                 <button
                   onClick={handleReject}
-                  disabled={selectedExpense.status === 'rejected' || selectedExpense.status === 'paid'}
+                  disabled={selectedExpense.status === 'rejected' || selectedExpense.status === 'approved'}
                   className="flex-1 bg-red-500 hover:bg-red-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition-colors"
                 >
                   Reject
                 </button>
-                {selectedExpense.status === 'approved' && (
-                  <button
-                    onClick={handleMarkAsPaid}
-                    className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-medium py-3 px-4 rounded-lg transition-colors"
-                  >
-                    Mark as Paid
-                  </button>
-                )}
                 <button
                   onClick={() => setShowModal(false)}
                   className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-3 px-4 rounded-lg transition-colors"
