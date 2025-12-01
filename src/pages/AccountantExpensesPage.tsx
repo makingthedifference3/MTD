@@ -43,10 +43,14 @@ const AccountantExpensesPage: React.FC = () => {
   const [csrPartners, setCSRPartners] = useState<CSRPartner[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [tolls, setTolls] = useState<Toll[]>([]);
-  const [budgetCategories, setBudgetCategories] = useState<Array<{id: string; name: string; parent_id: string | null}>>([]);
+  const [budgetCategories, setBudgetCategories] = useState<Array<{id: string; name: string; parent_id: string | null; project_id: string}>>([]);
   const [filterBudgetCategory, setFilterBudgetCategory] = useState<string>('');
   const [filterBudgetSubcategory, setFilterBudgetSubcategory] = useState<string>('');
   const [filterBudgetSubSubcategory, setFilterBudgetSubSubcategory] = useState<string>('');
+  // Filtered dropdowns based on selection
+  const [filteredTolls, setFilteredTolls] = useState<Toll[]>([]);
+  const [filteredProjects, setFilteredProjects] = useState<Project[]>([]);
+  const [filteredBudgetCategories, setFilteredBudgetCategories] = useState<Array<{id: string; name: string; parent_id: string | null}>>([]);
   // Editable expense fields
   const [editMode, setEditMode] = useState(false);
   const [editableCsrPartner, setEditableCsrPartner] = useState<string>('');
@@ -56,6 +60,10 @@ const AccountantExpensesPage: React.FC = () => {
   const [customCsrPartner, setCustomCsrPartner] = useState<string>('');
   const [customProject, setCustomProject] = useState<string>('');
   const [customToll, setCustomToll] = useState<string>('');
+  // Modal filtered dropdowns
+  const [modalFilteredTolls, setModalFilteredTolls] = useState<Toll[]>([]);
+  const [modalFilteredProjects, setModalFilteredProjects] = useState<Project[]>([]);
+  const [modalFilteredBudgetCategories, setModalFilteredBudgetCategories] = useState<Array<{id: string; name: string; parent_id: string | null}>>([]);
 
   useEffect(() => {
     if (currentUser) {
@@ -79,6 +87,8 @@ const AccountantExpensesPage: React.FC = () => {
       setCSRPartners(partners);
       setProjects(projectsList);
       setTolls(tollsList);
+      setFilteredTolls(tollsList);
+      setFilteredProjects(projectsList);
       await fetchAllBudgetCategories();
     } catch (error) {
       console.error('Error loading data:', error);
@@ -154,13 +164,15 @@ const AccountantExpensesPage: React.FC = () => {
         .order('name');
       if (error) throw error;
       setBudgetCategories(data || []);
+      setFilteredBudgetCategories(data || []);
     } catch (error) {
       console.error('Error fetching budget categories:', error);
       setBudgetCategories([]);
+      setFilteredBudgetCategories([]);
     }
   };
 
-  const handleViewDetails = (expense: ProjectExpense) => {
+  const handleViewDetails = async (expense: ProjectExpense) => {
     setSelectedExpense(expense);
     setShowModal(true);
     
@@ -176,6 +188,34 @@ const AccountantExpensesPage: React.FC = () => {
     setCustomCsrPartner('');
     setCustomProject('');
     setCustomToll('');
+    
+    // Initialize modal dropdowns based on expense data
+    if (expense.csr_partner_id) {
+      const { data: partnerTolls } = await supabase
+        .from('csr_partner_tolls')
+        .select('id, toll_name')
+        .eq('csr_partner_id', expense.csr_partner_id);
+      setModalFilteredTolls(partnerTolls || []);
+      
+      const { data: partnerProjects } = await supabase
+        .from('projects')
+        .select('id, name')
+        .eq('csr_partner_id', expense.csr_partner_id);
+      setModalFilteredProjects(partnerProjects || []);
+    } else {
+      setModalFilteredTolls(tolls);
+      setModalFilteredProjects(projects);
+    }
+    
+    if (expense.project_id) {
+      const { data: projectBudgets } = await supabase
+        .from('budget_categories')
+        .select('id, name, parent_id')
+        .eq('project_id', expense.project_id);
+      setModalFilteredBudgetCategories(projectBudgets || []);
+    } else {
+      setModalFilteredBudgetCategories([]);
+    }
   };
 
   const handleAccept = async () => {
@@ -286,6 +326,38 @@ const AccountantExpensesPage: React.FC = () => {
         console.error('Error marking expense as paid:', error);
       }
     }
+  };
+
+  const getBudgetCategoryHierarchy = (categoryId: string | undefined): { category: string; subcategory: string; subSubcategory: string } => {
+    if (!categoryId) return { category: '', subcategory: '', subSubcategory: '' };
+    
+    const category = budgetCategories.find(cat => cat.id === categoryId);
+    if (!category) return { category: '', subcategory: '', subSubcategory: '' };
+    
+    // Check if this is a sub-subcategory (has grandparent)
+    if (category.parent_id) {
+      const parent = budgetCategories.find(cat => cat.id === category.parent_id);
+      if (parent?.parent_id) {
+        const grandparent = budgetCategories.find(cat => cat.id === parent.parent_id);
+        return {
+          category: grandparent?.name || '',
+          subcategory: parent.name,
+          subSubcategory: category.name
+        };
+      }
+      // This is a subcategory (has parent but no grandparent)
+      return {
+        category: parent?.name || '',
+        subcategory: category.name,
+        subSubcategory: ''
+      };
+    }
+    // This is a top-level category
+    return {
+      category: category.name,
+      subcategory: '',
+      subSubcategory: ''
+    };
   };
 
   const getFilteredExpenses = () => {
@@ -462,7 +534,18 @@ const AccountantExpensesPage: React.FC = () => {
         className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"
       >
         <div className="p-6 border-b border-gray-100">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">All Expenses</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-gray-900">All Expenses</h2>
+            <button
+              onClick={() => alert('Excel import functionality coming soon!')}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center gap-2"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+              Import Excel
+            </button>
+          </div>
           
           {/* Filters */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
@@ -470,7 +553,35 @@ const AccountantExpensesPage: React.FC = () => {
               <label className="block text-sm font-medium text-gray-700 mb-1">CSR Partner</label>
               <select
                 value={filterCSRPartner}
-                onChange={(e) => setFilterCSRPartner(e.target.value)}
+                onChange={async (e) => {
+                  const partnerId = e.target.value;
+                  setFilterCSRPartner(partnerId);
+                  setFilterToll('');
+                  setFilterProject('');
+                  setFilterBudgetCategory('');
+                  setFilterBudgetSubcategory('');
+                  setFilterBudgetSubSubcategory('');
+                  
+                  if (partnerId) {
+                    // Filter tolls for this CSR partner
+                    const { data: partnerTolls } = await supabase
+                      .from('csr_partner_tolls')
+                      .select('id, toll_name')
+                      .eq('csr_partner_id', partnerId);
+                    setFilteredTolls(partnerTolls || []);
+                    
+                    // Filter projects for this CSR partner
+                    const { data: partnerProjects } = await supabase
+                      .from('projects')
+                      .select('id, name')
+                      .eq('csr_partner_id', partnerId);
+                    setFilteredProjects(partnerProjects || []);
+                  } else {
+                    setFilteredTolls(tolls);
+                    setFilteredProjects(projects);
+                    setFilteredBudgetCategories(budgetCategories);
+                  }
+                }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
               >
                 <option value="">All CSR Partners</option>
@@ -484,11 +595,25 @@ const AccountantExpensesPage: React.FC = () => {
               <label className="block text-sm font-medium text-gray-700 mb-1">Project</label>
               <select
                 value={filterProject}
-                onChange={(e) => setFilterProject(e.target.value)}
+                onChange={(e) => {
+                  const projectId = e.target.value;
+                  setFilterProject(projectId);
+                  setFilterBudgetCategory('');
+                  setFilterBudgetSubcategory('');
+                  setFilterBudgetSubSubcategory('');
+                  
+                  if (projectId) {
+                    // Filter budget categories for this project
+                    const projectBudgets = budgetCategories.filter(cat => cat.project_id === projectId);
+                    setFilteredBudgetCategories(projectBudgets);
+                  } else {
+                    setFilteredBudgetCategories(budgetCategories);
+                  }
+                }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
               >
                 <option value="">All Projects</option>
-                {projects.map(project => (
+                {filteredProjects.map(project => (
                   <option key={project.id} value={project.id}>{project.name}</option>
                 ))}
               </select>
@@ -498,11 +623,36 @@ const AccountantExpensesPage: React.FC = () => {
               <label className="block text-sm font-medium text-gray-700 mb-1">Toll</label>
               <select
                 value={filterToll}
-                onChange={(e) => setFilterToll(e.target.value)}
+                onChange={async (e) => {
+                  const tollId = e.target.value;
+                  setFilterToll(tollId);
+                  setFilterProject('');
+                  setFilterBudgetCategory('');
+                  setFilterBudgetSubcategory('');
+                  setFilterBudgetSubSubcategory('');
+                  
+                  if (tollId) {
+                    // Filter projects for this toll
+                    const { data: tollProjects } = await supabase
+                      .from('projects')
+                      .select('id, name')
+                      .eq('toll_id', tollId);
+                    setFilteredProjects(tollProjects || []);
+                  } else if (filterCSRPartner) {
+                    // Reset to CSR partner projects
+                    const { data: partnerProjects } = await supabase
+                      .from('projects')
+                      .select('id, name')
+                      .eq('csr_partner_id', filterCSRPartner);
+                    setFilteredProjects(partnerProjects || []);
+                  } else {
+                    setFilteredProjects(projects);
+                  }
+                }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
               >
                 <option value="">All Tolls</option>
-                {tolls.map(toll => (
+                {filteredTolls.map(toll => (
                   <option key={toll.id} value={toll.id}>{toll.toll_name}</option>
                 ))}
               </select>
@@ -574,7 +724,7 @@ const AccountantExpensesPage: React.FC = () => {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
               >
                 <option value="">All Categories</option>
-                {budgetCategories.filter(cat => !cat.parent_id).map(cat => (
+                {filteredBudgetCategories.filter(cat => !cat.parent_id).map(cat => (
                   <option key={cat.id} value={cat.id}>{cat.name}</option>
                 ))}
               </select>
@@ -592,7 +742,7 @@ const AccountantExpensesPage: React.FC = () => {
                 disabled={!filterBudgetCategory}
               >
                 <option value="">All Subcategories</option>
-                {budgetCategories.filter(cat => cat.parent_id === filterBudgetCategory).map(cat => (
+                {filteredBudgetCategories.filter(cat => cat.parent_id === filterBudgetCategory).map(cat => (
                   <option key={cat.id} value={cat.id}>{cat.name}</option>
                 ))}
               </select>
@@ -607,7 +757,7 @@ const AccountantExpensesPage: React.FC = () => {
                 disabled={!filterBudgetSubcategory}
               >
                 <option value="">All Sub-Subcategories</option>
-                {budgetCategories.filter(cat => cat.parent_id === filterBudgetSubcategory).map(cat => (
+                {filteredBudgetCategories.filter(cat => cat.parent_id === filterBudgetSubcategory).map(cat => (
                   <option key={cat.id} value={cat.id}>{cat.name}</option>
                 ))}
               </select>
@@ -640,19 +790,22 @@ const AccountantExpensesPage: React.FC = () => {
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Expense Code</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Merchant</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Category</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Amount</th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Date</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Submitted By</th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Merchant</th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Description</th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Category</th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Budget Category</th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Sub Category</th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Project</th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Amount Debited</th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {getFilteredExpenses().length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={11} className="px-6 py-12 text-center text-gray-500">
                     {expenses.length === 0 ? "No expenses found." : "No expenses match the selected filters."}
                   </td>
                 </tr>
@@ -666,13 +819,13 @@ const AccountantExpensesPage: React.FC = () => {
                     className="hover:bg-emerald-50/50 transition-colors"
                   >
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{expense.expense_code}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{expense.merchant_name}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{expense.category}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">₹{expense.total_amount.toLocaleString()}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{new Date(expense.date).toLocaleDateString()}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                      {expense.submitted_by ? userMap[expense.submitted_by] || 'Unknown' : 'N/A'}
-                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{expense.merchant_name}</td>
+                    <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate" title={expense.description}>{expense.description || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{expense.category}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{getBudgetCategoryHierarchy((expense as any).budget_category_id).category || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{getBudgetCategoryHierarchy((expense as any).budget_category_id).subcategory || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{projects.find(p => p.id === expense.project_id)?.name || '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                         expense.status === 'approved' 
@@ -688,6 +841,7 @@ const AccountantExpensesPage: React.FC = () => {
                         {expense.status.charAt(0).toUpperCase() + expense.status.slice(1)}
                       </span>
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">₹{expense.total_amount.toLocaleString()}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                       <button
                         onClick={() => handleViewDetails(expense)}
@@ -739,9 +893,31 @@ const AccountantExpensesPage: React.FC = () => {
                     <label className="text-sm font-medium text-gray-600 mb-1 block">CSR Partner</label>
                     <select
                       value={editableCsrPartner}
-                      onChange={(e) => {
-                        setEditableCsrPartner(e.target.value);
+                      onChange={async (e) => {
+                        const partnerId = e.target.value;
+                        setEditableCsrPartner(partnerId);
                         setCustomCsrPartner('');
+                        setEditableToll('');
+                        setEditableProject('');
+                        setEditableBudgetCategory('');
+                        
+                        if (partnerId && partnerId !== 'custom') {
+                          // Filter tolls and projects for this CSR partner
+                          const { data: partnerTolls } = await supabase
+                            .from('csr_partner_tolls')
+                            .select('id, toll_name')
+                            .eq('csr_partner_id', partnerId);
+                          setModalFilteredTolls(partnerTolls || []);
+                          
+                          const { data: partnerProjects } = await supabase
+                            .from('projects')
+                            .select('id, name')
+                            .eq('csr_partner_id', partnerId);
+                          setModalFilteredProjects(partnerProjects || []);
+                        } else {
+                          setModalFilteredTolls(tolls);
+                          setModalFilteredProjects(projects);
+                        }
                       }}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     >
@@ -776,27 +952,27 @@ const AccountantExpensesPage: React.FC = () => {
                     <label className="text-sm font-medium text-gray-600 mb-1 block">Project</label>
                     <select
                       value={editableProject}
-                      onChange={(e) => {
-                        setEditableProject(e.target.value);
+                      onChange={async (e) => {
+                        const projectId = e.target.value;
+                        setEditableProject(projectId);
                         setCustomProject('');
-                        if (e.target.value && e.target.value !== 'custom') {
+                        setEditableBudgetCategory('');
+                        
+                        if (projectId && projectId !== 'custom') {
                           // Fetch budget categories for this project
-                          const fetchBudget = async () => {
-                            const { data } = await supabase
-                              .from('budget_categories')
-                              .select('id, name, parent_id')
-                              .eq('project_id', e.target.value);
-                            if (data) {
-                              // Update local budget categories for this modal
-                            }
-                          };
-                          fetchBudget();
+                          const { data } = await supabase
+                            .from('budget_categories')
+                            .select('id, name, parent_id')
+                            .eq('project_id', projectId);
+                          setModalFilteredBudgetCategories(data || []);
+                        } else {
+                          setModalFilteredBudgetCategories([]);
                         }
                       }}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     >
                       <option value="">Select Project</option>
-                      {projects.map(project => (
+                      {modalFilteredProjects.map(project => (
                         <option key={project.id} value={project.id}>{project.name}</option>
                       ))}
                       <option value="custom">Custom (Enter Name)</option>
@@ -826,14 +1002,35 @@ const AccountantExpensesPage: React.FC = () => {
                     <label className="text-sm font-medium text-gray-600 mb-1 block">Toll</label>
                     <select
                       value={editableToll}
-                      onChange={(e) => {
-                        setEditableToll(e.target.value);
+                      onChange={async (e) => {
+                        const tollId = e.target.value;
+                        setEditableToll(tollId);
                         setCustomToll('');
+                        setEditableProject('');
+                        setEditableBudgetCategory('');
+                        
+                        if (tollId && tollId !== 'custom') {
+                          // Filter projects for this toll
+                          const { data: tollProjects } = await supabase
+                            .from('projects')
+                            .select('id, name')
+                            .eq('toll_id', tollId);
+                          setModalFilteredProjects(tollProjects || []);
+                        } else if (editableCsrPartner && editableCsrPartner !== 'custom') {
+                          // Reset to CSR partner projects
+                          const { data: partnerProjects } = await supabase
+                            .from('projects')
+                            .select('id, name')
+                            .eq('csr_partner_id', editableCsrPartner);
+                          setModalFilteredProjects(partnerProjects || []);
+                        } else {
+                          setModalFilteredProjects(projects);
+                        }
                       }}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     >
                       <option value="">No Toll / Select Toll</option>
-                      {tolls.map(toll => (
+                      {modalFilteredTolls.map(toll => (
                         <option key={toll.id} value={toll.id}>{toll.toll_name}</option>
                       ))}
                       <option value="custom">Custom (Enter Name)</option>
@@ -851,7 +1048,7 @@ const AccountantExpensesPage: React.FC = () => {
                 )}
                 
                 {/* Budget Category - Editable */}
-                {editMode && budgetCategories.length > 0 && (
+                {editMode && modalFilteredBudgetCategories.length > 0 && (
                   <div className="col-span-2">
                     <label className="text-sm font-medium text-gray-600 mb-1 block">Budget Category</label>
                     <select
@@ -860,7 +1057,7 @@ const AccountantExpensesPage: React.FC = () => {
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     >
                       <option value="">No Budget Category</option>
-                      {budgetCategories.map(cat => (
+                      {modalFilteredBudgetCategories.map(cat => (
                         <option key={cat.id} value={cat.id}>
                           {cat.parent_id ? `  ↳ ${cat.name}` : cat.name}
                         </option>
