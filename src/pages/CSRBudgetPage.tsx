@@ -168,22 +168,22 @@ const CSRBudgetPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-emerald-50/20 to-gray-50 p-4 md:p-8">
+    <div className="min-h-screen bg-linear-to-br from-gray-50 via-emerald-50/20 to-gray-50 p-4 md:p-8">
       {/* Header */}
       <motion.div 
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         className="mb-8 relative"
       >
-        <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 via-emerald-400/5 to-transparent rounded-3xl blur-3xl"></div>
+        <div className="absolute inset-0 bg-linear-to-r from-emerald-500/10 via-emerald-400/5 to-transparent rounded-3xl blur-3xl"></div>
         <div className="relative bg-white/60 backdrop-blur-xl border border-white/20 shadow-xl shadow-emerald-500/5 rounded-3xl p-6 md:p-8">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className="p-3 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl shadow-lg shadow-emerald-500/30">
+              <div className="p-3 bg-linear-to-br from-emerald-500 to-emerald-600 rounded-2xl shadow-lg shadow-emerald-500/30">
                 <Wallet className="w-8 h-8 text-white" />
               </div>
               <div>
-                <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-gray-900 via-emerald-800 to-gray-900 bg-clip-text text-transparent">
+                <h1 className="text-3xl md:text-4xl font-bold bg-linear-to-r from-gray-900 via-emerald-800 to-gray-900 bg-clip-text text-transparent">
                   CSR Budget Management
                 </h1>
                 <p className="text-gray-600 mt-1 font-medium">
@@ -294,7 +294,7 @@ const CSRBudgetPage = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
-              className="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-3xl p-8 text-white shadow-xl shadow-emerald-500/20 relative overflow-hidden group hover:shadow-2xl hover:shadow-emerald-500/30 transition-all duration-500"
+              className="bg-linear-to-br from-emerald-500 to-emerald-600 rounded-3xl p-8 text-white shadow-xl shadow-emerald-500/20 relative overflow-hidden group hover:shadow-2xl hover:shadow-emerald-500/30 transition-all duration-500"
             >
               <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 group-hover:scale-150 transition-transform duration-700"></div>
               <div className="relative z-10">
@@ -306,7 +306,7 @@ const CSRBudgetPage = () => {
                 </div>
                 <div className="space-y-2">
                   <p className="text-emerald-100 text-sm font-medium uppercase tracking-wide">Total Allocated</p>
-                  <h3 className="text-4xl font-bold break-words">₹{(overallStats.totalAllocated / 100000).toFixed(2)}L</h3>
+                  <h3 className="text-4xl font-bold wrap-break-word">₹{(overallStats.totalAllocated / 100000).toFixed(2)}L</h3>
                   <p className="text-emerald-200 text-xs">{filteredProjects.length} Projects</p>
                 </div>
               </div>
@@ -329,7 +329,7 @@ const CSRBudgetPage = () => {
                 </div>
                 <div className="space-y-2">
                   <p className="text-gray-400 text-sm font-medium uppercase tracking-wide">Total Utilized</p>
-                  <h3 className="text-4xl font-bold break-words">₹{(overallStats.totalUtilized / 100000).toFixed(2)}L</h3>
+                  <h3 className="text-4xl font-bold wrap-break-word">₹{(overallStats.totalUtilized / 100000).toFixed(2)}L</h3>
                   <div className="flex items-center gap-2 pt-2">
                     <span className="px-3 py-1 bg-amber-500/20 backdrop-blur-sm rounded-full text-xs font-semibold text-amber-400">
                       {overallStats.utilizationRate}% used
@@ -360,7 +360,7 @@ const CSRBudgetPage = () => {
                 </div>
                 <div className="space-y-2">
                   <p className="text-gray-600 text-sm font-medium uppercase tracking-wide">Total Remaining</p>
-                  <h3 className="text-4xl font-bold text-black break-words">₹{(Math.abs(overallStats.totalRemaining) / 100000).toFixed(2)}L</h3>
+                  <h3 className="text-4xl font-bold text-black wrap-break-word">₹{(Math.abs(overallStats.totalRemaining) / 100000).toFixed(2)}L</h3>
                 </div>
               </div>
             </motion.div>
@@ -445,7 +445,7 @@ const CSRBudgetPage = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.6 }}
-              className="bg-gradient-to-br from-gray-900 to-black rounded-3xl p-8 text-white shadow-xl relative overflow-hidden"
+              className="bg-linear-to-br from-gray-900 to-black rounded-3xl p-8 text-white shadow-xl relative overflow-hidden"
             >
               <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 rounded-full -mr-32 -mt-32"></div>
               <div className="relative z-10">
@@ -519,7 +519,7 @@ const CSRBudgetPage = () => {
                       animate={{ opacity: 1, scale: 1 }}
                       transition={{ delay: index * 0.05 }}
                       onClick={() => setContextSelectedProject(project.id)}
-                      className="group relative text-left bg-gradient-to-br from-gray-50 to-white border-2 border-gray-200 hover:border-emerald-500 rounded-2xl p-6 transition-all duration-300 hover:shadow-xl hover:shadow-emerald-500/20 hover:-translate-y-1"
+                      className="group relative text-left bg-linear-to-br from-gray-50 to-white border-2 border-gray-200 hover:border-emerald-500 rounded-2xl p-6 transition-all duration-300 hover:shadow-xl hover:shadow-emerald-500/20 hover:-translate-y-1"
                     >
                       <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-bl-3xl group-hover:bg-emerald-500/10 transition-colors"></div>
                       
@@ -601,7 +601,7 @@ const CSRBudgetPage = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
-              className="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-3xl p-8 text-white shadow-xl shadow-emerald-500/20 relative overflow-hidden group hover:shadow-2xl hover:shadow-emerald-500/30 transition-all duration-500"
+              className="bg-linear-to-br from-emerald-500 to-emerald-600 rounded-3xl p-8 text-white shadow-xl shadow-emerald-500/20 relative overflow-hidden group hover:shadow-2xl hover:shadow-emerald-500/30 transition-all duration-500"
             >
               <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 group-hover:scale-150 transition-transform duration-700"></div>
               <div className="relative z-10">
@@ -613,7 +613,7 @@ const CSRBudgetPage = () => {
                 </div>
                 <div className="space-y-2">
                   <p className="text-emerald-100 text-sm font-medium uppercase tracking-wide">Total Budget</p>
-                  <h3 className="text-4xl font-bold break-words">₹{(projectBudgetStats.total / 100000).toFixed(2)}L</h3>
+                  <h3 className="text-4xl font-bold wrap-break-word">₹{(projectBudgetStats.total / 100000).toFixed(2)}L</h3>
                 </div>
               </div>
             </motion.div>
@@ -635,7 +635,7 @@ const CSRBudgetPage = () => {
                 </div>
                 <div className="space-y-2">
                   <p className="text-gray-400 text-sm font-medium uppercase tracking-wide">Budget Utilized</p>
-                  <h3 className="text-4xl font-bold break-words">₹{(projectBudgetStats.utilized / 100000).toFixed(2)}L</h3>
+                  <h3 className="text-4xl font-bold wrap-break-word">₹{(projectBudgetStats.utilized / 100000).toFixed(2)}L</h3>
                   <div className="flex items-center gap-2 pt-2">
                     <span className="px-3 py-1 bg-amber-500/20 backdrop-blur-sm rounded-full text-xs font-semibold text-amber-400">
                       {projectBudgetStats.utilizationRate}% used
@@ -666,7 +666,7 @@ const CSRBudgetPage = () => {
                 </div>
                 <div className="space-y-2">
                   <p className="text-gray-600 text-sm font-medium uppercase tracking-wide">Budget Remaining</p>
-                  <h3 className="text-4xl font-bold text-black break-words">₹{(Math.abs(projectBudgetStats.remaining) / 100000).toFixed(2)}L</h3>
+                  <h3 className="text-4xl font-bold text-black wrap-break-word">₹{(Math.abs(projectBudgetStats.remaining) / 100000).toFixed(2)}L</h3>
                 </div>
               </div>
             </motion.div>
@@ -684,7 +684,7 @@ const CSRBudgetPage = () => {
                 transition={{ delay: 0.4 }}
                 className="bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden hover:shadow-xl transition-shadow duration-500"
               >
-                <div className="p-8 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
+                <div className="p-8 border-b border-gray-100 bg-linear-to-r from-gray-50 to-white">
                   <h2 className="text-2xl font-bold text-black mb-1">Budget Categories</h2>
                   <p className="text-gray-500 text-sm">Allocation breakdown with subcategories</p>
                 </div>
@@ -780,21 +780,21 @@ const CSRBudgetPage = () => {
                                   <span className="text-sm font-bold text-gray-600 min-w-[50px] text-right">{utilizationPercent}%</span>
                                 </div>
                                 <div className="grid grid-cols-3 gap-3">
-                                  <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-3 border border-gray-200">
+                                  <div className="bg-linear-to-br from-gray-50 to-gray-100 rounded-xl p-3 border border-gray-200">
                                     <div className="flex items-center gap-1 mb-1">
                                       <div className="w-2 h-2 rounded-full bg-gray-500"></div>
                                       <p className="text-xs font-bold text-gray-700">Allocated</p>
                                     </div>
                                     <p className="text-lg font-black text-gray-900">₹{(category.allocated_amount / 1000).toFixed(1)}K</p>
                                   </div>
-                                  <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-xl p-3 border border-amber-200">
+                                  <div className="bg-linear-to-br from-amber-50 to-amber-100 rounded-xl p-3 border border-amber-200">
                                     <div className="flex items-center gap-1 mb-1">
                                       <div className="w-2 h-2 rounded-full bg-amber-500"></div>
                                       <p className="text-xs font-bold text-amber-700">Utilized</p>
                                     </div>
                                     <p className="text-lg font-black text-amber-900">₹{(category.utilized_amount / 1000).toFixed(1)}K</p>
                                   </div>
-                                  <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-xl p-3 border border-emerald-200">
+                                  <div className="bg-linear-to-br from-emerald-50 to-emerald-100 rounded-xl p-3 border border-emerald-200">
                                     <div className="flex items-center gap-1 mb-1">
                                       <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
                                       <p className="text-xs font-bold text-emerald-700">Available</p>
@@ -914,7 +914,7 @@ const CSRBudgetPage = () => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.5 }}
-                className="bg-gradient-to-br from-purple-500 to-purple-700 rounded-3xl p-8 text-white shadow-xl relative overflow-hidden"
+                className="bg-linear-to-br from-purple-500 to-purple-700 rounded-3xl p-8 text-white shadow-xl relative overflow-hidden"
               >
                 <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32"></div>
                 <div className="relative z-10">
@@ -1025,7 +1025,7 @@ const CSRBudgetPage = () => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.7 }}
-                className="bg-gradient-to-br from-gray-900 to-black rounded-3xl p-8 text-white shadow-xl relative overflow-hidden"
+                className="bg-linear-to-br from-gray-900 to-black rounded-3xl p-8 text-white shadow-xl relative overflow-hidden"
               >
                 <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 rounded-full -mr-32 -mt-32"></div>
                 <div className="relative z-10">
@@ -1080,3 +1080,4 @@ const CSRBudgetPage = () => {
 };
 
 export default CSRBudgetPage;
+

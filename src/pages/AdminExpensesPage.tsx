@@ -643,7 +643,7 @@ const AdminExpensesPage: React.FC = () => {
             animate={{ opacity: 1, scale: 1 }}
             className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden"
           >
-            <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 p-6 text-white">
+            <div className="bg-linear-to-r from-emerald-500 to-emerald-600 p-6 text-white">
               <h2 className="text-2xl font-bold">Expense Details</h2>
               <p className="text-emerald-100 mt-1">{selectedExpense.expense_code}</p>
             </div>
@@ -753,7 +753,7 @@ const AdminExpensesPage: React.FC = () => {
             animate={{ opacity: 1, scale: 1 }}
             className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden"
           >
-            <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 p-6 text-white flex items-center justify-between">
+            <div className="bg-linear-to-r from-emerald-500 to-emerald-600 p-6 text-white flex items-center justify-between">
               <h2 className="text-2xl font-bold">Bill Document</h2>
               <button
                 onClick={() => {
@@ -788,3 +788,4 @@ const AdminExpensesPage: React.FC = () => {
 };
 
 export default AdminExpensesPage;
+
