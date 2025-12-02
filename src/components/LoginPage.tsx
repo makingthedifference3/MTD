@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Crown, Lock, User, Loader } from 'lucide-react';
+import { Crown, Lock, User, Loader, Eye, EyeOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/useAuth';
 import { authenticateUser } from '../services/authService';
@@ -8,15 +8,16 @@ import { authenticateUser } from '../services/authService';
 export default function LoginPage() {
   const navigate = useNavigate();
   const { login } = useAuth();
-  const [fullName, setFullName] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fullName.trim() || !password.trim()) {
-      setError('Please enter full name and password');
+    if (!username.trim() || !password.trim()) {
+      setError('Please enter username and password');
       return;
     }
 
@@ -24,11 +25,11 @@ export default function LoginPage() {
     setError('');
 
     try {
-      // Authenticate user against database using full_name and password
-      const authenticatedUser = await authenticateUser(fullName.trim(), password);
+      // Authenticate user against database using username and password
+      const authenticatedUser = await authenticateUser(username.trim(), password);
       
       if (!authenticatedUser) {
-        setError('Invalid full name or password');
+        setError('Invalid username or password');
         setIsLoading(false);
         return;
       }
@@ -91,19 +92,19 @@ export default function LoginPage() {
           <p className="text-gray-600 mb-8 text-sm">Enter your credentials to continue</p>
 
           <form onSubmit={handleLogin} className="space-y-5">
-            {/* Full Name Field */}
+            {/* Username Field */}
             <div>
-              <label htmlFor="fullName" className="block text-sm font-semibold text-gray-700 mb-2">
-                Full Name
+              <label htmlFor="username" className="block text-sm font-semibold text-gray-700 mb-2">
+                Username
               </label>
               <div className="relative">
                 <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-600" />
                 <input
-                  id="fullName"
+                  id="username"
                   type="text"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="Enter your full name"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="Enter your username"
                   className="w-full pl-10 pr-4 py-3 border-2 border-emerald-200 rounded-lg focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all bg-white/50"
                   disabled={isLoading}
                 />
@@ -119,11 +120,11 @@ export default function LoginPage() {
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-600" />
                 <input
                   id="password"
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter your password"
-                  className="w-full pl-10 pr-4 py-3 border-2 border-emerald-200 rounded-lg focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all bg-white/50"
+                  className="w-full pl-10 pr-12 py-3 border-2 border-emerald-200 rounded-lg focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all bg-white/50"
                   disabled={isLoading}
                   onKeyPress={(e) => {
                     if (e.key === 'Enter') {
@@ -131,6 +132,18 @@ export default function LoginPage() {
                     }
                   }}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-600 hover:text-emerald-700 transition-colors"
+                  disabled={isLoading}
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-5 h-5" />
+                  ) : (
+                    <Eye className="w-5 h-5" />
+                  )}
+                </button>
               </div>
             </div>
 

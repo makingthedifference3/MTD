@@ -1,7 +1,7 @@
 import { supabase } from './supabaseClient';
 
 export interface LoginCredentials {
-  fullName: string;
+  username: string;
   password: string;
 }
 
@@ -16,19 +16,19 @@ export interface AuthUser {
 }
 
 /**
- * Authenticate user with full_name and password
+ * Authenticate user with username and password
  * Returns user data if successful, null if failed
  * Password is stored directly in database (no hashing)
  */
 export const authenticateUser = async (
-  fullName: string,
+  username: string,
   plainPassword: string
 ): Promise<AuthUser | null> => {
   try {
     const { data, error } = await supabase
       .from('users')
       .select('id, username, email, full_name, role, is_active, password, csr_partner_id')
-      .eq('full_name', fullName)
+      .eq('username', username)
       .eq('is_active', true)
       .single();
 
@@ -39,7 +39,7 @@ export const authenticateUser = async (
 
     // Direct password comparison (passwords stored as plain text)
     if (plainPassword !== data.password) {
-      console.error('Password mismatch for user:', fullName);
+      console.error('Password mismatch for user:', username);
       return null;
     }
 
