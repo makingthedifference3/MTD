@@ -3,9 +3,9 @@
 @import "tailwindcss";
 
 @layer base {
-  /* Light Mode (Default) */
+  /* Light Mode (Always Active) */
   :root {
-    color-scheme: light;
+    color-scheme: light !important;
     --background: 0 0% 98%;
     --foreground: 0 0% 3.9%;
     --card: 0 0% 100%;
@@ -26,32 +26,6 @@
     --input: 0 0% 89.8%;
     --ring: 158 64% 52%;
     --radius: 0.75rem;
-  }
-
-  /* Dark Mode */
-  @media (prefers-color-scheme: dark) {
-    :root {
-      color-scheme: dark;
-      --background: 0 0% 3.9%;
-      --foreground: 0 0% 98%;
-      --card: 0 0% 8.5%;
-      --card-foreground: 0 0% 98%;
-      --popover: 0 0% 8.5%;
-      --popover-foreground: 0 0% 98%;
-      --primary: 158 64% 52%;
-      --primary-foreground: 0 0% 8.5%;
-      --secondary: 158 30% 20%;
-      --secondary-foreground: 158 64% 65%;
-      --muted: 0 0% 14.9%;
-      --muted-foreground: 0 0% 63.9%;
-      --accent: 158 64% 52%;
-      --accent-foreground: 0 0% 8.5%;
-      --destructive: 0 84.2% 60.2%;
-      --destructive-foreground: 0 0% 8.5%;
-      --border: 0 0% 14.9%;
-      --input: 0 0% 14.9%;
-      --ring: 158 64% 52%;
-    }
   }
 
   * {
@@ -114,21 +88,6 @@
     scrollbar-color: hsl(var(--border)) hsl(var(--background));
     scrollbar-width: thin;
   }
-
-  /* Dark Mode Scrollbar */
-  @media (prefers-color-scheme: dark) {
-    ::-webkit-scrollbar-track {
-      background: hsl(var(--background));
-    }
-
-    ::-webkit-scrollbar-thumb {
-      background: hsl(var(--border));
-    }
-
-    ::-webkit-scrollbar-thumb:hover {
-      background: hsl(var(--muted-foreground));
-    }
-  }
 }
 
 @layer components {
@@ -154,17 +113,10 @@
 
   /* Soft translucent emerald card */
   .emerald-card {
-    background: linear-gradient(to bottom right, #ecfdf5, #d1fae580);
-    border: 1px solid #a7f3d0;
+    background: linear-gradient(to bottom right, #ecfdf5, #d1fae580) !important;
+    border: 1px solid #a7f3d0 !important;
     backdrop-filter: blur(8px);
     border-radius: var(--radius);
-  }
-
-  @media (prefers-color-scheme: dark) {
-    .emerald-card {
-      background: linear-gradient(to bottom right, #064e3b, #047857);
-      border: 1px solid #10b981;
-    }
   }
 
   /* Emerald styled buttons */
@@ -217,13 +169,6 @@
   .bento-card:hover {
     border-color: #10b981;
     box-shadow: 0 12px 32px -8px rgb(16 185 129 / 0.1);
-  }
-
-  @media (prefers-color-scheme: dark) {
-    .bento-card:hover {
-      border-color: #10b981;
-      box-shadow: 0 12px 32px -8px rgb(16 185 129 / 0.2);
-    }
   }
 }
 
@@ -296,83 +241,563 @@ button:focus-visible {
   animation: shimmer 2s infinite;
 }
 
-/* Light mode specific */
-@media (prefers-color-scheme: light) {
-  body {
-    color: #213547;
-    background-color: #ffffff;
-  }
-
-  a:hover {
-    color: #10b981;
-  }
-
-  input, textarea, select {
-    background-color: #f9f9f9;
-    color: #213547;
-    border-color: #e5e7eb;
-  }
-
-  input:focus, textarea:focus, select:focus {
-    border-color: #10b981;
-    background-color: #ffffff;
-  }
+/* Light mode always active */
+body {
+  color: #213547 !important;
+  background-color: #ffffff !important;
 }
 
-/* Dark mode specific */
+a:hover {
+  color: #10b981 !important;
+}
+
+input, textarea, select {
+  background-color: #ffffff !important;
+  color: #213547 !important;
+  border-color: #e5e7eb !important;
+}
+
+input:focus, textarea:focus, select:focus {
+  border-color: #10b981 !important;
+  background-color: #ffffff !important;
+}
+
+/* Force light mode colors */
+.text-gray-600 {
+  color: #4b5563 !important;
+}
+
+.text-gray-700 {
+  color: #374151 !important;
+}
+
+.text-gray-900 {
+  color: #111827 !important;
+}
+
+.bg-white {
+  background-color: #ffffff !important;
+  color: #111827 !important;
+}
+
+.bg-gray-50 {
+  background-color: #f9fafb !important;
+  color: #111827 !important;
+}
+
+.bg-gray-100 {
+  background-color: #f3f4f6 !important;
+}
+
+.border-gray-200 {
+  border-color: #e5e7eb !important;
+}
+
+.border-gray-300 {
+  border-color: #d1d5db !important;
+}
+
+/* Force light backgrounds for all states */
+.bg-slate-50 {
+  background-color: #f8fafc !important;
+}
+
+.bg-slate-100 {
+  background-color: #f1f5f9 !important;
+}
+
+.bg-emerald-50 {
+  background-color: #ecfdf5 !important;
+}
+
+.bg-emerald-100 {
+  background-color: #d1fae5 !important;
+}
+
+.bg-amber-50 {
+  background-color: #fffbeb !important;
+}
+
+.bg-amber-100 {
+  background-color: #fef3c7 !important;
+}
+
+/* Text colors for light mode */
+.text-emerald-600 {
+  color: #059669 !important;
+}
+
+.text-emerald-700 {
+  color: #047857 !important;
+}
+
+.text-emerald-800 {
+  color: #065f46 !important;
+}
+
+.text-amber-600 {
+  color: #d97706 !important;
+}
+
+.text-amber-700 {
+  color: #b45309 !important;
+}
+
+.text-amber-800 {
+  color: #92400e !important;
+}
+
+/* Border colors */
+.border-emerald-100 {
+  border-color: #d1fae5 !important;
+}
+
+.border-emerald-200 {
+  border-color: #a7f3d0 !important;
+}
+
+.border-emerald-500 {
+  border-color: #10b981 !important;
+}
+
+/* Ensure white/light backgrounds for cards and containers */
+div[class*="bg-white"],
+div[class*="bg-gray"],
+div[class*="bg-slate"] {
+  color: #111827 !important;
+}
+
+/* Custom gradient utilities - Always light mode */
+.bg-linear-to-br {
+  background-image: linear-gradient(to bottom right, var(--tw-gradient-stops)) !important;
+}
+
+.bg-linear-to-r {
+  background-image: linear-gradient(to right, var(--tw-gradient-stops)) !important;
+}
+
+.bg-linear-to-tl {
+  background-image: linear-gradient(to top left, var(--tw-gradient-stops)) !important;
+}
+
+/* Ensure text remains visible on all backgrounds */
+h1, h2, h3, h4, h5, h6, p, span, div {
+  color: inherit;
+}
+
+/* Fix for backdrop blur elements */
+.backdrop-blur-xl,
+.backdrop-blur-2xl {
+  backdrop-filter: blur(24px) !important;
+  -webkit-backdrop-filter: blur(24px) !important;
+}
+
+/* Ensure modals and overlays work in light mode */
+.bg-black\/50 {
+  background-color: rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Stats cards specific styling */
+.bg-emerald-500 {
+  background-color: #10b981 !important;
+}
+
+.bg-emerald-600 {
+  background-color: #059669 !important;
+}
+
+.text-white {
+  color: #ffffff !important;
+}
+
+/* Force all select/option elements to light mode */
+select option {
+  background-color: #ffffff !important;
+  color: #111827 !important;
+}
+
+/* Ensure all cards stay light */
+.rounded-2xl,
+.rounded-3xl,
+.rounded-xl {
+  background-color: inherit;
+}
+
+/* Activity cards and list items */
+.divide-gray-100 > * {
+  border-color: #f3f4f6 !important;
+}
+
+/* Progress bars */
+.bg-gray-200 {
+  background-color: #e5e7eb !important;
+}
+
+/* Button states */
+.hover\:bg-gray-100:hover {
+  background-color: #f3f4f6 !important;
+}
+
+.hover\:bg-emerald-50:hover {
+  background-color: #ecfdf5 !important;
+}
+
+.hover\:bg-emerald-100:hover {
+  background-color: #d1fae5 !important;
+}
+
+/* Active states */
+.bg-emerald-500 {
+  background-color: #10b981 !important;
+  color: #ffffff !important;
+}
+
+.hover\:bg-emerald-600:hover {
+  background-color: #059669 !important;
+}
+
+/* Shadow colors - keep them visible in light mode */
+.shadow-emerald-500\/30 {
+  --tw-shadow-color: rgb(16 185 129 / 0.3);
+  --tw-shadow: var(--tw-shadow-colored);
+}
+
+.shadow-emerald-500\/20 {
+  --tw-shadow-color: rgb(16 185 129 / 0.2);
+  --tw-shadow: var(--tw-shadow-colored);
+}
+
+.shadow-emerald-500\/5 {
+  --tw-shadow-color: rgb(16 185 129 / 0.05);
+  --tw-shadow: var(--tw-shadow-colored);
+}
+
+/* Force light mode globally - highest priority */
+* {
+  color-scheme: light !important;
+}
+
+html, body, #root {
+  background-color: #ffffff !important;
+  color-scheme: light !important;
+}
+
+/* Override any system dark mode preferences */
 @media (prefers-color-scheme: dark) {
-  body {
-    color: #e5e7eb;
-    background-color: #0f172a;
+  * {
+    color-scheme: light !important;
   }
-
-  a {
-    color: #10b981;
+  
+  html, body, #root {
+    background-color: #ffffff !important;
+    color: #111827 !important;
   }
-
-  a:hover {
-    color: #6ee7b7;
+  
+  /* Force all text to be dark on light backgrounds */
+  .text-gray-300,
+  .text-gray-400,
+  .text-gray-500,
+  .text-gray-600,
+  .text-gray-700,
+  .text-gray-800 {
+    color: #374151 !important;
   }
-
-  input, textarea, select {
-    background-color: #1e293b;
-    color: #e5e7eb;
-    border-color: #334155;
+  
+  .text-gray-900 {
+    color: #111827 !important;
   }
-
-  input:focus, textarea:focus, select:focus {
-    border-color: #10b981;
-    background-color: #0f172a;
+  
+  /* Ensure cards and containers stay light */
+  div, section, article, aside, main, header, footer {
+    background-color: inherit;
   }
-
-  /* Ensure contrast in dark mode */
-  .text-gray-600 {
-    color: #cbd5e1 !important;
+  
+  /* Fix semi-transparent backgrounds */
+  .bg-white\/60 {
+    background-color: rgba(255, 255, 255, 0.6) !important;
   }
-
-  .text-gray-700 {
-    color: #e2e8f0 !important;
+  
+  .bg-white\/70 {
+    background-color: rgba(255, 255, 255, 0.7) !important;
   }
-
-  .bg-white {
-    background-color: #1e293b;
-    color: #e5e7eb;
+  
+  .bg-white\/80 {
+    background-color: rgba(255, 255, 255, 0.8) !important;
   }
-
-  .bg-gray-50 {
-    background-color: #0f172a;
-    color: #e5e7eb;
+  
+  .bg-white\/85 {
+    background-color: rgba(255, 255, 255, 0.85) !important;
   }
-
-  .bg-gray-100 {
-    background-color: #1e293b;
+  
+  /* Fix modal overlays */
+  .bg-black\/50 {
+    background-color: rgba(0, 0, 0, 0.5) !important;
   }
-
+  
+  /* Fix emerald transparencies */
+  .bg-emerald-50\/20 {
+    background-color: rgba(236, 253, 245, 0.2) !important;
+  }
+  
+  .bg-emerald-500\/5 {
+    background-color: rgba(16, 185, 129, 0.05) !important;
+  }
+  
+  .bg-emerald-500\/10 {
+    background-color: rgba(16, 185, 129, 0.1) !important;
+  }
+  
+  .bg-emerald-500\/20 {
+    background-color: rgba(16, 185, 129, 0.2) !important;
+  }
+  
+  .bg-emerald-600\/20 {
+    background-color: rgba(5, 150, 105, 0.2) !important;
+  }
+  
+  /* Fix border colors with transparency */
+  .border-white\/20 {
+    border-color: rgba(255, 255, 255, 0.2) !important;
+  }
+  
+  .border-emerald-100 {
+    border-color: #d1fae5 !important;
+  }
+  
   .border-gray-200 {
-    border-color: #334155;
+    border-color: #e5e7eb !important;
   }
-
-  .border-gray-300 {
-    border-color: #475569;
+  
+  /* Fix from/via/to gradient colors */
+  .from-gray-50 {
+    --tw-gradient-from: #f9fafb !important;
+    --tw-gradient-to: rgb(249 250 251 / 0) !important;
+    --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+  }
+  
+  .via-emerald-50\/20 {
+    --tw-gradient-to: rgb(236 253 245 / 0) !important;
+    --tw-gradient-stops: var(--tw-gradient-from), rgb(236 253 245 / 0.2), var(--tw-gradient-to) !important;
+  }
+  
+  .to-gray-50 {
+    --tw-gradient-to: #f9fafb !important;
+  }
+  
+  .from-emerald-50 {
+    --tw-gradient-from: #ecfdf5 !important;
+    --tw-gradient-to: rgb(236 253 245 / 0) !important;
+    --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+  }
+  
+  .via-white {
+    --tw-gradient-to: rgb(255 255 255 / 0) !important;
+    --tw-gradient-stops: var(--tw-gradient-from), #ffffff, var(--tw-gradient-to) !important;
+  }
+  
+  .to-emerald-100 {
+    --tw-gradient-to: #d1fae5 !important;
+  }
+  
+  .from-gray-900 {
+    --tw-gradient-from: #111827 !important;
+    --tw-gradient-to: rgb(17 24 39 / 0) !important;
+    --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+  }
+  
+  .via-emerald-800 {
+    --tw-gradient-to: rgb(6 95 70 / 0) !important;
+    --tw-gradient-stops: var(--tw-gradient-from), #065f46, var(--tw-gradient-to) !important;
+  }
+  
+  .to-gray-900 {
+    --tw-gradient-to: #111827 !important;
+  }
+  
+  /* Fix emerald gradient stops */
+  .from-emerald-500 {
+    --tw-gradient-from: #10b981 !important;
+    --tw-gradient-to: rgb(16 185 129 / 0) !important;
+    --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+  }
+  
+  .to-emerald-600 {
+    --tw-gradient-to: #059669 !important;
+  }
+  
+  .via-emerald-400\/5 {
+    --tw-gradient-to: rgb(52 211 153 / 0) !important;
+    --tw-gradient-stops: var(--tw-gradient-from), rgb(52 211 153 / 0.05), var(--tw-gradient-to) !important;
+  }
+  
+  .to-transparent {
+    --tw-gradient-to: transparent !important;
+  }
+  
+  /* Ensure backdrop blur works consistently */
+  .backdrop-blur-sm,
+  .backdrop-blur-xl,
+  .backdrop-blur-2xl {
+    -webkit-backdrop-filter: blur(var(--tw-blur)) !important;
+    backdrop-filter: blur(var(--tw-blur)) !important;
+  }
+  
+  /* Fix shadow colors */
+  .shadow-xl,
+  .shadow-2xl,
+  .shadow-lg {
+    box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow) !important;
+  }
+  
+  .shadow-emerald-500\/5 {
+    --tw-shadow-color: rgb(16 185 129 / 0.05) !important;
+    --tw-shadow: var(--tw-shadow-colored) !important;
+  }
+  
+  .shadow-emerald-500\/20 {
+    --tw-shadow-color: rgb(16 185 129 / 0.2) !important;
+    --tw-shadow: var(--tw-shadow-colored) !important;
+  }
+  
+  .shadow-emerald-500\/30 {
+    --tw-shadow-color: rgb(16 185 129 / 0.3) !important;
+    --tw-shadow: var(--tw-shadow-colored) !important;
+  }
+  
+  /* Fix hover states */
+  .hover\:border-emerald-500:hover {
+    border-color: #10b981 !important;
+  }
+  
+  .hover\:bg-emerald-50:hover {
+    background-color: #ecfdf5 !important;
+  }
+  
+  .hover\:text-emerald-600:hover {
+    color: #059669 !important;
+  }
+  
+  .hover\:shadow-emerald-500\/20:hover {
+    --tw-shadow-color: rgb(16 185 129 / 0.2) !important;
+    --tw-shadow: var(--tw-shadow-colored) !important;
+  }
+  
+  /* Group hover effects */
+  .group:hover .group-hover\:blur-3xl {
+    filter: blur(48px) !important;
+  }
+  
+  .group:hover .group-hover\:opacity-100 {
+    opacity: 1 !important;
+  }
+  
+  .group:hover .group-hover\:bg-emerald-500\/10 {
+    background-color: rgba(16, 185, 129, 0.1) !important;
+  }
+  
+  /* Ensure proper text colors throughout */
+  .text-white {
+    color: #ffffff !important;
+  }
+  
+  .text-emerald-600 {
+    color: #059669 !important;
+  }
+  
+  .text-emerald-700 {
+    color: #047857 !important;
+  }
+  
+  .text-emerald-800 {
+    color: #065f46 !important;
+  }
+  
+  .text-amber-800 {
+    color: #92400e !important;
+  }
+  
+  .text-amber-700 {
+    color: #b45309 !important;
+  }
+  
+  /* Ensure background colors are consistent */
+  .bg-gray-50 {
+    background-color: #f9fafb !important;
+  }
+  
+  .bg-emerald-50 {
+    background-color: #ecfdf5 !important;
+  }
+  
+  .bg-amber-50 {
+    background-color: #fffbeb !important;
+  }
+  
+  .bg-emerald-100 {
+    background-color: #d1fae5 !important;
+  }
+  
+  .bg-amber-100 {
+    background-color: #fef3c7 !important;
+  }
+  
+  .bg-amber-200 {
+    background-color: #fde68a !important;
+  }
+  
+  /* Fix gradients for buttons and headers */
+  .bg-linear-to-r,
+  .bg-linear-to-br,
+  .bg-linear-to-tl {
+    background-image: linear-gradient(var(--tw-gradient-stops)) !important;
+  }
+  
+  /* Ensure proper contrast for all combinations */
+  .bg-emerald-500,
+  .bg-emerald-600 {
+    color: #ffffff !important;
+  }
+  
+  /* Fix any remaining opacity classes */
+  .opacity-0 {
+    opacity: 0 !important;
+  }
+  
+  .opacity-100 {
+    opacity: 1 !important;
+  }
+  
+  .group-hover\:opacity-100 {
+    opacity: 0;
+  }
+  
+  .group:hover .group-hover\:opacity-100 {
+    opacity: 1 !important;
+  }
+  
+  /* Ensure scale transforms work */
+  .scale-\[1\.02\] {
+    transform: scale(1.02) !important;
+  }
+  
+  .hover\:-translate-y-2:hover {
+    transform: translateY(-0.5rem) !important;
+  }
+  
+  /* Fix blur values */
+  .blur-2xl {
+    filter: blur(40px) !important;
+  }
+  
+  .blur-3xl {
+    filter: blur(48px) !important;
+  }
+  
+  .group-hover\:blur-3xl {
+    filter: blur(40px);
+  }
+  
+  .group:hover .group-hover\:blur-3xl {
+    filter: blur(48px) !important;
   }
 }
