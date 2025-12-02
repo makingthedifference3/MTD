@@ -10,7 +10,7 @@ export interface AuthUser {
   username: string;
   email: string;
   full_name: string;
-  role: 'admin' | 'accountant' | 'project_manager' | 'team_member' | 'client';
+  role: 'admin' | 'accountant' | 'project_manager' | 'team_member' | 'client' | 'data_manager';
   is_active: boolean;
   csr_partner_id?: string;
 }

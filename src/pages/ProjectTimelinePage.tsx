@@ -79,6 +79,8 @@ const ProjectTimelinePage = () => {
   // Description items (checkable points)
   const [descriptionItems, setDescriptionItems] = useState<{ text: string; isCompleted: boolean }[]>([]);
   const [newItemText, setNewItemText] = useState('');
+  const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
+  const [editingItemText, setEditingItemText] = useState('');
 
   // Get tolls for selected partner
   const partnerTolls = tolls.filter(t => t.csr_partner_id === selectedPartner);
@@ -223,11 +225,17 @@ const ProjectTimelinePage = () => {
     if (!newItemText.trim()) return;
     setDescriptionItems([...descriptionItems, { text: newItemText.trim(), isCompleted: false }]);
     setNewItemText('');
+    setEditingItemIndex(null);
+    setEditingItemText('');
   };
 
   // Remove description item
   const handleRemoveDescriptionItem = (index: number) => {
     setDescriptionItems(descriptionItems.filter((_, i) => i !== index));
+    if (editingItemIndex === index) {
+      setEditingItemIndex(null);
+      setEditingItemText('');
+    }
   };
 
   // Toggle item in form
@@ -235,6 +243,33 @@ const ProjectTimelinePage = () => {
     setDescriptionItems(descriptionItems.map((item, i) => 
       i === index ? { ...item, isCompleted: !item.isCompleted } : item
     ));
+    if (editingItemIndex === index) {
+      // Preserve text but toggle completion while editing
+      setEditingItemText(descriptionItems[index]?.text || '');
+    }
+  };
+
+  const handleStartEditingItem = (index: number) => {
+    setEditingItemIndex(index);
+    setEditingItemText(descriptionItems[index]?.text || '');
+  };
+
+  const handleCancelEditingItem = () => {
+    setEditingItemIndex(null);
+    setEditingItemText('');
+  };
+
+  const handleSaveEditingItem = () => {
+    if (editingItemIndex === null) return;
+    if (!editingItemText.trim()) {
+      // prevent empty values
+      return;
+    }
+    setDescriptionItems(descriptionItems.map((item, i) => (
+      i === editingItemIndex ? { ...item, text: editingItemText.trim() } : item
+    )));
+    setEditingItemIndex(null);
+    setEditingItemText('');
   };
 
   // Submit form
@@ -923,36 +958,91 @@ const ProjectTimelinePage = () => {
                     Task Items (Checkable Points)
                   </label>
                   <div className="space-y-2 mb-3">
-                    {descriptionItems.map((item, index) => (
-                      <div
-                        key={index}
-                        className={`flex items-center space-x-3 p-3 rounded-lg border ${
-                          item.isCompleted ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200'
-                        }`}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => handleToggleFormItem(index)}
-                          className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
-                            item.isCompleted
-                              ? 'bg-emerald-500 border-emerald-500 text-white'
-                              : 'border-gray-300 hover:border-emerald-500'
+                    {descriptionItems.map((item, index) => {
+                      const isEditing = editingItemIndex === index;
+                      return (
+                        <div
+                          key={index}
+                          className={`flex items-center space-x-3 p-3 rounded-lg border ${
+                            item.isCompleted ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200'
                           }`}
                         >
-                          {item.isCompleted && <Check className="w-4 h-4" />}
-                        </button>
-                        <span className={`flex-1 ${item.isCompleted ? 'text-gray-500 line-through' : 'text-gray-700'}`}>
-                          {item.text}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveDescriptionItem(index)}
-                          className="p-1 text-gray-400 hover:text-red-500 transition-colors"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleFormItem(index)}
+                            className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+                              item.isCompleted
+                                ? 'bg-emerald-500 border-emerald-500 text-white'
+                                : 'border-gray-300 hover:border-emerald-500'
+                            }`}
+                          >
+                            {item.isCompleted && <Check className="w-4 h-4" />}
+                          </button>
+                          {isEditing ? (
+                            <input
+                              autoFocus
+                              type="text"
+                              value={editingItemText}
+                              onChange={(e) => setEditingItemText(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleSaveEditingItem();
+                                } else if (e.key === 'Escape') {
+                                  handleCancelEditingItem();
+                                }
+                              }}
+                              className="flex-1 px-3 py-2 border-2 border-emerald-200 rounded-lg focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition-all text-sm"
+                            />
+                          ) : (
+                            <span
+                              className={`flex-1 ${item.isCompleted ? 'text-gray-500 line-through' : 'text-gray-700'}`}
+                            >
+                              {item.text}
+                            </span>
+                          )}
+                          <div className="flex items-center gap-1">
+                            {isEditing ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={handleSaveEditingItem}
+                                  className="p-1.5 rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 transition-colors"
+                                  title="Save"
+                                >
+                                  <Save className="w-4 h-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleCancelEditingItem}
+                                  className="p-1.5 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+                                  title="Cancel"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleStartEditingItem(index)}
+                                className="p-1.5 rounded-lg text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                                title="Edit"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveDescriptionItem(index)}
+                              className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
+                              title="Remove"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                   
                   {/* Add new item */}

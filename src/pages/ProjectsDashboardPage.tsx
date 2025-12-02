@@ -15,6 +15,7 @@ interface ProjectWithRole {
   end_date: string;
   csr_partner_name: string;
   csr_partner_id: string;
+  csr_partner_logo?: string;
   user_role: string;
   all_roles: string[];
   city?: string;
@@ -40,12 +41,14 @@ interface TeamMemberData {
 interface CSRPartner {
   id: string;
   company_name: string;
+  logo_drive_link?: string;
 }
 
 export default function ProjectsDashboardPage() {
   const navigate = useNavigate();
   const { currentUser, logout } = useAuth();
   const { setSelectedProject } = useSelectedProject();
+  const SIDEBAR_LOGO = 'https://img.logo.dev/mtdngo.com?token=pk_TWFfI7LzSyOkJp3PACHx6A';
   const [projects, setProjects] = useState<ProjectWithRole[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -100,18 +103,21 @@ export default function ProjectsDashboardPage() {
         });
 
         // Step 3: Fetch CSR partner details for all unique IDs
-        const csrPartnerMap = new Map<string, string>();
+        const csrPartnerMap = new Map<string, { name: string; logo?: string }>();
         if (uniqueCSRPartnerIds.size > 0) {
           const { data: csrPartnersData, error: csrPartnersError } = await supabase
             .from('csr_partners')
-            .select('id, company_name')
+            .select('id, company_name, logo_drive_link')
             .in('id', Array.from(uniqueCSRPartnerIds));
 
           if (csrPartnersError) {
             console.error('Error fetching CSR partners:', csrPartnersError);
           } else {
             (csrPartnersData || []).forEach((partner: CSRPartner) => {
-              csrPartnerMap.set(partner.id, partner.company_name);
+              csrPartnerMap.set(partner.id, { 
+                name: partner.company_name, 
+                logo: partner.logo_drive_link 
+              });
             });
           }
         }
@@ -126,9 +132,9 @@ export default function ProjectsDashboardPage() {
             ? item.projects[0] 
             : item.projects;
           if (projectData && projectData.id) {
-            const csrPartnerName = projectData.csr_partner_id 
-              ? csrPartnerMap.get(projectData.csr_partner_id) || 'N/A' 
-              : 'N/A';
+            const csrPartnerInfo = projectData.csr_partner_id 
+              ? csrPartnerMap.get(projectData.csr_partner_id) 
+              : null;
 
             transformedProjects.push({
               id: projectData.id,
@@ -139,7 +145,8 @@ export default function ProjectsDashboardPage() {
               end_date: projectData.expected_end_date,
               total_budget: projectData.total_budget,
               csr_partner_id: projectData.csr_partner_id,
-              csr_partner_name: csrPartnerName,
+              csr_partner_name: csrPartnerInfo?.name || 'N/A',
+              csr_partner_logo: csrPartnerInfo?.logo,
               user_role: item.role,
               all_roles: [item.role], // Single role in array
             });
@@ -337,9 +344,18 @@ export default function ProjectsDashboardPage() {
                     </span>
                   </div>
 
-                  {/* CSR Partner */}
+                  {/* CSR Partner with Sidebar Logo styling */}
                   <div className="flex items-start gap-3 pt-2">
-                    <Briefcase className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                    <div className="w-12 h-12 rounded-2xl ring-2 ring-emerald-100 bg-slate-900/90 p-1 flex items-center justify-center shadow-inner">
+                      <img
+                        src={project.csr_partner_logo || SIDEBAR_LOGO}
+                        alt={`${project.csr_partner_name} logo`}
+                        className="w-full h-full object-contain rounded-xl"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).src = SIDEBAR_LOGO;
+                        }}
+                      />
+                    </div>
                     <div>
                       <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">CSR Partner</p>
                       <p className="text-gray-900 font-semibold text-lg">{project.csr_partner_name}</p>

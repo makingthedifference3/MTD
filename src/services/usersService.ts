@@ -8,7 +8,7 @@ export interface User {
   address?: string;
   city?: string;
   state?: string;
-  role: 'admin' | 'accountant' | 'project_manager' | 'team_member' | 'client';
+  role: 'admin' | 'accountant' | 'project_manager' | 'team_member' | 'client' | 'data_manager';
   department?: string;
   team?: string;
   designation?: string;

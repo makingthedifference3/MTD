@@ -23,7 +23,7 @@ CREATE TABLE public.users (
   pincode VARCHAR(10),
   
   -- Role & Access Control
-  role VARCHAR(50) NOT NULL CHECK (role IN ('admin', 'accountant', 'project_manager', 'team_member', 'client')),
+  role VARCHAR(50) NOT NULL CHECK (role IN ('admin', 'accountant', 'project_manager', 'team_member', 'client', 'data_manager')),
   
   -- Organization Structure
   department VARCHAR(100),
