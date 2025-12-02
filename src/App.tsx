@@ -34,6 +34,7 @@ import ProjectsDashboardPage from './pages/ProjectsDashboardPage';
 import TollManagementPage from './pages/TollManagementPage';
 import ResultAnalysisPage from './pages/ResultAnalysisPage';
 import ProjectTimelinePage from './pages/ProjectTimelinePage';
+import DataManagerDashboard from './pages/DataManagerDashboard';
 
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -73,6 +74,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/admin-dashboard" element={<ProtectedRoute><Sidebar currentPage="dashboard" onNavigate={() => {}}><AdminDashboard /></Sidebar></ProtectedRoute>} />
       <Route path="/admin/users" element={<ProtectedRoute><Sidebar currentPage="user-management" onNavigate={() => {}}><UserManagementPage /></Sidebar></ProtectedRoute>} />
+      <Route path="/data-manager" element={<ProtectedRoute><DataManagerDashboard /></ProtectedRoute>} />
       <Route path="/accountant-dashboard" element={<ProtectedRoute><Sidebar currentPage="dashboard" onNavigate={() => {}}><AccountantDashboard /></Sidebar></ProtectedRoute>} />
       <Route path="/pm-dashboard" element={<ProtectedRoute><Sidebar currentPage="dashboard" onNavigate={() => {}}><PMDashboard /></Sidebar></ProtectedRoute>} />
       <Route path="/team-member-dashboard" element={<ProtectedRoute><Sidebar currentPage="dashboard" onNavigate={() => {}}><TeamMemberDashboard /></Sidebar></ProtectedRoute>} />

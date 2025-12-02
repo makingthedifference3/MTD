@@ -8,6 +8,7 @@ import {
 import { useFilter } from '../context/useFilter';
 import type { Project } from '../services/filterService';
 import type { Toll } from '../services/tollsService';
+import { supabase } from '../services/supabaseClient';
 import {
   type ProjectActivity,
   type ProjectActivityWithDetails,
@@ -76,6 +77,9 @@ const ProjectTimelinePage = () => {
     responsible_person: '',
   });
   
+  // Team members state
+  const [teamMembers, setTeamMembers] = useState<Array<{ user_id: string; full_name: string; role: string }>>([]);
+  
   // Description items (checkable points)
   const [descriptionItems, setDescriptionItems] = useState<{ text: string; isCompleted: boolean }[]>([]);
   const [newItemText, setNewItemText] = useState('');
@@ -95,6 +99,49 @@ const ProjectTimelinePage = () => {
     }
     return [];
   }, [filteredProjects, selectedPartner, selectedToll]);
+
+  // Fetch team members for the selected project
+  const fetchTeamMembers = useCallback(async () => {
+    if (!selectedProjectData) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('project_team_members')
+        .select(`
+          user_id,
+          role,
+          roles,
+          users!project_team_members_user_id_fkey(full_name)
+        `)
+        .eq('project_id', selectedProjectData.id)
+        .eq('is_active', true);
+      
+      if (error) throw error;
+      
+      const members = data?.map(member => {
+        // Get role from either the 'role' field or first item in 'roles' array
+        let displayRole = member.role || 'Team Member';
+        if (!member.role && member.roles && Array.isArray(member.roles) && member.roles.length > 0) {
+          // Convert role to proper display format (e.g., "project_manager" -> "Project Manager")
+          displayRole = member.roles[0]
+            .split('_')
+            .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+        }
+        
+        return {
+          user_id: member.user_id,
+          full_name: (member.users as any).full_name,
+          role: displayRole
+        };
+      }) || [];
+      
+      setTeamMembers(members);
+    } catch (error) {
+      console.error('Error fetching team members:', error);
+      setTeamMembers([]);
+    }
+  }, [selectedProjectData]);
 
   // Load activities when project is selected
   const loadActivities = useCallback(async () => {
@@ -116,8 +163,9 @@ const ProjectTimelinePage = () => {
   useEffect(() => {
     if (viewMode === 'activities' && selectedProjectData) {
       loadActivities();
+      fetchTeamMembers();
     }
-  }, [viewMode, selectedProjectData, loadActivities]);
+  }, [viewMode, selectedProjectData, loadActivities, fetchTeamMembers]);
 
   // Handle partner click
   const handlePartnerClick = (partner: { id: string; name: string }) => {
@@ -1101,13 +1149,25 @@ const ProjectTimelinePage = () => {
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Responsible Person
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={formData.responsible_person}
                     onChange={(e) => setFormData({ ...formData, responsible_person: e.target.value })}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all"
-                    placeholder="Enter responsible person name"
-                  />
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all bg-white text-gray-900 font-medium"
+                  >
+                    <option value="" className="text-gray-500">Select a team member</option>
+                    {teamMembers.map((member) => (
+                      <option 
+                        key={member.user_id} 
+                        value={`${member.full_name} : ${member.role}`}
+                        className="text-gray-900 py-2"
+                      >
+                        {member.full_name} : {member.role}
+                      </option>
+                    ))}
+                  </select>
+                  {teamMembers.length === 0 && (
+                    <p className="text-sm text-amber-600 mt-2">No team members assigned to this project yet.</p>
+                  )}
                 </div>
               </form>
 

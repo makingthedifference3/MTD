@@ -29,7 +29,7 @@ const menuItems = [
   { id: 'admin-expenses', label: 'Admin Expenses', icon: Receipt, roles: ['admin'] },
   { id: 'acc-expense', label: 'Accountant Expenses', icon: FileText, roles: ['accountant'] },
   { id: 'daily-report', label: 'Daily Report', icon: ClipboardList, roles: ['admin', 'accountant', 'project_manager'] },
-  { id: 'result-analysis', label: 'Result Analysis', icon: GraduationCap, roles: ['admin', 'project_manager'] },
+  { id: 'result-analysis', label: 'Result Analysis', icon: GraduationCap, roles: ['admin', 'project_manager', 'data_manager'] },
   { id: 'upcoming-expenses', label: 'Upcoming Expenses', icon: TrendingUp, roles: ['admin', 'project_manager'] },
   { id: 'bills', label: 'Bills', icon: Receipt, roles: ['admin', 'project_manager'] },
   { id: 'csr-budget', label: 'CSR Budget', icon: CreditCard, roles: ['admin'] },
@@ -47,9 +47,9 @@ const Sidebar = ({ children, currentPage, onNavigate }: SidebarProps) => {
   
   // Get role from project context for non-admin users
   const getEffectiveRole = () => {
-    // Admin role always comes from users table
-    if (currentRole === 'admin') {
-      return 'admin';
+    // Admin and data_manager roles always come from users table
+    if (currentRole === 'admin' || currentRole === 'data_manager') {
+      return currentRole;
     }
     
     // For non-admin users, ALWAYS use role from project context
@@ -81,7 +81,8 @@ const Sidebar = ({ children, currentPage, onNavigate }: SidebarProps) => {
   const routeMap: Record<string, string> = {
     'dashboard': effectiveRole === 'admin' ? '/admin-dashboard' : 
                  effectiveRole === 'accountant' ? '/accountant-dashboard' :
-                 effectiveRole === 'project_manager' ? '/pm-dashboard' : '/team-member-dashboard',
+                 effectiveRole === 'project_manager' ? '/pm-dashboard' :
+                 effectiveRole === 'data_manager' ? '/data-manager' : '/team-member-dashboard',
     'csr-partners': '/csr-partners',
     'projects': '/projects',
     'project-timeline': '/project-timeline',
