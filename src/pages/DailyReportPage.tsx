@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { motion } from 'framer-motion';
-import { Download, Calendar, Loader, FileText, Star, CheckCircle, Clock, AlertTriangle, Filter } from 'lucide-react';
-import { type Task } from '@/services/tasksService';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Download, Calendar, Loader, FileText, Star, CheckCircle, Clock, AlertTriangle, Filter, Edit3, X, Save } from 'lucide-react';
+import { type Task, updateTask } from '@/services/tasksService';
 import { getUserById } from '@/services/usersService';
 import { projectService } from '@/services/projectService';
 import { supabase } from '@/services/supabaseClient';
@@ -77,6 +77,64 @@ const DailyReportPage = () => {
   const [selectedPerformance, setSelectedPerformance] = useState<string>('');
   const [hasToll, setHasToll] = useState(false);
   const [filteredProjects, setFilteredProjects] = useState<Array<{ id: string; name: string; project_code: string; toll_id?: string }>>([]);
+
+  // Edit Modal State
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<TaskWithUser | null>(null);
+  const [editForm, setEditForm] = useState({
+    title: '',
+    description: '',
+    due_date: '',
+    status: 'not_started' as Task['status'],
+    priority: '',
+  });
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Handle opening edit modal
+  const handleEditTask = (task: TaskWithUser) => {
+    setEditingTask(task);
+    setEditForm({
+      title: task.title || '',
+      description: task.description || '',
+      due_date: task.due_date || '',
+      status: task.status,
+      priority: task.priority || '',
+    });
+    setEditModalOpen(true);
+  };
+
+  // Handle saving edited task
+  const handleSaveTask = async () => {
+    if (!editingTask) return;
+    
+    try {
+      setIsSaving(true);
+      await updateTask(editingTask.id, {
+        title: editForm.title,
+        description: editForm.description,
+        due_date: editForm.due_date,
+        status: editForm.status,
+        priority: editForm.priority,
+        completed_date: editForm.status === 'completed' ? new Date().toISOString().split('T')[0] : editingTask.completed_date,
+      });
+      
+      // Refresh tasks data
+      await fetchTasksData();
+      setEditModalOpen(false);
+      setEditingTask(null);
+    } catch (err) {
+      console.error('Error updating task:', err);
+      setError('Failed to update task');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Handle closing edit modal
+  const handleCloseEditModal = () => {
+    setEditModalOpen(false);
+    setEditingTask(null);
+  };
 
   // Calculate performance status based on due date and completion date
   const calculatePerformanceStatus = (task: Task): { status: PerformanceStatus; daysVariance: number } => {
@@ -830,9 +888,18 @@ const DailyReportPage = () => {
                       <div>
                         <div className="flex items-start justify-between mb-2">
                           <h3 className="text-xl font-bold text-gray-900">{task.title}</h3>
-                          <span className={`px-4 py-2 rounded-full text-sm font-bold ${performanceBadge.bgColor} ${performanceBadge.textColor} border ${performanceBadge.borderColor}`}>
-                            {performanceBadge.label}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleEditTask(task)}
+                              className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-900 transition-colors"
+                              title="Edit Task"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+                            <span className={`px-4 py-2 rounded-full text-sm font-bold ${performanceBadge.bgColor} ${performanceBadge.textColor} border ${performanceBadge.borderColor}`}>
+                              {performanceBadge.label}
+                            </span>
+                          </div>
                         </div>
                         {task.description && (
                           <p className="text-sm text-gray-600 mb-3">{task.description}</p>
@@ -895,6 +962,136 @@ const DailyReportPage = () => {
           </div>
         )}
       </div>
+
+      {/* Edit Task Modal */}
+      <AnimatePresence>
+        {editModalOpen && editingTask && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            onClick={handleCloseEditModal}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+            >
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-6 border-b border-gray-200">
+                <h2 className="text-xl font-bold text-gray-900">Edit Task</h2>
+                <button
+                  onClick={handleCloseEditModal}
+                  className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-900 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-6 space-y-4">
+                {/* Title */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Task Title</label>
+                  <input
+                    type="text"
+                    value={editForm.title}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, title: e.target.value }))}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 transition-colors"
+                    placeholder="Enter task title"
+                  />
+                </div>
+
+                {/* Description */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Description</label>
+                  <textarea
+                    value={editForm.description}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, description: e.target.value }))}
+                    rows={3}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 transition-colors resize-none"
+                    placeholder="Enter task description"
+                  />
+                </div>
+
+                {/* Due Date */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Due Date</label>
+                  <input
+                    type="date"
+                    value={editForm.due_date}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, due_date: e.target.value }))}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 transition-colors"
+                  />
+                </div>
+
+                {/* Status */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Status</label>
+                  <select
+                    value={editForm.status}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, status: e.target.value as Task['status'] }))}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 transition-colors"
+                  >
+                    <option value="not_started">Not Started</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="completed">Completed</option>
+                    <option value="on_priority">On Priority</option>
+                    <option value="blocked">Blocked</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </div>
+
+                {/* Priority */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Priority</label>
+                  <select
+                    value={editForm.priority}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, priority: e.target.value }))}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 transition-colors"
+                  >
+                    <option value="">No Priority</option>
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 bg-gray-50 rounded-b-2xl">
+                <button
+                  onClick={handleCloseEditModal}
+                  className="px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-100 transition-colors font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveTask}
+                  disabled={isSaving || !editForm.title.trim()}
+                  className="flex items-center gap-2 px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader className="w-4 h-4 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      <span>Save Changes</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
     </div>
   );

@@ -30,7 +30,7 @@ CREATE TABLE public.users (
   state VARCHAR(100),
   pincode VARCHAR(10),
   
-  role VARCHAR(50) NOT NULL CHECK (role IN ('admin', 'accountant', 'project_manager', 'team_member', 'client')),
+  role VARCHAR(50) NOT NULL CHECK (role IN ('admin', 'accountant', 'project_manager', 'team_member', 'client', 'data_manager')),
   
   department VARCHAR(100),
   team VARCHAR(100),

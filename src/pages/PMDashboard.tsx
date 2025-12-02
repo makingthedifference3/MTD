@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  FolderKanban, ChevronRight,
+  FolderKanban, ChevronRight, ChevronDown,
   ArrowLeft, MapPin, Briefcase, Leaf, Building2, Heart, Droplet, GraduationCap,
   CheckCircle2, Users, Activity, Award, type LucideIcon, BarChart3, Grid3x3,
   Target, Zap
@@ -107,6 +107,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
   const [viewMode, setViewMode] = useState<'partners' | 'projects' | 'projectDetails'>('partners');
   const [selectedProjectData, setSelectedProjectData] = useState<ProjectWithBeneficiaries | null>(null);
   const [dashboardView, setDashboardView] = useState<'hierarchy' | 'analytics'>('hierarchy');
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
   // When project is pre-selected from ProjectsDashboard, sync it to FilterContext
   useEffect(() => {
@@ -145,8 +146,75 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
     ? csrPartners.find(p => p.id === selectedPartner)
     : null;
 
-  // Get projects for selected partner - directly use filteredProjects which is already filtered by context
-  const partnerProjects = filteredProjects;
+  // Get projects for selected partner - fall back to all filtered projects if no partner locked
+  const partnerProjects = selectedPartner ? filteredProjects.filter((p) => p.csr_partner_id === selectedPartner) : filteredProjects;
+
+  const groupedProjects = useMemo(() => {
+    const grouped = partnerProjects.reduce<Record<string, {
+      projects: Project[];
+      totalBudget: number;
+      totalBeneficiaries: number;
+      activeCount: number;
+      completedCount: number;
+    }>>((acc, project) => {
+      const key = (project.name || 'Untitled Project').trim();
+      if (!acc[key]) {
+        acc[key] = {
+          projects: [],
+          totalBudget: 0,
+          totalBeneficiaries: 0,
+          activeCount: 0,
+          completedCount: 0,
+        };
+      }
+
+      acc[key].projects.push(project);
+      acc[key].totalBudget += project.total_budget || 0;
+      acc[key].totalBeneficiaries += project.direct_beneficiaries || 0;
+      if (project.status === 'completed') {
+        acc[key].completedCount += 1;
+      } else {
+        acc[key].activeCount += 1;
+      }
+
+      return acc;
+    }, {});
+
+    return Object.entries(grouped)
+      .map(([name, details]) => ({
+        name,
+        ...details,
+      }))
+      .sort((a, b) => {
+        if (b.projects.length === a.projects.length) {
+          return a.name.localeCompare(b.name);
+        }
+        return b.projects.length - a.projects.length;
+      });
+  }, [partnerProjects]);
+
+  useEffect(() => {
+    setExpandedGroups((prev) => {
+      let changed = false;
+      const next: Record<string, boolean> = { ...prev };
+
+      groupedProjects.forEach((group) => {
+        if (next[group.name] === undefined) {
+          next[group.name] = group.projects.length > 1 || groupedProjects.length === 1;
+          changed = true;
+        }
+      });
+
+      Object.keys(next).forEach((key) => {
+        if (!groupedProjects.find((group) => group.name === key)) {
+          delete next[key];
+          changed = true;
+        }
+      });
+
+      return changed ? next : prev;
+    });
+  }, [groupedProjects]);
 
   console.log('PMDashboard - selectedPartner:', selectedPartner);
   console.log('PMDashboard - partnerProjects count:', partnerProjects.length);
@@ -177,6 +245,13 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
     setSelectedProjectData(project as ProjectWithBeneficiaries);
     setSelectedProject(project.id);
     setViewMode('projectDetails');
+  };
+
+  const toggleGroup = (groupName: string) => {
+    setExpandedGroups((prev) => ({
+      ...prev,
+      [groupName]: !prev[groupName],
+    }));
   };
 
   const handleBack = () => {
@@ -699,46 +774,116 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
               </div>
             </div>
 
-            {partnerProjects.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {partnerProjects.map((project, index) => {
-                  const Icon = getIconComponent(project.display_icon);
-                  const colorClass = project.display_color || 'emerald';
-                  
+            {groupedProjects.length > 0 ? (
+              <div className="space-y-4">
+                {groupedProjects.map((group, index) => {
+                  const isExpanded = expandedGroups[group.name];
+                  const projectLabel = group.projects.length === 1 ? 'Project' : 'Projects';
+                  const formattedBudget = group.totalBudget > 0
+                    ? `₹${(group.totalBudget / 10000000).toFixed(2)}Cr`
+                    : 'Budget pending';
+
                   return (
-                    <motion.button
-                      key={project.id}
+                    <motion.div
+                      key={group.name}
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.1 }}
-                      onClick={() => handleProjectClick(project)}
-                      className="group relative text-left"
+                      transition={{ delay: index * 0.08 }}
+                      className="bg-white border-2 border-gray-200 rounded-3xl p-5 shadow-sm"
                     >
-                      <div className={`absolute inset-0 bg-linear-to-br from-${colorClass}-500/20 to-${colorClass}-600/20 rounded-2xl blur-2xl group-hover:blur-3xl transition-all opacity-0 group-hover:opacity-100`}></div>
-                      
-                      <div className="relative bg-white border-2 border-gray-200 hover:border-emerald-500 rounded-2xl p-6 transition-all duration-300 hover:shadow-2xl hover:shadow-emerald-500/20 hover:-translate-y-2 overflow-hidden">
-                        <div className={`absolute top-0 right-0 w-24 h-24 bg-${colorClass}-500/5 rounded-bl-3xl group-hover:bg-${colorClass}-500/10 transition-colors`}></div>
-                        
-                        <div className="relative z-10">
-                          <div className="flex items-start justify-between mb-4">
-                            <div className={`p-3 bg-${colorClass}-100 group-hover:bg-${colorClass}-200 rounded-xl transition-all`}>
-                              <Icon className={`w-6 h-6 text-${colorClass}-600`} />
-                            </div>
-                            <div className={`text-sm font-bold text-${colorClass}-600 bg-${colorClass}-50 px-3 py-1 rounded-full`}>
-                              {project.status || 'Active'}
-                            </div>
+                      <button
+                        type="button"
+                        onClick={() => toggleGroup(group.name)}
+                        className="w-full flex flex-col gap-4 text-left"
+                      >
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                          <div>
+                            <p className="text-sm font-semibold text-emerald-600 uppercase tracking-wide">Common Project</p>
+                            <h3 className="text-2xl font-bold text-gray-900">{group.name}</h3>
                           </div>
-                          
-                          <h3 className="text-xl font-bold text-gray-900 mb-2">{project.name}</h3>
-                          <p className="text-sm text-gray-600 mb-4 line-clamp-2">{project.description}</p>
-                          
-                          <div className="flex items-center gap-2 text-emerald-600 font-semibold text-sm group-hover:gap-3 transition-all">
-                            View Details
-                            <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                          <div className="flex flex-wrap items-center gap-3">
+                            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-semibold">
+                              <FolderKanban className="w-4 h-4" />
+                              {group.projects.length} {projectLabel}
+                            </span>
+                            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-yellow-50 text-yellow-700 font-semibold">
+                              <Target className="w-4 h-4" />
+                              {group.activeCount} Active
+                            </span>
+                            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-semibold">
+                              <CheckCircle2 className="w-4 h-4" />
+                              {group.completedCount} Completed
+                            </span>
+                            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-50 text-purple-700 font-semibold">
+                              <Users className="w-4 h-4" />
+                              {formatMetricValue(group.totalBeneficiaries)} Beneficiaries
+                            </span>
+                            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-50 text-orange-700 font-semibold">
+                              <Zap className="w-4 h-4" />
+                              {formattedBudget}
+                            </span>
+                            <span className={`p-2 rounded-full border border-gray-200 transition-transform ${isExpanded ? 'bg-emerald-50 text-emerald-600 rotate-180' : 'text-gray-500'}`}>
+                              <ChevronDown className="w-5 h-5" />
+                            </span>
                           </div>
                         </div>
-                      </div>
-                    </motion.button>
+                      </button>
+
+                      <AnimatePresence initial={false}>
+                        {isExpanded && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.25 }}
+                            className="mt-5 border-t border-gray-100 pt-5"
+                          >
+                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                              {group.projects.map((project, projectIndex) => {
+                                const Icon = getIconComponent(project.display_icon);
+                                const colorClass = project.display_color || 'emerald';
+
+                                return (
+                                  <motion.button
+                                    key={project.id}
+                                    initial={{ opacity: 0, y: 15 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: projectIndex * 0.05 }}
+                                    onClick={() => handleProjectClick(project)}
+                                    className="group relative text-left"
+                                  >
+                                    <div className={`absolute inset-0 bg-linear-to-br from-${colorClass}-500/15 to-${colorClass}-600/15 rounded-2xl blur-2xl group-hover:blur-3xl transition-all opacity-0 group-hover:opacity-100`}></div>
+
+                                    <div className="relative bg-white border-2 border-gray-200 hover:border-emerald-500 rounded-2xl p-6 transition-all duration-300 hover:shadow-2xl hover:shadow-emerald-500/20 hover:-translate-y-2 overflow-hidden">
+                                      <div className={`absolute top-0 right-0 w-24 h-24 bg-${colorClass}-500/5 rounded-bl-3xl group-hover:bg-${colorClass}-500/10 transition-colors`}></div>
+
+                                      <div className="relative z-10">
+                                        <div className="flex items-start justify-between mb-4">
+                                          <div className={`p-3 bg-${colorClass}-100 group-hover:bg-${colorClass}-200 rounded-xl transition-all`}>
+                                            <Icon className={`w-6 h-6 text-${colorClass}-600`} />
+                                          </div>
+                                          <div className={`text-sm font-bold text-${colorClass}-600 bg-${colorClass}-50 px-3 py-1 rounded-full`}>
+                                            {project.status || 'Active'}
+                                          </div>
+                                        </div>
+
+                                        <h3 className="text-lg font-bold text-gray-900 mb-1">{project.name}</h3>
+                                        <p className="text-sm text-gray-600 mb-4 line-clamp-2">{project.description}</p>
+
+                                        <div className="flex items-center gap-2 text-emerald-600 font-semibold text-sm group-hover:gap-3 transition-all">
+                                          View Details
+                                          <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </motion.button>
+                                );
+                              })}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </motion.div>
                   );
                 })}
               </div>

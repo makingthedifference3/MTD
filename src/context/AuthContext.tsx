@@ -3,13 +3,13 @@ import type { AuthUser } from '../services/authService';
 
 export interface AuthContextType {
   currentUser: AuthUser | null;
-  currentRole: 'admin' | 'accountant' | 'project_manager' | 'team_member' | 'client' | null;
+  currentRole: 'admin' | 'accountant' | 'project_manager' | 'team_member' | 'client' | 'data_manager' | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (user: AuthUser) => void;
   logout: () => void;
-  setSelectedRole: (role: 'admin' | 'accountant' | 'project_manager' | 'team_member' | null) => void;
-  selectedRole: 'admin' | 'accountant' | 'project_manager' | 'team_member' | null;
+  setSelectedRole: (role: 'admin' | 'accountant' | 'project_manager' | 'team_member' | 'data_manager' | null) => void;
+  selectedRole: 'admin' | 'accountant' | 'project_manager' | 'team_member' | 'data_manager' | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -24,7 +24,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [currentUser, setCurrentUserState] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedRole, setSelectedRole] = useState<
-    'admin' | 'accountant' | 'project_manager' | 'team_member' | null
+    'admin' | 'accountant' | 'project_manager' | 'team_member' | 'data_manager' | null
   >(null);
 
   // Load user from localStorage on mount
@@ -59,6 +59,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     | 'accountant'
     | 'project_manager'
     | 'team_member'
+    | 'data_manager'
     | 'client') || null;
 
   const isAuthenticated = !!currentUser;
