@@ -477,23 +477,53 @@ class ProjectsService {
    * Archive project (soft delete)
    */
   async archiveProject(projectId: string): Promise<Project | null> {
+    const success = await this.deleteProject(projectId);
+    if (!success) {
+      return null;
+    }
+
+    return this.getProjectById(projectId);
+  }
+
+  /**
+   * Delete project (soft delete)
+   */
+  async deleteProject(projectId: string): Promise<boolean> {
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('projects')
         .update({
           is_active: false,
           status: 'archived',
           updated_at: new Date().toISOString(),
         })
-        .eq('id', projectId)
-        .select()
-        .single();
+        .eq('id', projectId);
 
       if (error) throw error;
-      return data;
+      await this.archiveChildProjects(projectId);
+      return true;
     } catch (error) {
-      console.error('Error archiving project:', error);
-      throw error;
+      console.error('Error deleting project:', error);
+      return false;
+    }
+  }
+
+  private async archiveChildProjects(parentProjectId: string): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('projects')
+        .update({
+          is_active: false,
+          status: 'archived',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('parent_project_id', parentProjectId);
+
+      if (error) {
+        throw error;
+      }
+    } catch (error) {
+      console.error('Error archiving child projects:', error);
     }
   }
 

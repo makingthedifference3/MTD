@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { FormEvent, Dispatch, SetStateAction } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, FolderKanban, DollarSign, X, MapPin, Calendar, Loader, LayoutDashboard } from 'lucide-react';
+import { Plus, FolderKanban, DollarSign, X, MapPin, Calendar, Loader, LayoutDashboard, Trash2 } from 'lucide-react';
 import { useFilter } from '../context/useFilter';
 import { useAuth } from '../context/useAuth';
 import { useNavigate } from 'react-router-dom';
@@ -175,7 +175,7 @@ const SECONDARY_IMPACT_METRICS: ImpactMetricKey[] = ['students_enrolled', 'schoo
 import type { Project as ServiceProject } from '../services/projectsService';
 
 const ProjectsPage = () => {
-  const { projects, filteredProjects, selectedPartner, selectedProject, refreshData, setSelectedPartner, setSelectedProject, setSelectedToll } = useFilter();
+  const { projects, filteredProjects, selectedProject, refreshData, setSelectedPartner, setSelectedProject, setSelectedToll } = useFilter();
   const { currentRole, currentUser } = useAuth();
   const navigate = useNavigate();
   const [selectedProjectDetails, setSelectedProjectDetails] = useState<Project | null>(null);
@@ -198,6 +198,10 @@ const ProjectsPage = () => {
   const [impactMetricsForm, setImpactMetricsForm] = useState<ImpactMetricEntry[]>([]);
   const [isSubmittingImpactMetrics, setIsSubmittingImpactMetrics] = useState(false);
   const [projectCustomMetricName, setProjectCustomMetricName] = useState('');
+  const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isDeletingProject, setIsDeletingProject] = useState(false);
+  const [projectDeleteError, setProjectDeleteError] = useState<string | null>(null);
 
   // Add project modal state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -608,6 +612,51 @@ const ProjectsPage = () => {
     }
   };
 
+  const openProjectDeleteModal = (project: Project) => {
+    if (isDeletingProject) return;
+    setProjectDeleteError(null);
+    setProjectToDelete(project);
+    setIsDeleteModalOpen(true);
+  };
+
+  const closeProjectDeleteModal = () => {
+    if (isDeletingProject) return;
+    setIsDeleteModalOpen(false);
+    setProjectToDelete(null);
+    setProjectDeleteError(null);
+  };
+
+  const confirmProjectDelete = async () => {
+    if (!projectToDelete) return;
+    setIsDeletingProject(true);
+    setProjectDeleteError(null);
+
+    try {
+      const success = await projectsService.deleteProject(projectToDelete.id);
+      if (!success) {
+        setProjectDeleteError('Unable to delete project.');
+        return;
+      }
+
+      if (selectedProjectDetails?.id === projectToDelete.id) {
+        setSelectedProjectDetails(null);
+      }
+
+      setSelectedProject?.(null);
+
+      if (refreshData) {
+        await refreshData();
+      }
+
+      closeProjectDeleteModal();
+    } catch (err) {
+      console.error('Failed to delete project:', err);
+      setProjectDeleteError('Unable to delete project.');
+    } finally {
+      setIsDeletingProject(false);
+    }
+  };
+
   const getProjectStatus = (project: Project): 'on-track' | 'completed' => {
     // Map database status values to display status
     if (project.status === 'completed') return 'completed';
@@ -964,14 +1013,14 @@ const ProjectsPage = () => {
       : filteredProjects && filteredProjects.length > 0
       ? filteredProjects
       : projects;
-    
+
     // Apply work filter
     if (workFilter) {
       projectList = projectList.filter(p => p.work === workFilter);
     }
-    
+
     return projectList;
-  }, [selectedProject, selectedPartner, filteredProjects, projects, workFilter]);
+  }, [selectedProject, filteredProjects, projects, workFilter]);
 
   const getStatusColor = (status: 'on-track' | 'completed') => {
     switch (status) {
@@ -1033,72 +1082,90 @@ const ProjectsPage = () => {
 
       {/* Projects Grid */}
       <div className="grid grid-cols-1 gap-6 mt-6">
-        {displayProjects.map((project, index) => (
-          <motion.div
-            key={project.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.05 }}
-            className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow"
-          >
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-center space-x-3">
-                <div className="p-3 bg-emerald-50 rounded-xl">
-                  <FolderKanban className="w-6 h-6 text-emerald-600" />
+        {displayProjects.map((project, index) => {
+          const isCurrentDeleting = isDeletingProject && projectToDelete?.id === project.id;
+
+          return (
+            <motion.div
+              key={project.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.05 }}
+              className="relative bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-center space-x-3">
+                  <div className="p-3 bg-emerald-50 rounded-xl">
+                    <FolderKanban className="w-6 h-6 text-emerald-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-gray-900 text-lg">{project.name}</h3>
+                    <p className="text-sm text-gray-600">{project.project_code} • {project.location}</p>
+                    {project.toll?.toll_name && (
+                      <p className="text-xs text-emerald-600 mt-1">Toll: {project.toll.toll_name}</p>
+                    )}
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-bold text-gray-900 text-lg">{project.name}</h3>
-                  <p className="text-sm text-gray-600">{project.project_code} • {project.location}</p>
-                  {project.toll?.toll_name && (
-                    <p className="text-xs text-emerald-600 mt-1">Toll: {project.toll.toll_name}</p>
+                <div className="flex items-center gap-2">
+                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(getProjectStatus(project))}`}>
+                    {getProjectStatus(project).replace('-', ' ').toUpperCase()}
+                  </span>
+                  {currentRole === 'admin' && (
+                    <button
+                      onClick={() => openProjectDeleteModal(project)}
+                      disabled={isCurrentDeleting}
+                      className="px-3 py-2 rounded-lg text-sm flex items-center gap-1 border border-red-200 text-red-700 hover:bg-red-50 disabled:opacity-60"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span>Delete</span>
+                    </button>
                   )}
                 </div>
               </div>
-              <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(getProjectStatus(project))}`}>
-                {getProjectStatus(project).replace('-', ' ').toUpperCase()}
-              </span>
-            </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
-              <div className="flex items-center space-x-2">
-                <DollarSign className="w-4 h-4 text-emerald-600" />
-                <div>
-                  <p className="text-xs text-gray-600">Budget</p>
-                  <p className="text-sm font-semibold text-gray-900">₹{((project.total_budget || 0) / 1000).toFixed(0)}K</p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+                <div className="flex items-center space-x-2">
+                  <DollarSign className="w-4 h-4 text-emerald-600" />
+                  <div>
+                    <p className="text-xs text-gray-600">Budget</p>
+                    <p className="text-sm font-semibold text-gray-900">₹{((project.total_budget || 0) / 1000).toFixed(0)}K</p>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center space-x-2">
-                <DollarSign className="w-4 h-4 text-emerald-600" />
-                <div>
-                  <p className="text-xs text-gray-600">Utilized</p>
-                  <p className="text-sm font-semibold text-gray-900">₹{((project.utilized_budget || 0) / 1000).toFixed(0)}K</p>
+                <div className="flex items-center space-x-2">
+                  <DollarSign className="w-4 h-4 text-emerald-600" />
+                  <div>
+                    <p className="text-xs text-gray-600">Utilized</p>
+                    <p className="text-sm font-semibold text-gray-900">₹{((project.utilized_budget || 0) / 1000).toFixed(0)}K</p>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center space-x-2">
-                <FolderKanban className="w-4 h-4 text-emerald-600" />
-                <div>
+                <div className="flex items-center space-x-2">
+                  <FolderKanban className="w-4 h-4 text-emerald-600" />
+                  <div>
                     <p className="text-xs text-gray-600">{project.beneficiary_type || (project as { metadata?: { beneficiary_type?: string } }).metadata?.beneficiary_type || 'Beneficiaries'}</p>
                     <p className="text-sm font-semibold text-gray-900">{(project.direct_beneficiaries || 0).toLocaleString()}</p>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="flex gap-2 mt-4">
-              <button 
-                onClick={() => setSelectedProjectDetails(project)}
-                className="flex-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-medium py-2 rounded-lg transition-colors">
-                View Details
-              </button>
-              <button
-                onClick={() => handleViewProjectDashboard(project)}
-                className="flex-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-medium py-2 rounded-lg transition-colors flex items-center justify-center gap-2"
-              >
-                <LayoutDashboard className="w-4 h-4" />
-                View Dashboard
-              </button>
-            </div>
-          </motion.div>
-        ))}
+              <div className="flex gap-2 mt-4">
+                <button
+                  onClick={() => setSelectedProjectDetails(project)}
+                  className="flex-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-medium py-2 rounded-lg transition-colors"
+                >
+                  View Details
+                </button>
+                <button
+                  onClick={() => handleViewProjectDashboard(project)}
+                  className="flex-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-medium py-2 rounded-lg transition-colors flex items-center justify-center gap-2"
+                >
+                  <LayoutDashboard className="w-4 h-4" />
+                  View Dashboard
+                </button>
+              </div>
+
+            </motion.div>
+          );
+        })}
       </div>
 
       {/* Empty State */}
@@ -1149,6 +1216,19 @@ const ProjectsPage = () => {
                       className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold transition-colors disabled:bg-emerald-300"
                     >
                       {isPreparingEdit ? 'Preparing...' : 'Edit Project'}
+                    </button>
+                  )}
+                  {currentRole === 'admin' && (
+                    <button
+                      type="button"
+                      onClick={() => openProjectDeleteModal(selectedProjectDetails)}
+                      disabled={isDeletingProject && projectToDelete?.id === selectedProjectDetails.id}
+                      className="px-4 py-2 rounded-xl border border-red-200 text-red-700 hover:bg-red-50 text-sm font-semibold transition-colors disabled:opacity-60"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Trash2 className="w-4 h-4" />
+                        <span>Delete</span>
+                      </div>
                     </button>
                   )}
                   <button
@@ -1605,6 +1685,67 @@ const ProjectsPage = () => {
                   className="flex-1 px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-900 font-medium rounded-xl transition-colors"
                 >
                   Close
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isDeleteModalOpen && projectToDelete && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+            onClick={closeProjectDeleteModal}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-gray-100 p-6"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <p className="text-sm font-medium text-red-600">Delete Project</p>
+                  <h3 className="text-2xl font-bold text-gray-900">Confirm removal</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeProjectDeleteModal}
+                  className="p-2 rounded-full hover:bg-gray-100"
+                  aria-label="Close delete modal"
+                >
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+              <p className="text-gray-600">
+                Deleting "{projectToDelete.name}" removes it from the dashboard and its reporting will no longer be available.
+                This action cannot be undone.
+              </p>
+              {projectDeleteError && (
+                <p className="mt-4 text-sm text-red-600">{projectDeleteError}</p>
+              )}
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={closeProjectDeleteModal}
+                  disabled={isDeletingProject}
+                  className="px-5 py-2 rounded-lg border border-gray-200 text-gray-600 font-semibold hover:bg-gray-50 disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmProjectDelete}
+                  disabled={isDeletingProject}
+                  className="px-5 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold disabled:opacity-60 flex items-center gap-2"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  {isDeletingProject ? 'Deleting...' : 'Delete project'}
                 </button>
               </div>
             </motion.div>

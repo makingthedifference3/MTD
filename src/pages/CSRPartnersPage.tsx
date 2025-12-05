@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Dispatch, SetStateAction, FormEvent, ReactNode } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Plus, Building2, MapPin, Phone, Mail, Loader, X, User2, Info, Settings, Eye, EyeOff } from 'lucide-react';
+import { Search, Plus, Building2, MapPin, Phone, Mail, Loader, X, User2, Info, Settings, Eye, EyeOff, Trash2, Key } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { INDIAN_STATES } from '@/constants/indianStates';
 import {
@@ -17,6 +17,8 @@ import {
 } from '@/services/csrPartnersService';
 import { getTollCountForPartner } from '@/services/tollsService';
 import { useFilter } from '@/context/useFilter';
+import { csrPartnerService } from '@/services/csrPartnerService';
+import PasswordViewer from '@/components/PasswordViewer';
 
 const INITIAL_FORM_STATE = {
   name: '',
@@ -27,7 +29,6 @@ const INITIAL_FORM_STATE = {
   city: '',
   state: '',
   isCustomState: false,
-  status: 'active',
   hasToll: false,
   poc_password: '',
   confirmPassword: '',
@@ -52,7 +53,7 @@ const PARTNER_TEXT_FIELDS: Array<{
 
 const CSRPartnersPage = () => {
   const navigate = useNavigate();
-  const { projects } = useFilter();
+  const { projects, refreshData } = useFilter();
   const [searchTerm, setSearchTerm] = useState('');
   const [partners, setPartners] = useState<CSRPartnerStats[]>([]);
   const [allPartners, setAllPartners] = useState<CSRPartnerStats[]>([]);
@@ -62,7 +63,9 @@ const CSRPartnersPage = () => {
     activePartners: 0,
     totalProjects: 0,
     totalBudget: 0,
+    totalTolls: 0,
   });
+  const [deletingPartnerId, setDeletingPartnerId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -77,6 +80,9 @@ const CSRPartnersPage = () => {
   const [editFormData, setEditFormData] = useState(INITIAL_FORM_STATE);
   const [isEditSubmitting, setIsEditSubmitting] = useState(false);
   const [editFormError, setEditFormError] = useState<string | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [partnerPendingDeleteId, setPartnerPendingDeleteId] = useState<string | null>(null);
+  const [partnerPendingDeleteName, setPartnerPendingDeleteName] = useState('');
   const fetchPartnerData = useCallback(async () => {
     try {
       setLoading(true);
@@ -158,6 +164,14 @@ const CSRPartnersPage = () => {
     return summary;
   }, [projects]);
 
+  const aggregatedBudgetTotal = useMemo(() => {
+    let total = 0;
+    partnerBudgetSummary.forEach((entry) => {
+      total += entry.total;
+    });
+    return total;
+  }, [partnerBudgetSummary]);
+
   const filteredPartners = partners;
 
   if (loading) {
@@ -178,9 +192,9 @@ const CSRPartnersPage = () => {
 
   const localStats = [
     { label: 'Total Partners', value: stats.totalPartners },
-    { label: 'Active Partners', value: stats.activePartners },
+    { label: 'Total Tolls', value: stats.totalTolls },
     { label: 'Total Projects', value: stats.totalProjects },
-    { label: 'Total Budget', value: `₹${(stats.totalBudget / 1000000).toFixed(1)}M` },
+    { label: 'Total Budget', value: `₹${(((aggregatedBudgetTotal || stats.totalBudget) || 0) / 1000000).toFixed(1)}M` },
   ];
 
   const selectedPartnerBudgetInfo = selectedPartner ? partnerBudgetSummary.get(selectedPartner.id) : undefined;
@@ -252,7 +266,6 @@ const CSRPartnersPage = () => {
         city: partnerDetails.city || '',
         state: partnerState,
         isCustomState: isCustomStateValue(partnerState),
-        status: partnerDetails.is_active ? 'active' : 'inactive',
         hasToll: Boolean(partnerDetails.has_toll),
         poc_password: '',
         confirmPassword: '',
@@ -262,6 +275,37 @@ const CSRPartnersPage = () => {
     } catch (err) {
       console.error('Failed to load partner for edit:', err);
     }
+  };
+
+  const confirmDeletePartner = async () => {
+    if (!partnerPendingDeleteId || deletingPartnerId) return;
+
+    try {
+      setDeletingPartnerId(partnerPendingDeleteId);
+      const success = await csrPartnerService.deletePartnerCascade(partnerPendingDeleteId);
+      if (success) {
+        await fetchPartnerData();
+        if (selectedPartner?.id === partnerPendingDeleteId) {
+          setSelectedPartner(null);
+        }
+        await refreshData();
+      }
+    } catch (err) {
+      console.error('Failed to delete partner:', err);
+      alert('Unable to delete partner.');
+    } finally {
+      setDeletingPartnerId(null);
+      setPartnerPendingDeleteId(null);
+      setPartnerPendingDeleteName('');
+      setDeleteModalOpen(false);
+    }
+  };
+
+  const closeDeleteModal = () => {
+    if (deletingPartnerId) return;
+    setDeleteModalOpen(false);
+    setPartnerPendingDeleteId(null);
+    setPartnerPendingDeleteName('');
   };
 
   const handleUpdatePartner = async (event: FormEvent<HTMLFormElement>) => {
@@ -283,7 +327,7 @@ const CSRPartnersPage = () => {
     try {
       setIsEditSubmitting(true);
       setEditFormError(null);
-      const payload = buildPartnerPayload(editFormData);
+      const payload = buildPartnerPayload(editFormData, false);
       await updateCSRPartner(selectedPartner.id, payload);
       setIsEditModalOpen(false);
       setEditFormData({ ...INITIAL_FORM_STATE });
@@ -431,6 +475,18 @@ const CSRPartnersPage = () => {
               >
                 Edit
               </button>
+              <button
+                onClick={() => {
+                  setPartnerPendingDeleteId(partner.id);
+                  setPartnerPendingDeleteName(partner.name);
+                  setDeleteModalOpen(true);
+                }}
+                disabled={!!deletingPartnerId}
+                className="flex items-center justify-center gap-1 bg-red-50 hover:bg-red-100 text-red-700 font-semibold py-2 px-4 rounded-lg transition-colors border border-red-100 disabled:opacity-60"
+              >
+                <Trash2 className="w-4 h-4" />
+                Delete
+              </button>
               {partner.hasToll && (
                 <button
                   onClick={() => navigate(`/csr-partners/${partner.id}/tolls`)}
@@ -504,7 +560,55 @@ const CSRPartnersPage = () => {
             }
           }}
           onSubmit={handleUpdatePartner}
+          currentPassword={selectedPartner?.poc_password ?? null}
         />
+      )}
+      {deleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-gray-100 p-6"
+          >
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <p className="text-sm font-medium text-red-600">Delete CSR Partner</p>
+                <h3 className="text-2xl font-bold text-gray-900">Confirm deletion</h3>
+              </div>
+              <button
+                type="button"
+                onClick={closeDeleteModal}
+                className="p-2 rounded-full hover:bg-gray-100"
+                aria-label="Close delete modal"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <p className="text-gray-600">
+              Are you sure you want to delete {partnerPendingDeleteName || 'this partner'}?
+              This action removes the partner, its tolls, and projects from the dashboard.
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeDeleteModal}
+                disabled={!!deletingPartnerId}
+                className="px-5 py-2 rounded-lg border border-gray-200 text-gray-600 font-semibold hover:bg-gray-50 disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeletePartner}
+                disabled={!!deletingPartnerId}
+                className="px-5 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold disabled:opacity-60 flex items-center gap-2"
+              >
+                <Trash2 className="w-4 h-4" />
+                Delete
+              </button>
+            </div>
+          </motion.div>
+        </div>
       )}
     </div>
   );
@@ -512,12 +616,15 @@ const CSRPartnersPage = () => {
 
 export default CSRPartnersPage;
 
-const buildPartnerPayload = (values: typeof INITIAL_FORM_STATE): Omit<CSRPartner, 'id' | 'created_at' | 'updated_at'> => {
+const buildPartnerPayload = (
+  values: typeof INITIAL_FORM_STATE,
+  includeEmptyPassword = true
+): Omit<CSRPartner, 'id' | 'created_at' | 'updated_at'> => {
   const now = new Date().toISOString();
   const fiscalYear = `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
   const companyName = values.companyName.trim() || values.name.trim();
 
-  return {
+  const payload: Omit<CSRPartner, 'id' | 'created_at' | 'updated_at'> = {
     name: companyName,
     company_name: companyName,
     has_toll: values.hasToll,
@@ -551,13 +658,27 @@ const buildPartnerPayload = (values: typeof INITIAL_FORM_STATE): Omit<CSRPartner
       phone: values.phone.trim(),
     },
     documents: {},
-    is_active: values.status === 'active',
+    is_active: true,
     metadata: { source: 'dashboard' },
     notes: '',
     created_by: null,
     updated_by: null,
-    poc_password: values.poc_password.trim() || null,
+    ...(values.poc_password.trim()
+      ? { poc_password: values.poc_password.trim() }
+      : includeEmptyPassword
+        ? { poc_password: null }
+        : {}),
   };
+  const trimmedPassword = values.poc_password.trim();
+  if (trimmedPassword) {
+    payload.poc_password = trimmedPassword;
+  } else if (includeEmptyPassword) {
+    payload.poc_password = null;
+  } else {
+    delete payload.poc_password;
+  }
+
+  return payload;
 };
 
 interface PasswordFieldsProps {
@@ -789,25 +910,6 @@ const AddPartnerModal = ({ formData, setFormData, isSubmitting, formError, onClo
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <label className="text-sm font-medium text-gray-700">
-            Status
-            <select
-              value={formData.status}
-              onChange={(e) =>
-                setFormData((prev) => ({
-                  ...prev,
-                  status: e.target.value,
-                }))
-              }
-              className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-            >
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
-          </label>
-        </div>
-
         {formError && <p className="text-sm text-red-600">{formError}</p>}
 
         <div className="flex items-center justify-end gap-3">
@@ -839,9 +941,10 @@ interface EditPartnerModalProps {
   formError: string | null;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  currentPassword?: string | null;
 }
 
-const EditPartnerModal = ({ formData, setFormData, isSubmitting, formError, onClose, onSubmit }: EditPartnerModalProps) => (
+const EditPartnerModal = ({ formData, setFormData, isSubmitting, formError, onClose, onSubmit, currentPassword }: EditPartnerModalProps) => (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
     <motion.div
       initial={{ opacity: 0, y: 40 }}
@@ -985,6 +1088,15 @@ const EditPartnerModal = ({ formData, setFormData, isSubmitting, formError, onCl
           </>
         )}
 
+        {currentPassword !== undefined && (
+          <PasswordViewer
+            label="Current Partner Password"
+            password={currentPassword}
+            description="Leave the fields below empty to keep it unchanged."
+            className="rounded-2xl border border-gray-200 bg-gray-50 p-4"
+          />
+        )}
+
         <PasswordFields formData={formData} setFormData={setFormData} />
 
         {formData.hasToll && (
@@ -995,25 +1107,6 @@ const EditPartnerModal = ({ formData, setFormData, isSubmitting, formError, onCl
             </p>
           </div>
         )}
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <label className="text-sm font-medium text-gray-700">
-            Status
-            <select
-              value={formData.status}
-              onChange={(e) =>
-                setFormData((prev) => ({
-                  ...prev,
-                  status: e.target.value,
-                }))
-              }
-              className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-            >
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
-          </label>
-        </div>
 
         {formError && <p className="text-sm text-red-600">{formError}</p>}
 
@@ -1106,6 +1199,8 @@ const PartnerDetailsModal = ({ partner, isLoading, error, budgetTotal, directBud
               />
             </div>
 
+            <DetailPasswordRow password={partner.poc_password} />
+
             {partner.notes && (
               <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
                 <p className="text-sm font-semibold text-gray-700 mb-2">Notes</p>
@@ -1147,5 +1242,19 @@ const BudgetBreakdownRow = ({ label, amount }: { label: string; amount: number }
   <div className="flex items-center justify-between text-sm text-gray-700">
     <span>{label}</span>
     <span className="font-semibold text-gray-900">₹{amount.toLocaleString()}</span>
+  </div>
+);
+
+const DetailPasswordRow = ({ password }: { password?: string | null }) => (
+  <div className="flex items-center gap-3 rounded-xl border border-gray-100 px-4 py-3">
+    <div className="p-2 rounded-xl bg-emerald-50 text-emerald-700">
+      <Key className="w-4 h-4" />
+    </div>
+    <PasswordViewer
+      label="Partner Password"
+      password={password ?? null}
+      className="flex-1"
+      labelClassName="text-xs uppercase tracking-wide text-gray-500"
+    />
   </div>
 );

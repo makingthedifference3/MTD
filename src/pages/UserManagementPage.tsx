@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, Edit2, Trash2, Search, Loader, Check, X } from 'lucide-react';
 import { getAllUsers, createUser, updateUser, deleteUser, type AuthUser } from '../services/authService';
+import PasswordViewer from '../components/PasswordViewer';
 
 type RoleType = 'admin' | 'accountant' | 'project_manager' | 'team_member' | 'data_manager';
 type FormMode = 'create' | 'edit' | null;
@@ -75,6 +76,8 @@ export default function UserManagementPage() {
     e.preventDefault();
     setFormError('');
     setFormSuccess('');
+    const trimmedPassword = formData.password.trim();
+    const trimmedConfirm = formData.confirmPassword.trim();
 
     // Validation
     if (!formData.username.trim()) {
@@ -91,15 +94,25 @@ export default function UserManagementPage() {
     }
 
     if (formMode === 'create') {
-      if (!formData.password) {
+      if (!trimmedPassword) {
         setFormError('Password is required');
         return;
       }
-      if (formData.password.length < 6) {
+      if (trimmedPassword.length < 6) {
         setFormError('Password must be at least 6 characters');
         return;
       }
-      if (formData.password !== formData.confirmPassword) {
+      if (trimmedPassword !== trimmedConfirm) {
+        setFormError('Passwords do not match');
+        return;
+      }
+    }
+    else if (formMode === 'edit' && trimmedPassword) {
+      if (trimmedPassword.length < 6) {
+        setFormError('Password must be at least 6 characters');
+        return;
+      }
+      if (trimmedPassword !== trimmedConfirm) {
         setFormError('Passwords do not match');
         return;
       }
@@ -111,7 +124,7 @@ export default function UserManagementPage() {
           username: formData.username,
           email: formData.email,
           full_name: formData.full_name,
-          password: formData.password,
+          password: trimmedPassword,
           role: formData.role,
           is_active: formData.is_active,
         });
@@ -142,8 +155,8 @@ export default function UserManagementPage() {
           is_active: formData.is_active,
         };
 
-        if (formData.password) {
-          updateData.password = formData.password;
+          if (trimmedPassword) {
+            updateData.password = trimmedPassword;
         }
 
         const updated = await updateUser(selectedUser.id, updateData);
@@ -314,6 +327,17 @@ export default function UserManagementPage() {
                   <option value="admin">Admin</option>
                 </select>
               </div>
+
+              {formMode === 'edit' && (
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 mb-4">
+                  <PasswordViewer
+                    label="Stored Password"
+                    password={selectedUser?.password ?? null}
+                    description="Enter a new password to update this user."
+                    className="text-xs"
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">

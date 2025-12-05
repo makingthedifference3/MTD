@@ -211,6 +211,12 @@ export const deleteToll = async (id: string): Promise<boolean> => {
       .eq('id', id);
 
     if (error) throw error;
+    const { error: projectError } = await supabase
+      .from('projects')
+      .update({ is_active: false, status: 'archived', updated_at: new Date().toISOString() })
+      .eq('toll_id', id);
+
+    if (projectError) throw projectError;
     return true;
   } catch (error) {
     console.error('Error deleting toll:', error);

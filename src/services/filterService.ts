@@ -160,6 +160,7 @@ export const fetchAllProjects = async (): Promise<Project[]> => {
       .from('projects')
       .select(PROJECT_SELECT_FIELDS)
       .is('parent_project_id', null)
+      .eq('is_active', true)
       .order('name', { ascending: true });
 
     if (error) {

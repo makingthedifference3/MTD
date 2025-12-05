@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, Edit2, Trash2, Building2, MapPin, DollarSign, Users } from 'lucide-react';
+import { useFilter } from '../context/useFilter';
+import { useDelayedUndoAction } from '../hooks/useDelayedUndoAction';
 import { csrPartnerService, type CSRPartner, type CSRPartnerToll } from '../services/csrPartnerService';
+import PasswordViewer from '../components/PasswordViewer';
 
 const AdminCSRPartnerManagement = () => {
   const [csrPartners, setCSRPartners] = useState<CSRPartner[]>([]);
@@ -23,6 +26,8 @@ const AdminCSRPartnerManagement = () => {
     state: '',
     budget_allocation: '',
   });
+  const { refreshData } = useFilter();
+  const { pendingActions, scheduleAction, undoAction, isPending } = useDelayedUndoAction(10000);
 
   // Load CSR Partners
   useEffect(() => {
@@ -46,6 +51,37 @@ const AdminCSRPartnerManagement = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSchedulePartnerDelete = (partner: CSRPartner) => {
+    if (isPending('partner', partner.id)) return;
+
+    scheduleAction('partner', partner.id, `CSR Partner: ${partner.company_name || partner.id}`, async () => {
+      const success = await csrPartnerService.deletePartnerCascade(partner.id);
+      if (!success) return;
+      setSelectedPartner((current) => (current?.id === partner.id ? null : current));
+      setTolls((current) => {
+        if (partner.id in current) {
+          const next = { ...current };
+          delete next[partner.id];
+          return next;
+        }
+        return current;
+      });
+      await loadCSRPartners();
+      await refreshData();
+    });
+  };
+
+  const handleScheduleTollDelete = (partner: CSRPartner, toll: CSRPartnerToll) => {
+    if (isPending('toll', toll.id)) return;
+
+    scheduleAction('toll', toll.id, `Toll: ${toll.poc_name || toll.toll_name || toll.id}`, async () => {
+      const success = await csrPartnerService.deleteToll(toll.id);
+      if (!success) return;
+      await loadCSRPartners();
+      await refreshData();
+    });
   };
 
   const handleAddPartner = async (e: React.FormEvent) => {
@@ -111,24 +147,6 @@ const AdminCSRPartnerManagement = () => {
     }
   };
 
-  const handleDeleteToll = async (tollId: string) => {
-    if (!window.confirm('Are you sure you want to delete this toll?')) return;
-
-    try {
-      const success = await csrPartnerService.deleteToll(tollId);
-      if (success && selectedPartner) {
-        setTolls({
-          ...tolls,
-          [selectedPartner.id]: tolls[selectedPartner.id].filter(t => t.id !== tollId),
-        });
-        alert('Toll deleted successfully!');
-      }
-    } catch (error) {
-      console.error('Error deleting toll:', error);
-      alert('Failed to delete toll');
-    }
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -160,6 +178,34 @@ const AdminCSRPartnerManagement = () => {
             </button>
           </div>
         </motion.div>
+
+        {pendingActions.length > 0 && (
+          <div className="mb-6 space-y-3">
+            {pendingActions.map((action) => {
+              const entityLabel = action.entityType === 'partner' ? 'CSR Partner' : 'Toll';
+              const secondsLeft = Math.max(0, Math.ceil((action.expiresAt - Date.now()) / 1000));
+              return (
+                <div
+                  key={action.key}
+                  className="flex items-center justify-between gap-4 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 text-sm text-amber-800"
+                >
+                  <div>
+                    <p className="font-semibold">{entityLabel} deletion scheduled</p>
+                    <p className="text-xs text-amber-600">
+                      {action.label} — undo within {secondsLeft}s
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => undoAction(action.key)}
+                    className="px-3 py-1 rounded-lg bg-white border border-amber-200 text-amber-700 font-semibold"
+                  >
+                    Undo
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Add Partner Form */}
         {showPartnerForm && (
@@ -217,175 +263,233 @@ const AdminCSRPartnerManagement = () => {
 
         {/* CSR Partners Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {csrPartners.map((partner) => (
-            <motion.div
-              key={partner.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              onClick={() => setSelectedPartner(selectedPartner?.id === partner.id ? null : partner)}
-              className={`rounded-2xl border-2 p-6 cursor-pointer transition-all ${
-                selectedPartner?.id === partner.id
-                  ? 'border-emerald-500 bg-emerald-50 shadow-lg'
-                  : 'border-gray-200 bg-white hover:border-emerald-200'
-              }`}
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div className="p-3 bg-emerald-100 rounded-xl">
-                  <Building2 className="w-6 h-6 text-emerald-600" />
-                </div>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    // Handle edit
-                  }}
-                  className="p-2 hover:bg-gray-100 rounded-lg"
-                >
-                  <Edit2 className="w-5 h-5 text-gray-600" />
-                </button>
-              </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">{partner.company_name}</h3>
-              <div className="space-y-2 text-sm text-gray-600">
-                <div className="flex items-center space-x-2">
-                  <MapPin className="w-4 h-4" />
-                  <span>{partner.city}, {partner.state}</span>
-                </div>
-              </div>
+          {csrPartners.map((partner) => {
+            const pendingEntry = pendingActions.find((entry) => entry.key === `partner:${partner.id}`);
+            const pendingSecondsLeft = pendingEntry
+              ? Math.max(0, Math.ceil((pendingEntry.expiresAt - Date.now()) / 1000))
+              : 0;
 
-              {/* Tolls for this partner */}
-              {selectedPartner?.id === partner.id && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  className="mt-6 pt-6 border-t border-emerald-200"
-                >
-                  <div className="flex items-center justify-between mb-4">
-                    <h4 className="font-semibold text-gray-900 flex items-center space-x-2">
-                      <Users className="w-5 h-5" />
-                      <span>Tolls/Sub-offices ({tolls[partner.id]?.length || 0})</span>
-                    </h4>
+            return (
+              <motion.div
+                key={partner.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.05 }}
+                onClick={() => {
+                  if (isPending('partner', partner.id)) return;
+                  setSelectedPartner(selectedPartner?.id === partner.id ? null : partner);
+                }}
+                className={`relative rounded-2xl border-2 p-6 cursor-pointer transition-all ${
+                  selectedPartner?.id === partner.id
+                    ? 'border-emerald-500 bg-emerald-50 shadow-lg'
+                    : 'border-gray-200 bg-white hover:border-emerald-200'
+                }`}
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div className="p-3 bg-emerald-100 rounded-xl">
+                    <Building2 className="w-6 h-6 text-emerald-600" />
+                  </div>
+                  <div className="flex items-center gap-2">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        setShowTollForm(true);
+                        // Handle edit
                       }}
-                      className="flex items-center space-x-1 bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded-lg text-sm"
+                      className="px-3 py-2 hover:bg-gray-100 rounded-lg flex items-center gap-1 text-sm text-gray-700"
                     >
-                      <Plus className="w-4 h-4" />
-                      <span>Add Toll</span>
+                      <Edit2 className="w-4 h-4" />
+                      <span>Edit</span>
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSchedulePartnerDelete(partner);
+                      }}
+                      className="px-3 py-2 hover:bg-red-50 rounded-lg flex items-center gap-1 text-sm text-red-700"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span>Delete</span>
                     </button>
                   </div>
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">{partner.company_name}</h3>
+                <div className="space-y-2 text-sm text-gray-600">
+                  <div className="flex items-center space-x-2">
+                    <MapPin className="w-4 h-4" />
+                    <span>{partner.city}, {partner.state}</span>
+                  </div>
+                </div>
 
-                  {showTollForm && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="bg-emerald-50 rounded-xl p-4 mb-4"
-                    >
-                      <form onSubmit={handleAddToll} className="space-y-3">
-                        <input
-                          type="text"
-                          placeholder="POC Name *"
-                          value={tollFormData.poc_name}
-                          onChange={(e) => setTollFormData({ ...tollFormData, poc_name: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                          required
-                        />
-                        <div className="grid grid-cols-2 gap-2">
-                          <input
-                            type="text"
-                            placeholder="Contact"
-                            value={tollFormData.contact_number}
-                            onChange={(e) => setTollFormData({ ...tollFormData, contact_number: e.target.value })}
-                            className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                          />
-                          <input
-                            type="email"
-                            placeholder="Email"
-                            value={tollFormData.email_id}
-                            onChange={(e) => setTollFormData({ ...tollFormData, email_id: e.target.value })}
-                            className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                          />
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <input
-                            type="text"
-                            placeholder="City"
-                            value={tollFormData.city}
-                            onChange={(e) => setTollFormData({ ...tollFormData, city: e.target.value })}
-                            className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                          />
-                          <input
-                            type="text"
-                            placeholder="State"
-                            value={tollFormData.state}
-                            onChange={(e) => setTollFormData({ ...tollFormData, state: e.target.value })}
-                            className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                          />
-                        </div>
-                        <input
-                          type="number"
-                          placeholder="Budget Allocation"
-                          value={tollFormData.budget_allocation}
-                          onChange={(e) => setTollFormData({ ...tollFormData, budget_allocation: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                        />
-                        <div className="flex justify-end space-x-2">
-                          <button
-                            type="button"
-                            onClick={() => setShowTollForm(false)}
-                            className="px-3 py-1 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            type="submit"
-                            className="px-3 py-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-sm"
-                          >
-                            Add
-                          </button>
-                        </div>
-                      </form>
-                    </motion.div>
-                  )}
+                {selectedPartner?.id === partner.id && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="mt-6 pt-6 border-t border-emerald-200"
+                  >
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="font-semibold text-gray-900 flex items-center space-x-2">
+                        <Users className="w-5 h-5" />
+                        <span>Tolls/Sub-offices ({tolls[partner.id]?.length || 0})</span>
+                      </h4>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowTollForm(true);
+                        }}
+                        className="flex items-center space-x-1 bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded-lg text-sm"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Add Toll</span>
+                      </button>
+                    </div>
 
-                  {tolls[partner.id]?.length > 0 ? (
-                    <div className="space-y-2">
-                      {tolls[partner.id].map((toll) => (
-                        <div key={toll.id} className="bg-white rounded-lg p-3 border border-gray-200">
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <p className="font-semibold text-gray-900">{toll.poc_name}</p>
-                              <p className="text-xs text-gray-500">{toll.city}, {toll.state}</p>
-                              {toll.contact_number && (
-                                <p className="text-xs text-gray-600">{toll.contact_number}</p>
-                              )}
-                            </div>
+                    <div className="rounded-2xl border border-gray-200 bg-gray-50 p-3 mb-4">
+                      <PasswordViewer
+                        label="Partner Password"
+                        password={partner.poc_password ?? null}
+                        description="Existing password for partner access settings"
+                        className="text-sm"
+                      />
+                    </div>
+
+                    {showTollForm && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-emerald-50 rounded-xl p-4 mb-4"
+                      >
+                        <form onSubmit={handleAddToll} className="space-y-3">
+                          <input
+                            type="text"
+                            placeholder="POC Name *"
+                            value={tollFormData.poc_name}
+                            onChange={(e) => setTollFormData({ ...tollFormData, poc_name: e.target.value })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                            required
+                          />
+                          <div className="grid grid-cols-2 gap-2">
+                            <input
+                              type="text"
+                              placeholder="Contact"
+                              value={tollFormData.contact_number}
+                              onChange={(e) => setTollFormData({ ...tollFormData, contact_number: e.target.value })}
+                              className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                            />
+                            <input
+                              type="email"
+                              placeholder="Email"
+                              value={tollFormData.email_id}
+                              onChange={(e) => setTollFormData({ ...tollFormData, email_id: e.target.value })}
+                              className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <input
+                              type="text"
+                              placeholder="City"
+                              value={tollFormData.city}
+                              onChange={(e) => setTollFormData({ ...tollFormData, city: e.target.value })}
+                              className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                            />
+                            <input
+                              type="text"
+                              placeholder="State"
+                              value={tollFormData.state}
+                              onChange={(e) => setTollFormData({ ...tollFormData, state: e.target.value })}
+                              className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                            />
+                          </div>
+                          <input
+                            type="number"
+                            placeholder="Budget Allocation"
+                            value={tollFormData.budget_allocation}
+                            onChange={(e) => setTollFormData({ ...tollFormData, budget_allocation: e.target.value })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                          />
+                          <div className="flex justify-end space-x-2">
                             <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteToll(toll.id);
-                              }}
-                              className="p-1 hover:bg-red-100 rounded-lg"
+                              type="button"
+                              onClick={() => setShowTollForm(false)}
+                              className="px-3 py-1 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm"
                             >
-                              <Trash2 className="w-4 h-4 text-red-600" />
+                              Cancel
+                            </button>
+                            <button
+                              type="submit"
+                              className="px-3 py-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-sm"
+                            >
+                              Add
                             </button>
                           </div>
-                          {toll.budget_allocation > 0 && (
-                            <div className="mt-2 flex items-center space-x-1 text-xs text-emerald-600">
-                              <DollarSign className="w-3 h-3" />
-                              <span>Budget: {toll.budget_allocation.toLocaleString()}</span>
+                        </form>
+                      </motion.div>
+                    )}
+
+                    {tolls[partner.id]?.length > 0 ? (
+                      <div className="space-y-2">
+                        {tolls[partner.id].map((toll) => {
+                          const pendingEntry = pendingActions.find((entry) => entry.key === `toll:${toll.id}`);
+                          const secondsLeft = pendingEntry
+                            ? Math.max(0, Math.ceil((pendingEntry.expiresAt - Date.now()) / 1000))
+                            : 0;
+                          return (
+                            <div key={toll.id} className="relative bg-white rounded-lg p-3 border border-gray-200">
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <p className="font-semibold text-gray-900">{toll.poc_name}</p>
+                                  <p className="text-xs text-gray-500">{toll.city}, {toll.state}</p>
+                                  {toll.contact_number && (
+                                    <p className="text-xs text-gray-600">{toll.contact_number}</p>
+                                  )}
+                                </div>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleScheduleTollDelete(partner, toll);
+                                  }}
+                                  className="p-1 hover:bg-red-100 rounded-lg"
+                                >
+                                  <Trash2 className="w-4 h-4 text-red-600" />
+                                </button>
+                              </div>
+                              <div className="mt-3">
+                                <PasswordViewer
+                                  label="Toll Password"
+                                  password={toll.poc_password ?? null}
+                                  description="Stored password for this toll's POC"
+                                  className="rounded-2xl border border-gray-200 bg-gray-50 p-3"
+                                />
+                              </div>
+                              {toll.budget_allocation > 0 && (
+                                <div className="mt-2 flex items-center space-x-1 text-xs text-emerald-600">
+                                  <DollarSign className="w-3 h-3" />
+                                  <span>Budget: {toll.budget_allocation.toLocaleString()}</span>
+                                </div>
+                              )}
+                              {pendingEntry && (
+                                <div className="pointer-events-none absolute inset-0 rounded-lg bg-white/80 flex flex-col items-center justify-center gap-1 text-amber-700 text-center px-3">
+                                  <p className="text-xs font-semibold">Deletion queued</p>
+                                  <p className="text-[11px] text-amber-600">{secondsLeft}s left • Undo above</p>
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-500 text-center py-4">No tolls added yet</p>
-                  )}
-                </motion.div>
-              )}
-            </motion.div>
-          ))}
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500 text-center py-4">No tolls added yet</p>
+                    )}
+                  </motion.div>
+                )}
+                {pendingEntry && (
+                  <div className="pointer-events-none absolute inset-0 rounded-2xl bg-white/80 flex flex-col items-center justify-center gap-1 text-amber-700 text-center px-4">
+                    <p className="text-sm font-semibold">Deletion queued</p>
+                    <p className="text-xs text-amber-600">{pendingSecondsLeft}s left • Undo above</p>
+                  </div>
+                )}
+              </motion.div>
+            );
+          })}
         </div>
 
         {csrPartners.length === 0 && (

@@ -34,7 +34,7 @@ export interface CSRPartner {
   is_active: boolean;
   notes: string;
   metadata: Record<string, string | number>;
-  poc_password: string | null;
+  poc_password?: string | null;
   created_at: string;
   updated_at: string;
   created_by: string | null;
@@ -59,6 +59,7 @@ export interface PartnerStats {
   activePartners: number;
   totalProjects: number;
   totalBudget: number;
+  totalTolls: number;
 }
 
 /**
@@ -242,7 +243,7 @@ export const getCSRPartnersWithStats = async (): Promise<CSRPartnerStats[]> => {
         email,
         budget_allocated,
         is_active,
-        projects:projects(id)
+        projects:projects(id,is_active)
       `
       )
       .eq('is_active', true)
@@ -258,10 +259,13 @@ export const getCSRPartnersWithStats = async (): Promise<CSRPartnerStats[]> => {
       contactPerson: (partner.contact_person as string) || 'N/A',
       phone: (partner.phone as string) || 'N/A',
       email: (partner.email as string) || 'N/A',
-      activeProjects: (partner.projects as Array<{ id: string }>) ? (partner.projects as Array<{ id: string }>).length : 0,
       totalBudget: (partner.budget_allocated as number) || 0,
       status: 'active' as const,
       hasToll: Boolean(partner.has_toll),
+      activeProjects:
+        ((partner.projects as Array<{ id: string; is_active?: boolean }>) || []).filter(
+          (proj) => proj.is_active
+        ).length,
     }));
 
     return stats;
@@ -276,29 +280,39 @@ export const getCSRPartnersWithStats = async (): Promise<CSRPartnerStats[]> => {
  */
 export const getPartnerStats = async (): Promise<PartnerStats> => {
   try {
-    // Get all partners
-    const { data: allPartners, error: partnersError } = await supabase
+    const { data: activePartners, error: partnersError } = await supabase
       .from('csr_partners')
-      .select('id, is_active, budget_allocated');
+      .select('id, budget_allocated')
+      .eq('is_active', true);
 
     if (partnersError) throw partnersError;
 
-    const partners = (allPartners || []) as Array<{ id: string; is_active: boolean; budget_allocated: number }>;
+    const partners = (activePartners || []) as Array<{ id: string; budget_allocated: number }>;
 
-    // Get all projects
-    const { data: allProjects, error: projectsError } = await supabase
+    const { data: activeProjects, error: projectsError } = await supabase
       .from('projects')
-      .select('id, csr_partner_id');
+      .select('id, csr_partner_id')
+      .eq('is_active', true);
 
     if (projectsError) throw projectsError;
 
-    const projects = (allProjects || []) as Array<{ id: string; csr_partner_id: string }>;
+    const projects = (activeProjects || []) as Array<{ id: string; csr_partner_id: string }>;
+
+    const { data: activeTolls, error: tollsError } = await supabase
+      .from('csr_partner_tolls')
+      .select('id')
+      .eq('is_active', true);
+
+    if (tollsError) throw tollsError;
+
+    const tollCount = (activeTolls || []).length;
 
     const stats: PartnerStats = {
       totalPartners: partners.length,
-      activePartners: partners.filter((p) => p.is_active).length,
+      activePartners: partners.length,
       totalProjects: projects.length,
       totalBudget: partners.reduce((sum: number, p) => sum + (p.budget_allocated || 0), 0),
+      totalTolls: tollCount,
     };
 
     return stats;
@@ -309,6 +323,7 @@ export const getPartnerStats = async (): Promise<PartnerStats> => {
       activePartners: 0,
       totalProjects: 0,
       totalBudget: 0,
+      totalTolls: 0,
     };
   }
 };
