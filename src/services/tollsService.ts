@@ -202,34 +202,38 @@ export const updateToll = async (id: string, input: UpdateTollInput): Promise<To
 };
 
 /**
- * Delete a toll (soft delete by setting is_active to false)
+ * Delete a toll and remove related projects from Supabase
  */
 export const deleteToll = async (id: string): Promise<boolean> => {
   try {
-    const { error } = await supabase
-      .from('csr_partner_tolls')
-      .update({ is_active: false, updated_at: new Date().toISOString() })
-      .eq('id', id);
-
-    if (error) throw error;
-    const { error: projectError } = await supabase
+    // Collect projects linked to this toll so we can remove dependents
+    const { data: projectsForToll, error: projectFetchError } = await supabase
       .from('projects')
-      .update({ is_active: false, status: 'archived', updated_at: new Date().toISOString() })
+      .select('id')
       .eq('toll_id', id);
 
-    if (projectError) throw projectError;
-    return true;
-  } catch (error) {
-    console.error('Error deleting toll:', error);
-    return false;
-  }
-};
+    if (projectFetchError) throw projectFetchError;
 
-/**
- * Hard delete a toll
- */
-export const hardDeleteToll = async (id: string): Promise<boolean> => {
-  try {
+    const projectIds = (projectsForToll || []).map((p) => p.id);
+
+    // Remove project team members tied to those projects to avoid FK issues
+    if (projectIds.length > 0) {
+      const { error: ptmDeleteError } = await supabase
+        .from('project_team_members')
+        .delete()
+        .in('project_id', projectIds);
+
+      if (ptmDeleteError) throw ptmDeleteError;
+
+      const { error: projectsDeleteError } = await supabase
+        .from('projects')
+        .delete()
+        .in('id', projectIds);
+
+      if (projectsDeleteError) throw projectsDeleteError;
+    }
+
+    // Finally delete the toll itself
     const { error } = await supabase
       .from('csr_partner_tolls')
       .delete()
@@ -238,7 +242,7 @@ export const hardDeleteToll = async (id: string): Promise<boolean> => {
     if (error) throw error;
     return true;
   } catch (error) {
-    console.error('Error hard deleting toll:', error);
+    console.error('Error deleting toll:', error);
     return false;
   }
 };
@@ -289,7 +293,6 @@ export const tollsService = {
   createToll,
   updateToll,
   deleteToll,
-  hardDeleteToll,
   partnerHasTolls,
   getTollCountForPartner,
 };
