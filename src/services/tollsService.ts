@@ -13,6 +13,7 @@ export interface Toll {
   city: string | null;
   state: string | null;
   budget_allocation: number;
+  poc_password?: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;

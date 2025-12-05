@@ -73,7 +73,7 @@ const AdminCSRPartnerManagement = () => {
     });
   };
 
-  const handleScheduleTollDelete = (partner: CSRPartner, toll: CSRPartnerToll) => {
+  const handleScheduleTollDelete = (toll: CSRPartnerToll) => {
     if (isPending('toll', toll.id)) return;
 
     scheduleAction('toll', toll.id, `Toll: ${toll.poc_name || toll.toll_name || toll.id}`, async () => {
@@ -445,7 +445,7 @@ const AdminCSRPartnerManagement = () => {
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    handleScheduleTollDelete(partner, toll);
+                                    handleScheduleTollDelete(toll);
                                   }}
                                   className="p-1 hover:bg-red-100 rounded-lg"
                                 >

@@ -39,7 +39,7 @@ const PasswordViewer = ({
           </button>
         )}
       </div>
-      <p className={valueClassName ?? 'text-sm font-semibold text-gray-900 break-words'}>{displayValue}</p>
+      <p className={valueClassName ?? 'text-sm font-semibold text-gray-900 wrap-break-word'}>{displayValue}</p>
       {description && <p className="text-xs text-gray-500">{description}</p>}
     </div>
   );
