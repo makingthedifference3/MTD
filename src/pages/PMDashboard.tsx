@@ -4,7 +4,7 @@ import {
   FolderKanban, ChevronRight,
   ArrowLeft, MapPin, Briefcase, Leaf, Building2, Heart, Droplet, GraduationCap,
   CheckCircle2, Users, Activity, Award, type LucideIcon, BarChart3, Grid3x3,
-  Target, Zap, Info
+  Target, Zap
 } from 'lucide-react';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Label, Legend } from 'recharts';
 import { useFilter } from '../context/useFilter';
@@ -525,9 +525,9 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <h3 className="text-xl font-bold text-gray-900">Budget vs Utilization</h3>
-                  {/* <p className="text-sm text-gray-500">Total budget split by utilized and remaining</p> */}
+                  <p className="text-sm text-gray-500">Total budget split by utilized and remaining</p>
                 </div>
-              
+                <span className="text-sm text-gray-500">{analyticsProjects.length} projects</span>
               </div>
 
               {(() => {
