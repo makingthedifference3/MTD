@@ -127,8 +127,6 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
           type="date"
           value={startDateFilter}
           onChange={(e) => setStartDateFilter(e.target.value)}
-          min={defaultStartDate}
-          max={defaultEndDate}
           className="w-full rounded-xl border-2 border-emerald-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 px-3 py-2 text-sm"
         />
       </div>
@@ -138,8 +136,6 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
           type="date"
           value={endDateFilter}
           onChange={(e) => setEndDateFilter(e.target.value)}
-          min={defaultStartDate}
-          max={defaultEndDate}
           className="w-full rounded-xl border-2 border-emerald-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 px-3 py-2 text-sm"
         />
       </div>
