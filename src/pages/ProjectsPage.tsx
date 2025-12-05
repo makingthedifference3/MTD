@@ -11,6 +11,7 @@ import type { Project as ProjectServiceProject } from '../services/projectsServi
 import { projectsService } from '../services/projectsService';
 import { getActiveCSRPartners, type CSRPartner } from '../services/csrPartnersService';
 import { getTollsByPartnerId, type Toll } from '../services/tollsService';
+import { formatIndianRupee } from '../utils/currency';
 import {
   addProjectTeamMembers,
   replaceProjectTeamMembers,
@@ -1136,14 +1137,14 @@ const ProjectsPage = () => {
                   <DollarSign className="w-4 h-4 text-emerald-600" />
                   <div>
                     <p className="text-xs text-gray-600">Budget</p>
-                    <p className="text-sm font-semibold text-gray-900">₹{((project.total_budget || 0) / 1000).toFixed(0)}K</p>
+                    <p className="text-sm font-semibold text-gray-900">{formatIndianRupee(project.total_budget ?? 0)}</p>
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">
                   <DollarSign className="w-4 h-4 text-emerald-600" />
                   <div>
                     <p className="text-xs text-gray-600">Utilized</p>
-                    <p className="text-sm font-semibold text-gray-900">₹{((project.utilized_budget || 0) / 1000).toFixed(0)}K</p>
+                    <p className="text-sm font-semibold text-gray-900">{formatIndianRupee(project.utilized_budget ?? 0)}</p>
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">

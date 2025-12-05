@@ -19,6 +19,7 @@ import { getTollCountForPartner } from '@/services/tollsService';
 import { useFilter } from '@/context/useFilter';
 import { csrPartnerService } from '@/services/csrPartnerService';
 import PasswordViewer from '@/components/PasswordViewer';
+import { formatIndianRupee } from '@/utils/currency';
 
 const INITIAL_FORM_STATE = {
   name: '',
@@ -194,7 +195,10 @@ const CSRPartnersPage = () => {
     { label: 'Total Partners', value: stats.totalPartners },
     { label: 'Total Tolls', value: stats.totalTolls },
     { label: 'Total Projects', value: stats.totalProjects },
-    { label: 'Total Budget', value: `₹${(((aggregatedBudgetTotal || stats.totalBudget) || 0) / 1000000).toFixed(1)}M` },
+    {
+      label: 'Total Budget',
+      value: formatIndianRupee((aggregatedBudgetTotal || stats.totalBudget) || 0),
+    },
   ];
 
   const selectedPartnerBudgetInfo = selectedPartner ? partnerBudgetSummary.get(selectedPartner.id) : undefined;
@@ -453,7 +457,7 @@ const CSRPartnersPage = () => {
                 </div>
                 <div>
                   <p className="text-xs text-gray-600 mb-1">Total Budget</p>
-                  <p className="text-xl font-bold text-emerald-600">₹{(partnerBudgetValue / 1000).toFixed(0)}K</p>
+                  <p className="text-xl font-bold text-emerald-600">{formatIndianRupee(partnerBudgetValue)}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-600 mb-1">Tolls</p>
@@ -1195,7 +1199,7 @@ const PartnerDetailsModal = ({ partner, isLoading, error, budgetTotal, directBud
               <DetailRow
                 icon={<Info className="w-4 h-4" />}
                 label="Project Budget"
-                value={`₹${(budgetTotal || 0).toLocaleString()}`}
+                value={formatIndianRupee(budgetTotal || 0)}
               />
             </div>
 
@@ -1241,7 +1245,7 @@ const DetailRow = ({ icon, label, value }: { icon: ReactNode; label: string; val
 const BudgetBreakdownRow = ({ label, amount }: { label: string; amount: number }) => (
   <div className="flex items-center justify-between text-sm text-gray-700">
     <span>{label}</span>
-    <span className="font-semibold text-gray-900">₹{amount.toLocaleString()}</span>
+    <span className="font-semibold text-gray-900">{formatIndianRupee(amount)}</span>
   </div>
 );
 

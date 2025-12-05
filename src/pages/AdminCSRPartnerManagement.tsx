@@ -5,6 +5,7 @@ import { useFilter } from '../context/useFilter';
 import { useDelayedUndoAction } from '../hooks/useDelayedUndoAction';
 import { csrPartnerService, type CSRPartner, type CSRPartnerToll } from '../services/csrPartnerService';
 import PasswordViewer from '../components/PasswordViewer';
+import { formatIndianRupee } from '../utils/currency';
 
 const AdminCSRPartnerManagement = () => {
   const [csrPartners, setCSRPartners] = useState<CSRPartner[]>([]);
@@ -463,7 +464,7 @@ const AdminCSRPartnerManagement = () => {
                               {toll.budget_allocation > 0 && (
                                 <div className="mt-2 flex items-center space-x-1 text-xs text-emerald-600">
                                   <DollarSign className="w-3 h-3" />
-                                  <span>Budget: {toll.budget_allocation.toLocaleString()}</span>
+                                  <span>Budget: {formatIndianRupee(toll.budget_allocation)}</span>
                                 </div>
                               )}
                               {pendingEntry && (
