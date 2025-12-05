@@ -25,6 +25,7 @@ import CSRBudgetPage from './pages/CSRBudgetPage';
 import DailyReportPage from './pages/DailyReportPage';
 import DashboardFormsPage from './pages/DashboardFormsPage';
 import UpcomingExpensesPage from './pages/UpcomingExpensesPage';
+import ManageUpcomingExpensesPage from './pages/ManageUpcomingExpensesPage';
 import CSRPartnersPage from './pages/CSRPartnersPage';
 import ProjectsPage from './pages/ProjectsPage';
 import UserAssignmentPage from './pages/UserAssignmentPage';
@@ -98,6 +99,7 @@ function AppRoutes() {
       <Route path="/data-entry" element={<ProtectedRoute><Sidebar currentPage="data-entry" onNavigate={() => {}}><DataEntryPage /></Sidebar></ProtectedRoute>} />
       <Route path="/csr-budget" element={<ProtectedRoute><Sidebar currentPage="csr-budget" onNavigate={() => {}}><CSRBudgetPage /></Sidebar></ProtectedRoute>} />
       <Route path="/upcoming-expenses" element={<ProtectedRoute><Sidebar currentPage="upcoming-expenses" onNavigate={() => {}}><UpcomingExpensesPage /></Sidebar></ProtectedRoute>} />
+      <Route path="/acc-upcoming-expenses" element={<ProtectedRoute><Sidebar currentPage="acc-upcoming-expenses" onNavigate={() => {}}><ManageUpcomingExpensesPage /></Sidebar></ProtectedRoute>} />
       <Route path="/bills" element={<ProtectedRoute><Sidebar currentPage="bills" onNavigate={() => {}}><Bills /></Sidebar></ProtectedRoute>} />
       <Route path="/analysis-report" element={<ProtectedRoute><Sidebar currentPage="analysis-report" onNavigate={() => {}}><AnalysisReport /></Sidebar></ProtectedRoute>} />
       <Route

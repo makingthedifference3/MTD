@@ -23,6 +23,9 @@ export interface ProjectExpense {
   rejection_reason?: string;
   csr_partner_id?: string;
   toll_id?: string;
+  bill_drive_link?: string;
+  receipt_drive_link?: string;
+  created_by?: string;
   created_at: string;
   updated_at: string;
 }
@@ -459,6 +462,20 @@ export const projectExpensesService = {
     } catch (error) {
       console.error('Error fetching expense categories:', error);
       return [];
+    }
+  },
+
+  async deleteExpense(expenseId: string): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('project_expenses')
+        .delete()
+        .eq('id', expenseId);
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error deleting expense:', error);
+      throw error;
     }
   },
 };

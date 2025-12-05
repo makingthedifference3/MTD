@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { XCircle, Clock, CheckCircle2, Ban, DollarSign, AlertTriangle } from 'lucide-react';
+import { XCircle, Clock, CheckCircle2, Ban, DollarSign, AlertTriangle, Loader } from 'lucide-react';
 import { projectExpensesService } from '../services/projectExpensesService';
 import type { ProjectExpense } from '../services/projectExpensesService';
 import { supabase } from '../services/supabaseClient';
@@ -93,6 +93,9 @@ const AccountantExpensesPage: React.FC = () => {
       projectTotal?: number;
     };
   }>({ show: false, level: null, message: '', stats: {} });
+  const [showReceiptUploadModal, setShowReceiptUploadModal] = useState(false);
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [uploadingReceipt, setUploadingReceipt] = useState(false);
 
   useEffect(() => {
     if (currentUser) {
@@ -112,7 +115,9 @@ const AccountantExpensesPage: React.FC = () => {
         fetchExpenseCategories(),
       ]);
       
-      setExpenses(allExpenses);
+      // Filter out draft expenses
+      const nonDraftExpenses = allExpenses.filter(expense => expense.status !== 'draft');
+      setExpenses(nonDraftExpenses);
       setUserMap(users);
       setCSRPartners(partners);
       setProjects(projectsList);
@@ -648,16 +653,135 @@ const AccountantExpensesPage: React.FC = () => {
 
   const handleMarkAsPaid = async () => {
     if (selectedExpense && currentUser) {
-      try {
-        await projectExpensesService.markAsPaid(
-          selectedExpense.id,
-          currentUser.id
-        );
-        setShowModal(false);
-        await loadData();
-      } catch (error) {
-        console.error('Error marking expense as paid:', error);
+      // Show receipt upload modal
+      setShowReceiptUploadModal(true);
+    }
+  };
+
+  const handleUploadReceipt = async () => {
+    if (!selectedExpense || !currentUser || !receiptFile) {
+      alert('Please select a receipt file to upload.');
+      return;
+    }
+
+    try {
+      setUploadingReceipt(true);
+      
+      // Get current user's name
+      const uploaderName = currentUser.full_name?.replace(/\s+/g, '_') || 'Unknown';
+      
+      // Format bill date
+      const billDate = new Date(selectedExpense.date).toISOString().split('T')[0]; // YYYY-MM-DD
+      
+      // Get file extension
+      const fileExtension = receiptFile.name.split('.').pop();
+      
+      // Create filename: receipt_uploaderName_billDate.ext
+      const fileName = `receipt_${uploaderName}_${billDate}.${fileExtension}`;
+      const filePath = `receipt/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('MTD_Bills')
+        .upload(filePath, receiptFile, {
+          upsert: true // Allow overwrite if same filename exists
+        });
+
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        alert('Failed to upload receipt. Please try again.');
+        setUploadingReceipt(false);
+        return;
       }
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('MTD_Bills')
+        .getPublicUrl(filePath);
+
+      const receiptUrl = urlData.publicUrl;
+
+      // Update expense with receipt URL and mark as paid FIRST
+      const { error: updateError } = await supabase
+        .from('project_expenses')
+        .update({
+          status: 'paid',
+          receipt_drive_link: receiptUrl
+        })
+        .eq('id', selectedExpense.id);
+
+      if (updateError) {
+        console.error('Error updating expense:', updateError);
+        throw updateError;
+      }
+
+      // Only update budget utilization AFTER successfully marking as paid
+      const expenseAmount = selectedExpense.total_amount;
+      
+      // Update budget category utilized amount if budget_category_id exists
+      const budgetCategoryId = (selectedExpense as any).budget_category_id;
+      if (budgetCategoryId) {
+        try {
+          // Get current utilized amount
+          const { data: budgetCatData, error: fetchError } = await supabase
+            .from('budget_categories')
+            .select('utilized_amount')
+            .eq('id', budgetCategoryId)
+            .single();
+          
+          if (!fetchError) {
+            const currentUtilized = budgetCatData?.utilized_amount || 0;
+            
+            // Update utilized amount
+            const { error: updateCatError } = await supabase
+              .from('budget_categories')
+              .update({ utilized_amount: currentUtilized + expenseAmount })
+              .eq('id', budgetCategoryId);
+            
+            if (updateCatError) {
+              console.warn('Could not update budget category utilized amount:', updateCatError);
+            }
+          }
+        } catch (err) {
+          console.warn('Budget category update skipped:', err);
+        }
+      }
+      
+      // Update project utilized budget
+      if (selectedExpense.project_id) {
+        try {
+          const { data: projectData, error: fetchProjError } = await supabase
+            .from('projects')
+            .select('utilized_budget')
+            .eq('id', selectedExpense.project_id)
+            .single();
+          
+          if (!fetchProjError) {
+            const currentProjectUtilized = projectData?.utilized_budget || 0;
+            
+            const { error: updateProjError } = await supabase
+              .from('projects')
+              .update({ utilized_budget: currentProjectUtilized + expenseAmount })
+              .eq('id', selectedExpense.project_id);
+            
+            if (updateProjError) {
+              console.warn('Could not update project utilized budget:', updateProjError);
+            }
+          }
+        } catch (err) {
+          console.warn('Project budget update skipped:', err);
+        }
+      }
+
+      setShowReceiptUploadModal(false);
+      setShowModal(false);
+      setReceiptFile(null);
+      await loadData();
+      alert('Expense marked as paid with receipt uploaded successfully!');
+    } catch (error) {
+      console.error('Error marking expense as paid:', error);
+      alert('Failed to mark expense as paid. Please try again.');
+    } finally {
+      setUploadingReceipt(false);
     }
   };
 
@@ -1727,6 +1851,20 @@ const AccountantExpensesPage: React.FC = () => {
                   </button>
                 </div>
               )}
+              {(selectedExpense as ProjectExpense & { receipt_drive_link?: string }).receipt_drive_link && selectedExpense.status === 'paid' && (
+                <div>
+                  <label className="text-sm font-medium text-gray-600">Payment Receipt</label>
+                  <button
+                    onClick={() => {
+                      setBillUrl((selectedExpense as ProjectExpense & { receipt_drive_link?: string }).receipt_drive_link || '');
+                      setShowBillModal(true);
+                    }}
+                    className="text-blue-600 hover:text-blue-700 mt-1 block font-medium hover:underline"
+                  >
+                    View Payment Receipt
+                  </button>
+                </div>
+              )}
               <div className="flex gap-3 pt-4 border-t">
                 <button
                   onClick={handleSaveEdits}
@@ -1761,6 +1899,85 @@ const AccountantExpensesPage: React.FC = () => {
                   className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-3 px-4 rounded-lg transition-colors"
                 >
                   Close
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Receipt Upload Modal */}
+      {showReceiptUploadModal && selectedExpense && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden"
+          >
+            <div className="bg-linear-to-r from-green-500 to-green-600 p-6 text-white">
+              <h2 className="text-2xl font-bold">Upload Payment Receipt</h2>
+              <p className="text-green-100 mt-1">Upload proof of payment for {selectedExpense.expense_code}</p>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Receipt (PDF/Image) *</label>
+                <input
+                  type="file"
+                  accept="image/*,.pdf"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      // Check file size (max 10MB)
+                      if (file.size > 10 * 1024 * 1024) {
+                        alert('File size must be less than 10MB');
+                        e.target.value = '';
+                        return;
+                      }
+                      setReceiptFile(file);
+                    }
+                  }}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100"
+                  required
+                />
+                <p className="text-xs text-gray-500 mt-1">Upload payment receipt (max 10MB)</p>
+                {receiptFile && (
+                  <p className="text-xs text-green-600 mt-1 font-medium">✓ Selected: {receiptFile.name}</p>
+                )}
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-sm text-blue-800">
+                  <strong>Note:</strong> This receipt will be stored as proof of payment and can be viewed later.
+                </p>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={handleUploadReceipt}
+                  disabled={!receiptFile || uploadingReceipt}
+                  className="flex-1 bg-green-500 hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+                >
+                  {uploadingReceipt ? (
+                    <>
+                      <Loader className="w-5 h-5 animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-5 h-5" />
+                      Upload & Mark as Paid
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowReceiptUploadModal(false);
+                    setReceiptFile(null);
+                  }}
+                  disabled={uploadingReceipt}
+                  className="flex-1 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-50 disabled:cursor-not-allowed text-gray-700 font-medium py-3 px-4 rounded-lg transition-colors"
+                >
+                  Cancel
                 </button>
               </div>
             </div>
