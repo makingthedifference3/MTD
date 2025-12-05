@@ -259,6 +259,12 @@ const ProjectExpenses: React.FC = () => {
       return;
     }
 
+    // Enforce Bill required: either a selected file or a bill_drive_link must be present
+    if (!selectedFile && (!newExpense.bill_drive_link || newExpense.bill_drive_link.trim() === '')) {
+      alert('Please upload a bill (image or PDF) or provide a bill link. Bill is required.');
+      return;
+    }
+
     // Validate that we have a valid category_id
     let validCategoryId = newExpense.category_id;
     
@@ -920,27 +926,51 @@ const ProjectExpenses: React.FC = () => {
                       required
                     />
                   ) : (
-                    <select
-                      value={newExpense.category_id}
-                      onChange={(e) => {
-                        const categoryId = e.target.value;
-                        const category = categories.find(c => c.id === categoryId);
-                        setNewExpense({ 
-                          ...newExpense, 
-                          category_id: categoryId,
-                          category: category?.name || ''
-                        });
-                      }}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                      required
-                    >
-                      <option value="">Select Category</option>
-                      {categories.map((category) => (
-                        <option key={category.id} value={category.id}>
-                          {category.name}
-                        </option>
-                      ))}
-                    </select>
+                    <>
+                      <select
+                        value={newExpense.category_id}
+                        onChange={(e) => {
+                          const categoryId = e.target.value;
+                          if (categoryId === 'others') {
+                            // set category_id to 'others' and clear category name so user can type it
+                            setNewExpense({ ...newExpense, category_id: 'others', category: '' });
+                          } else {
+                            const category = categories.find(c => c.id === categoryId);
+                            setNewExpense({ 
+                              ...newExpense, 
+                              category_id: categoryId,
+                              category: category?.name || ''
+                            });
+                          }
+                        }}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        required
+                      >
+                        <option value="">Select Category</option>
+                        {categories.map((category) => (
+                          <option key={category.id} value={category.id}>
+                            {category.name}
+                          </option>
+                        ))}
+                        <option value="others">Others</option>
+                      </select>
+
+                      {/* Show custom category input when "Others" selected */}
+                      {newExpense.category_id === 'others' && (
+                        <input
+                          type="text"
+                          value={newExpense.category}
+                          onChange={(e) => setNewExpense({ 
+                            ...newExpense, 
+                            category: e.target.value,
+                            category_id: '' // keep category_id blank so creation logic will create it
+                          })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 mt-2"
+                          placeholder="Enter custom category name"
+                          required
+                        />
+                      )}
+                    </>
                   )}
                 </div>
 
@@ -988,7 +1018,7 @@ const ProjectExpenses: React.FC = () => {
 
                 {/* Bill Upload */}
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Bill</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Bill <span className="text-red-500">*</span></label>
                   <input
                     type="file"
                     accept="image/*,.pdf"
@@ -1005,8 +1035,10 @@ const ProjectExpenses: React.FC = () => {
                       }
                     }}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100"
+                    // visually required: we'll enforce requirement in JS as well
+                    required
                   />
-                  <p className="text-xs text-gray-500 mt-1">Upload bill image or PDF (max 5MB)</p>
+                  <p className="text-xs text-gray-500 mt-1">Upload bill image or PDF (max 5MB). Bill is required.</p>
                   {selectedFile && (
                     <p className="text-xs text-emerald-600 mt-1">Selected: {selectedFile.name}</p>
                   )}

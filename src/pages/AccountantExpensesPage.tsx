@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { XCircle, Clock, CheckCircle2, Ban, DollarSign } from 'lucide-react';
+import { XCircle, Clock, CheckCircle2, Ban, DollarSign, AlertTriangle } from 'lucide-react';
 import { projectExpensesService } from '../services/projectExpensesService';
 import type { ProjectExpense } from '../services/projectExpensesService';
 import { supabase } from '../services/supabaseClient';
@@ -23,7 +23,22 @@ interface Toll {
 interface Project {
   id: string;
   name: string;
+  total_budget?: number;
 }
+
+type ExportRow = {
+  ExpenseCode: string;
+  Date: string;
+  Merchant: string;
+  Description: string;
+  Category: string;
+  BudgetCategory: string;
+  BudgetSubCategory: string;
+  Project: string;
+  Status: string;
+  ModeOfPayment: string;
+  AmountDebited: number;
+};
 
 const AccountantExpensesPage: React.FC = () => {
   const { currentUser } = useAuth();
@@ -47,11 +62,9 @@ const AccountantExpensesPage: React.FC = () => {
   const [filterBudgetCategory, setFilterBudgetCategory] = useState<string>('');
   const [filterBudgetSubcategory, setFilterBudgetSubcategory] = useState<string>('');
   const [filterBudgetSubSubcategory, setFilterBudgetSubSubcategory] = useState<string>('');
-  // Filtered dropdowns based on selection
   const [filteredTolls, setFilteredTolls] = useState<Toll[]>([]);
   const [filteredProjects, setFilteredProjects] = useState<Project[]>([]);
-  const [filteredBudgetCategories, setFilteredBudgetCategories] = useState<Array<{id: string; name: string; parent_id: string | null}>>([]);
-  // Editable expense fields
+  const [filteredBudgetCategories, setFilteredBudgetCategories] = useState<Array<{id: string; name: string; parent_id: string | null; project_id: string}>>([]);
   const [editMode, setEditMode] = useState(false);
   const [editableCsrPartner, setEditableCsrPartner] = useState<string>('');
   const [editableProject, setEditableProject] = useState<string>('');
@@ -60,10 +73,26 @@ const AccountantExpensesPage: React.FC = () => {
   const [customCsrPartner, setCustomCsrPartner] = useState<string>('');
   const [customProject, setCustomProject] = useState<string>('');
   const [customToll, setCustomToll] = useState<string>('');
-  // Modal filtered dropdowns
   const [modalFilteredTolls, setModalFilteredTolls] = useState<Toll[]>([]);
   const [modalFilteredProjects, setModalFilteredProjects] = useState<Project[]>([]);
   const [modalFilteredBudgetCategories, setModalFilteredBudgetCategories] = useState<Array<{id: string; name: string; parent_id: string | null}>>([]);
+  const [expenseCategories, setExpenseCategories] = useState<Array<{id: string; name: string}>>([]);
+  const [editableCategory, setEditableCategory] = useState<string>('');
+  const [editableBudgetSubcategory, setEditableBudgetSubcategory] = useState<string>('');
+  const [editableBudgetSubSubcategory, setEditableBudgetSubSubcategory] = useState<string>('');
+  const [budgetWarning, setBudgetWarning] = useState<{
+    show: boolean;
+    level: 'subcategory' | 'category' | 'project' | null;
+    message: string;
+    stats: {
+      subcategoryRemaining?: number;
+      subcategoryTotal?: number;
+      categoryRemaining?: number;
+      categoryTotal?: number;
+      projectRemaining?: number;
+      projectTotal?: number;
+    };
+  }>({ show: false, level: null, message: '', stats: {} });
 
   useEffect(() => {
     if (currentUser) {
@@ -74,12 +103,13 @@ const AccountantExpensesPage: React.FC = () => {
 
   const loadData = async () => {
     try {
-      const [allExpenses, users, partners, projectsList, tollsList] = await Promise.all([
+      const [allExpenses, users, partners, projectsList, tollsList, categories] = await Promise.all([
         projectExpensesService.getAllExpenses(),
         fetchUsers(),
         fetchCSRPartners(),
         fetchProjects(),
         fetchTolls(),
+        fetchExpenseCategories(),
       ]);
       
       setExpenses(allExpenses);
@@ -89,6 +119,7 @@ const AccountantExpensesPage: React.FC = () => {
       setTolls(tollsList);
       setFilteredTolls(tollsList);
       setFilteredProjects(projectsList);
+      setExpenseCategories(categories);
       await fetchAllBudgetCategories();
     } catch (error) {
       console.error('Error loading data:', error);
@@ -132,7 +163,7 @@ const AccountantExpensesPage: React.FC = () => {
     try {
       const { data, error } = await supabase
         .from('projects')
-        .select('id, name')
+        .select('id, name, total_budget')
         .order('name');
       if (error) throw error;
       return data || [];
@@ -156,11 +187,26 @@ const AccountantExpensesPage: React.FC = () => {
     }
   };
 
+  const fetchExpenseCategories = async (): Promise<Array<{id: string; name: string}>> => {
+    try {
+      const { data, error } = await supabase
+        .from('expense_categories')
+        .select('id, name')
+        .eq('is_active', true)
+        .order('name');
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching expense categories:', error);
+      return [];
+    }
+  };
+
   const fetchAllBudgetCategories = async () => {
     try {
       const { data, error } = await supabase
         .from('budget_categories')
-        .select('id, name, parent_id, project_id')
+        .select('id, name, parent_id, project_id, allocated_amount')
         .order('name');
       if (error) throw error;
       setBudgetCategories(data || []);
@@ -172,24 +218,268 @@ const AccountantExpensesPage: React.FC = () => {
     }
   };
 
+  const quickCheckBudgetExceeded = (expense: ProjectExpense): boolean => {
+    // Only check for expenses that aren't already paid or rejected
+    if (!expense.project_id || expense.status === 'paid' || expense.status === 'rejected') {
+      return false;
+    }
+    
+    // Check budget category allocation if set
+    const budgetCategoryId = (expense as any).budget_category_id;
+    
+    console.log('QuickCheck for expense:', expense.expense_code, {
+      budgetCategoryId,
+      budgetCategoriesLength: budgetCategories.length,
+      status: expense.status
+    });
+    
+    if (budgetCategoryId && budgetCategories.length > 0) {
+      const budgetCat = budgetCategories.find(c => c.id === budgetCategoryId);
+      const allocated = (budgetCat as any)?.allocated_amount ?? 0; // Treat null/undefined as 0
+      
+      console.log('Found budget category:', {
+        found: !!budgetCat,
+        allocated,
+        expenseAmount: expense.total_amount
+      });
+      
+      // Calculate how much has been spent in this category (excluding current expense)
+      const categoryExpenses = expenses.filter(
+        e => (e as any).budget_category_id === budgetCategoryId &&
+        e.id !== expense.id &&
+        (e.status === 'paid' || e.status === 'approved' || e.status === 'accepted')
+      );
+      const categorySpent = categoryExpenses.reduce((sum, e) => sum + e.total_amount, 0);
+      
+      // Would this expense push us over budget? (including when budget is 0)
+      const totalAfterExpense = categorySpent + expense.total_amount;
+      const exceeded = totalAfterExpense > allocated;
+      
+      console.log('Budget check result:', {
+        categorySpent,
+        expenseAmount: expense.total_amount,
+        totalAfterExpense,
+        allocated,
+        exceeded
+      });
+      
+      if (exceeded) {
+        return true;
+      }
+    }
+    
+    // Also check project total budget (especially if no category budget set)
+    const project = projects.find(p => p.id === expense.project_id);
+    if (project) {
+      const projectBudget = project.total_budget ?? 0;
+      
+      // Calculate total spent in project (excluding current expense)
+      const projectExpenses = expenses.filter(
+        e => e.project_id === expense.project_id &&
+        e.id !== expense.id &&
+        (e.status === 'paid' || e.status === 'approved' || e.status === 'accepted')
+      );
+      const projectSpent = projectExpenses.reduce((sum, e) => sum + e.total_amount, 0);
+      const totalAfterExpense = projectSpent + expense.total_amount;
+      const exceeded = totalAfterExpense > projectBudget;
+      
+      console.log('Project budget check:', {
+        projectBudget,
+        projectSpent,
+        expenseAmount: expense.total_amount,
+        totalAfterExpense,
+        exceeded
+      });
+      
+      if (exceeded) {
+        return true;
+      }
+    }
+    
+    return false;
+  };
+
+  const checkBudgetAvailability = async (
+    projectId: string,
+    budgetCategoryId: string | null,
+    expenseAmount: number
+  ): Promise<void> => {
+    setBudgetWarning({ show: false, level: null, message: '', stats: {} });
+
+    if (!projectId) return;
+
+    try {
+      // Fetch project budget
+      const { data: projectData } = await supabase
+        .from('projects')
+        .select('total_budget')
+        .eq('id', projectId)
+        .single();
+
+      const projectTotalBudget = projectData?.total_budget || 0;
+
+      // Calculate project spent amount (paid + approved + accepted expenses)
+      const projectExpenses = expenses.filter(
+        e => e.project_id === projectId && 
+        (e.status === 'paid' || e.status === 'approved' || e.status === 'accepted')
+      );
+      const projectSpent = projectExpenses.reduce((sum, e) => sum + e.total_amount, 0);
+      const projectRemaining = projectTotalBudget - projectSpent;
+
+      // If budget category is selected, check category budgets
+      if (budgetCategoryId) {
+        const { data: budgetCategoryData } = await supabase
+          .from('budget_categories')
+          .select('id, name, parent_id, allocated_amount')
+          .eq('project_id', projectId);
+
+        const budgetCats = budgetCategoryData || [];
+        const selectedCategory = budgetCats.find(c => c.id === budgetCategoryId);
+
+        if (selectedCategory) {
+          // Calculate spent for this category and all its children
+          const getCategoryAndChildren = (catId: string): string[] => {
+            const children = budgetCats.filter(c => c.parent_id === catId).map(c => c.id);
+            return [catId, ...children.flatMap(childId => getCategoryAndChildren(childId))];
+          };
+
+          const categoryIds = getCategoryAndChildren(budgetCategoryId);
+          const categoryExpenses = expenses.filter(
+            e => categoryIds.includes((e as any).budget_category_id) &&
+            (e.status === 'paid' || e.status === 'approved' || e.status === 'accepted')
+          );
+          const categorySpent = categoryExpenses.reduce((sum, e) => sum + e.total_amount, 0);
+          const categoryTotal = selectedCategory.allocated_amount || 0;
+          const categoryRemaining = categoryTotal - categorySpent;
+
+          // Check if this is a subcategory or sub-subcategory
+          if (selectedCategory.parent_id) {
+            const parentCategory = budgetCats.find(c => c.id === selectedCategory.parent_id);
+            
+            // Check subcategory budget first
+            if (categoryRemaining - expenseAmount < 0) {
+              let level: 'subcategory' | 'category' = 'subcategory';
+              let message = `Budget exceeded for ${selectedCategory.name}!`;
+              const stats: any = {
+                subcategoryRemaining: categoryRemaining,
+                subcategoryTotal: categoryTotal,
+              };
+
+              // Check parent category budget
+              if (parentCategory) {
+                const parentCategoryIds = getCategoryAndChildren(parentCategory.id);
+                const parentExpenses = expenses.filter(
+                  e => parentCategoryIds.includes((e as any).budget_category_id) &&
+                  (e.status === 'paid' || e.status === 'approved' || e.status === 'accepted')
+                );
+                const parentSpent = parentExpenses.reduce((sum, e) => sum + e.total_amount, 0);
+                const parentTotal = parentCategory.allocated_amount || 0;
+                const parentRemaining = parentTotal - parentSpent;
+
+                stats.categoryRemaining = parentRemaining;
+                stats.categoryTotal = parentTotal;
+
+                if (parentCategory.parent_id) {
+                  // This is sub-subcategory, parent is subcategory
+                  const grandparent = budgetCats.find(c => c.id === parentCategory.parent_id);
+                  if (grandparent) {
+                    const grandparentIds = getCategoryAndChildren(grandparent.id);
+                    const grandparentExpenses = expenses.filter(
+                      e => grandparentIds.includes((e as any).budget_category_id) &&
+                      (e.status === 'paid' || e.status === 'approved' || e.status === 'accepted')
+                    );
+                    const grandparentSpent = grandparentExpenses.reduce((sum, e) => sum + e.total_amount, 0);
+                    const grandparentTotal = grandparent.allocated_amount || 0;
+                    const grandparentRemaining = grandparentTotal - grandparentSpent;
+
+                    message = `Budget exceeded for ${selectedCategory.name} (Sub-Sub-Category)!`;
+                    stats.categoryRemaining = grandparentRemaining;
+                    stats.categoryTotal = grandparentTotal;
+                  }
+                }
+              }
+
+              stats.projectRemaining = projectRemaining;
+              stats.projectTotal = projectTotalBudget;
+
+              setBudgetWarning({
+                show: true,
+                level,
+                message,
+                stats
+              });
+              return;
+            }
+          } else {
+            // Main category - check its budget
+            if (categoryRemaining - expenseAmount < 0) {
+              setBudgetWarning({
+                show: true,
+                level: 'category',
+                message: `Budget exceeded for ${selectedCategory.name} (Category)!`,
+                stats: {
+                  categoryRemaining,
+                  categoryTotal,
+                  projectRemaining,
+                  projectTotal: projectTotalBudget
+                }
+              });
+              return;
+            }
+          }
+        }
+      } else {
+        // No budget category selected - only check project budget
+        if (projectRemaining - expenseAmount < 0) {
+          setBudgetWarning({
+            show: true,
+            level: 'project',
+            message: 'Project budget exceeded!',
+            stats: {
+              projectRemaining,
+              projectTotal: projectTotalBudget
+            }
+          });
+          return;
+        }
+      }
+
+      // Also check project budget even if category budget is fine
+      if (projectRemaining - expenseAmount < 0) {
+        setBudgetWarning({
+          show: true,
+          level: 'project',
+          message: 'Project budget exceeded!',
+          stats: {
+            projectRemaining,
+            projectTotal: projectTotalBudget
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error checking budget availability:', error);
+    }
+  };
+
   const handleViewDetails = async (expense: ProjectExpense) => {
     setSelectedExpense(expense);
     setShowModal(true);
+    setEditMode(true); // Always enable edit mode
     
-    // Check if description contains custom entries
-    const hasCustomEntries = expense.description?.includes('[Custom');
-    setEditMode(hasCustomEntries);
-    
-    // Initialize editable fields
     setEditableCsrPartner(expense.csr_partner_id || '');
     setEditableProject(expense.project_id || '');
     setEditableToll(expense.toll_id || '');
-    setEditableBudgetCategory((expense as any).budget_category_id || '');
+    setEditableCategory(expense.category_id || '');
+    
+    const budgetCategoryId = (expense as any).budget_category_id || '';
+    setEditableBudgetCategory('');
+    setEditableBudgetSubcategory('');
+    setEditableBudgetSubSubcategory('');
+    
     setCustomCsrPartner('');
     setCustomProject('');
     setCustomToll('');
     
-    // Initialize modal dropdowns based on expense data
     if (expense.csr_partner_id) {
       const { data: partnerTolls } = await supabase
         .from('csr_partner_tolls')
@@ -213,9 +503,36 @@ const AccountantExpensesPage: React.FC = () => {
         .select('id, name, parent_id')
         .eq('project_id', expense.project_id);
       setModalFilteredBudgetCategories(projectBudgets || []);
+      
+      // Set budget hierarchy based on current budget_category_id
+      if (budgetCategoryId && projectBudgets) {
+        const currentBudgetCat = projectBudgets.find(cat => cat.id === budgetCategoryId);
+        if (currentBudgetCat) {
+          if (currentBudgetCat.parent_id) {
+            const parent = projectBudgets.find(cat => cat.id === currentBudgetCat.parent_id);
+            if (parent?.parent_id) {
+              // This is a sub-sub-category
+              setEditableBudgetCategory(parent.parent_id);
+              setEditableBudgetSubcategory(parent.id);
+              setEditableBudgetSubSubcategory(currentBudgetCat.id);
+            } else {
+              // This is a subcategory
+              setEditableBudgetCategory(parent?.id || '');
+              setEditableBudgetSubcategory(currentBudgetCat.id);
+            }
+          } else {
+            // This is a main category
+            setEditableBudgetCategory(currentBudgetCat.id);
+          }
+        }
+      }
     } else {
       setModalFilteredBudgetCategories([]);
     }
+    
+    // Check budget availability for this expense
+    const budgetCatId = (expense as any).budget_category_id;
+    await checkBudgetAvailability(expense.project_id, budgetCatId, expense.total_amount);
   };
 
   const handleAccept = async () => {
@@ -254,7 +571,7 @@ const AccountantExpensesPage: React.FC = () => {
     try {
       const updates: any = {};
       
-      // Update CSR Partner
+      // CSR Partner
       if (editableCsrPartner === 'custom') {
         if (!customCsrPartner.trim()) {
           alert('Please enter a custom CSR partner name');
@@ -267,7 +584,7 @@ const AccountantExpensesPage: React.FC = () => {
         updates.description = (selectedExpense.description || '').replace(/\[Custom CSR Partner:.*?\]/g, '');
       }
       
-      // Update Project
+      // Project
       if (editableProject === 'custom') {
         if (!customProject.trim()) {
           alert('Please enter a custom project name');
@@ -279,7 +596,7 @@ const AccountantExpensesPage: React.FC = () => {
         updates.description = (updates.description || selectedExpense.description || '').replace(/\[Custom Project:.*?\]/g, '');
       }
       
-      // Update Toll
+      // Toll
       if (editableToll === 'custom') {
         if (!customToll.trim()) {
           alert('Please enter a custom toll name');
@@ -289,11 +606,28 @@ const AccountantExpensesPage: React.FC = () => {
         updates.description = (updates.description || selectedExpense.description || '') + ` [Custom Toll: ${customToll}]`;
       } else if (editableToll) {
         updates.toll_id = editableToll;
+      } else {
+        updates.toll_id = null;
       }
       
-      // Update Budget Category
-      if (editableBudgetCategory) {
+      // Category
+      if (editableCategory) {
+        updates.category_id = editableCategory;
+        const category = expenseCategories.find(c => c.id === editableCategory);
+        if (category) {
+          updates.category = category.name;
+        }
+      }
+      
+      // Budget Category (use the most specific selected level)
+      if (editableBudgetSubSubcategory) {
+        updates.budget_category_id = editableBudgetSubSubcategory;
+      } else if (editableBudgetSubcategory) {
+        updates.budget_category_id = editableBudgetSubcategory;
+      } else if (editableBudgetCategory) {
         updates.budget_category_id = editableBudgetCategory;
+      } else {
+        updates.budget_category_id = null;
       }
       
       const { error } = await supabase
@@ -304,7 +638,6 @@ const AccountantExpensesPage: React.FC = () => {
       if (error) throw error;
       
       await loadData();
-      setEditMode(false);
       setShowModal(false);
       alert('Expense updated successfully');
     } catch (error) {
@@ -334,7 +667,6 @@ const AccountantExpensesPage: React.FC = () => {
     const category = budgetCategories.find(cat => cat.id === categoryId);
     if (!category) return { category: '', subcategory: '', subSubcategory: '' };
     
-    // Check if this is a sub-subcategory (has grandparent)
     if (category.parent_id) {
       const parent = budgetCategories.find(cat => cat.id === category.parent_id);
       if (parent?.parent_id) {
@@ -345,14 +677,12 @@ const AccountantExpensesPage: React.FC = () => {
           subSubcategory: category.name
         };
       }
-      // This is a subcategory (has parent but no grandparent)
       return {
         category: parent?.name || '',
         subcategory: category.name,
         subSubcategory: ''
       };
     }
-    // This is a top-level category
     return {
       category: category.name,
       subcategory: '',
@@ -370,16 +700,13 @@ const AccountantExpensesPage: React.FC = () => {
       if (filterProject && expense.project_id !== filterProject) return false;
       if (filterToll && expense.toll_id !== filterToll) return false;
       
-      // Budget category filtering (hierarchical)
       const expenseBudgetCategoryId = (expense as any).budget_category_id;
       if (filterBudgetCategory) {
         if (!expenseBudgetCategoryId) return false;
         const expenseBudgetCat = budgetCategories.find(cat => cat.id === expenseBudgetCategoryId);
         if (!expenseBudgetCat) return false;
         
-        // Check if expense budget category matches or is a child of filter
         if (expenseBudgetCat.id !== filterBudgetCategory && expenseBudgetCat.parent_id !== filterBudgetCategory) {
-          // Check if parent of parent matches
           const parentCat = budgetCategories.find(cat => cat.id === expenseBudgetCat.parent_id);
           if (!parentCat || parentCat.parent_id !== filterBudgetCategory) {
             return false;
@@ -447,6 +774,98 @@ const AccountantExpensesPage: React.FC = () => {
 
   const stats = getStats();
 
+  // -------------------------
+  // Export table to Excel/CSV (typed-safe)
+  // -------------------------
+  const exportTable = async () => {
+    try {
+      const rows = getFilteredExpenses();
+      if (!rows || rows.length === 0) {
+        alert('No rows to export.');
+        return;
+      }
+
+      const exportData: ExportRow[] = rows.map((expense) => {
+        const budgetHierarchy = getBudgetCategoryHierarchy((expense as any).budget_category_id);
+        return {
+          ExpenseCode: expense.expense_code,
+          Date: expense.date ? new Date(expense.date).toISOString().split('T')[0] : '',
+          Merchant: expense.merchant_name || '',
+          Description: expense.description || '',
+          Category: expense.category || '',
+          BudgetCategory: budgetHierarchy.category || '',
+          BudgetSubCategory: budgetHierarchy.subcategory || '',
+          Project: projects.find(p => p.id === expense.project_id)?.name || '',
+          Status: expense.status || '',
+          ModeOfPayment: expense.payment_method || '',
+          AmountDebited: expense.total_amount != null ? Number(expense.total_amount) : 0,
+        };
+      });
+
+      const header: (keyof ExportRow)[] = [
+        'ExpenseCode','Date','Merchant','Description','Category','BudgetCategory','BudgetSubCategory','Project','Status','ModeOfPayment','AmountDebited'
+      ];
+
+      try {
+        // dynamic import so app still runs if xlsx is not installed
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const XLSX = await import('xlsx');
+
+        const ws = XLSX.utils.json_to_sheet(exportData, { header: header as string[] });
+
+        // auto-width (simple heuristic) — typed safely
+        const cols = header.map((k) => {
+          const maxLen = Math.max(
+            ...exportData.map(r => {
+              const v = r[k];
+              return v === null || v === undefined ? 0 : String(v).length;
+            }),
+            String(k).length
+          );
+          return { wch: Math.min(40, maxLen + 2) };
+        });
+        (ws as any)['!cols'] = cols;
+
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'All Expenses');
+        const filename = `all_expenses_${new Date().toISOString().replace(/[:.]/g,'-')}.xlsx`;
+        XLSX.writeFile(wb, filename);
+        return;
+      } catch (xlsxErr) {
+        console.info('xlsx not available, falling back to CSV export.', xlsxErr);
+        const headerStrings = header.map(h => String(h));
+        const csvRows = [
+          headerStrings.join(','),
+          ...exportData.map(row => headerStrings.map(h => {
+            const val = row[h as keyof ExportRow];
+            if (val === null || val === undefined) return '';
+            const s = String(val);
+            const escaped = s.replace(/"/g, '""');
+            if (escaped.includes(',') || escaped.includes('\n')) return `"${escaped}"`;
+            return `"${escaped}"`;
+          }).join(','))
+        ].join('\r\n');
+
+        const blob = new Blob([csvRows], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `all_expenses_${new Date().toISOString().replace(/[:.]/g,'-')}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        return;
+      }
+    } catch (err) {
+      console.error('Export error:', err);
+      alert('Failed to export. See console for details.');
+    }
+  };
+
+  // -------------------------
+  // JSX render
+  // -------------------------
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       {/* Header */}
@@ -536,15 +955,18 @@ const AccountantExpensesPage: React.FC = () => {
         <div className="p-6 border-b border-gray-100">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-gray-900">All Expenses</h2>
-            <button
-              onClick={() => alert('Excel import functionality coming soon!')}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center gap-2"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
-              </svg>
-              Import Excel
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={exportTable}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center gap-2"
+                title="Export visible expenses to Excel (Actions column excluded)"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+                Import Excel
+              </button>
+            </div>
           </div>
           
           {/* Filters */}
@@ -563,14 +985,12 @@ const AccountantExpensesPage: React.FC = () => {
                   setFilterBudgetSubSubcategory('');
                   
                   if (partnerId) {
-                    // Filter tolls for this CSR partner
                     const { data: partnerTolls } = await supabase
                       .from('csr_partner_tolls')
                       .select('id, toll_name')
                       .eq('csr_partner_id', partnerId);
                     setFilteredTolls(partnerTolls || []);
                     
-                    // Filter projects for this CSR partner
                     const { data: partnerProjects } = await supabase
                       .from('projects')
                       .select('id, name')
@@ -603,7 +1023,6 @@ const AccountantExpensesPage: React.FC = () => {
                   setFilterBudgetSubSubcategory('');
                   
                   if (projectId) {
-                    // Filter budget categories for this project
                     const projectBudgets = budgetCategories.filter(cat => cat.project_id === projectId);
                     setFilteredBudgetCategories(projectBudgets);
                   } else {
@@ -632,14 +1051,12 @@ const AccountantExpensesPage: React.FC = () => {
                   setFilterBudgetSubSubcategory('');
                   
                   if (tollId) {
-                    // Filter projects for this toll
                     const { data: tollProjects } = await supabase
                       .from('projects')
                       .select('id, name')
                       .eq('toll_id', tollId);
                     setFilteredProjects(tollProjects || []);
                   } else if (filterCSRPartner) {
-                    // Reset to CSR partner projects
                     const { data: partnerProjects } = await supabase
                       .from('projects')
                       .select('id, name')
@@ -798,6 +1215,10 @@ const AccountantExpensesPage: React.FC = () => {
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Sub Category</th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Project</th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
+
+                {/* Mode of Payment column */}
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Mode of Payment</th>
+
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Amount Debited</th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
               </tr>
@@ -805,20 +1226,31 @@ const AccountantExpensesPage: React.FC = () => {
             <tbody className="divide-y divide-gray-100">
               {getFilteredExpenses().length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={12} className="px-6 py-12 text-center text-gray-500">
                     {expenses.length === 0 ? "No expenses found." : "No expenses match the selected filters."}
                   </td>
                 </tr>
               ) : (
-                getFilteredExpenses().map((expense, index) => (
+                getFilteredExpenses().map((expense, index) => {
+                  const budgetExceeded = quickCheckBudgetExceeded(expense);
+                  return (
                   <motion.tr
                     key={expense.id}
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.05 }}
-                    className="hover:bg-emerald-50/50 transition-colors"
+                    className={`hover:bg-emerald-50/50 transition-colors ${budgetExceeded ? 'bg-amber-50/30 border-l-4 border-l-amber-500' : ''}`}
                   >
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{expense.expense_code}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      <div className="flex items-center gap-2">
+                        {budgetExceeded && (
+                          <div title="Budget may be exceeded">
+                            <AlertTriangle className="w-4 h-4 text-amber-600" />
+                          </div>
+                        )}
+                        {expense.expense_code}
+                      </div>
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{new Date(expense.date).toLocaleDateString()}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{expense.merchant_name}</td>
                     <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate" title={expense.description}>{expense.description || '-'}</td>
@@ -841,6 +1273,10 @@ const AccountantExpensesPage: React.FC = () => {
                         {expense.status.charAt(0).toUpperCase() + expense.status.slice(1)}
                       </span>
                     </td>
+
+                    {/* Mode of Payment */}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{expense.payment_method || '-'}</td>
+
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">₹{expense.total_amount.toLocaleString()}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                       <button
@@ -851,7 +1287,8 @@ const AccountantExpensesPage: React.FC = () => {
                       </button>
                     </td>
                   </motion.tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -871,10 +1308,54 @@ const AccountantExpensesPage: React.FC = () => {
               <p className="text-emerald-100 mt-1">{selectedExpense.expense_code}</p>
             </div>
             <div className="p-6 space-y-4 overflow-y-auto flex-1">
-              {editMode && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-                  <p className="text-sm text-blue-800 font-medium">✏️ Edit Mode: This expense contains custom entries. Update the fields below before accepting.</p>
-                </div>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                <p className="text-sm text-blue-800 font-medium">✏️ Edit Mode: You can modify CSR Partner, Project, Toll, Category, and Budget Categories below.</p>
+              </div>
+              
+              {/* Budget Warning Alert */}
+              {budgetWarning.show && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-amber-50 border-l-4 border-amber-500 rounded-lg p-4 mb-4"
+                >
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <h3 className="text-sm font-bold text-amber-900 mb-2">{budgetWarning.message}</h3>
+                      <div className="space-y-2 text-xs text-amber-800">
+                        {budgetWarning.stats.subcategoryRemaining !== undefined && (
+                          <div className="flex justify-between items-center bg-amber-100/50 rounded px-2 py-1">
+                            <span className="font-medium">Sub-Category Budget:</span>
+                            <span className={budgetWarning.stats.subcategoryRemaining < 0 ? 'text-red-700 font-bold' : 'font-semibold'}>
+                              ₹{budgetWarning.stats.subcategoryRemaining.toLocaleString()} / ₹{budgetWarning.stats.subcategoryTotal?.toLocaleString()}
+                            </span>
+                          </div>
+                        )}
+                        {budgetWarning.stats.categoryRemaining !== undefined && (
+                          <div className="flex justify-between items-center bg-amber-100/50 rounded px-2 py-1">
+                            <span className="font-medium">Category Budget:</span>
+                            <span className={budgetWarning.stats.categoryRemaining < 0 ? 'text-red-700 font-bold' : 'font-semibold'}>
+                              ₹{budgetWarning.stats.categoryRemaining.toLocaleString()} / ₹{budgetWarning.stats.categoryTotal?.toLocaleString()}
+                            </span>
+                          </div>
+                        )}
+                        {budgetWarning.stats.projectRemaining !== undefined && (
+                          <div className="flex justify-between items-center bg-amber-100/50 rounded px-2 py-1">
+                            <span className="font-medium">Project Budget:</span>
+                            <span className={budgetWarning.stats.projectRemaining < 0 ? 'text-red-700 font-bold' : 'font-semibold'}>
+                              ₹{budgetWarning.stats.projectRemaining.toLocaleString()} / ₹{budgetWarning.stats.projectTotal?.toLocaleString()}
+                            </span>
+                          </div>
+                        )}
+                        <div className="mt-2 pt-2 border-t border-amber-300">
+                          <span className="font-medium">Expense Amount: </span>
+                          <span className="font-bold text-amber-900">₹{selectedExpense.total_amount.toLocaleString()}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
               )}
               
               <div className="grid grid-cols-2 gap-4">
@@ -900,9 +1381,10 @@ const AccountantExpensesPage: React.FC = () => {
                         setEditableToll('');
                         setEditableProject('');
                         setEditableBudgetCategory('');
+                        setEditableBudgetSubcategory('');
+                        setEditableBudgetSubSubcategory('');
                         
                         if (partnerId && partnerId !== 'custom') {
-                          // Filter tolls and projects for this CSR partner
                           const { data: partnerTolls } = await supabase
                             .from('csr_partner_tolls')
                             .select('id, toll_name')
@@ -946,60 +1428,10 @@ const AccountantExpensesPage: React.FC = () => {
                   </div>
                 )}
                 
-                {/* Project - Editable */}
-                {editMode ? (
+                {/* Toll - Editable (if exists) */}
+                {(selectedExpense.toll_id || modalFilteredTolls.length > 0) && (
                   <div className="col-span-2">
-                    <label className="text-sm font-medium text-gray-600 mb-1 block">Project</label>
-                    <select
-                      value={editableProject}
-                      onChange={async (e) => {
-                        const projectId = e.target.value;
-                        setEditableProject(projectId);
-                        setCustomProject('');
-                        setEditableBudgetCategory('');
-                        
-                        if (projectId && projectId !== 'custom') {
-                          // Fetch budget categories for this project
-                          const { data } = await supabase
-                            .from('budget_categories')
-                            .select('id, name, parent_id')
-                            .eq('project_id', projectId);
-                          setModalFilteredBudgetCategories(data || []);
-                        } else {
-                          setModalFilteredBudgetCategories([]);
-                        }
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    >
-                      <option value="">Select Project</option>
-                      {modalFilteredProjects.map(project => (
-                        <option key={project.id} value={project.id}>{project.name}</option>
-                      ))}
-                      <option value="custom">Custom (Enter Name)</option>
-                    </select>
-                    {editableProject === 'custom' && (
-                      <input
-                        type="text"
-                        value={customProject}
-                        onChange={(e) => setCustomProject(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 mt-2"
-                        placeholder="Enter custom project name"
-                      />
-                    )}
-                  </div>
-                ) : (
-                  <div>
-                    <label className="text-sm font-medium text-gray-600">Project</label>
-                    <p className="text-gray-900 font-semibold mt-1">
-                      {projects.find(p => p.id === selectedExpense.project_id)?.name || 'Unknown'}
-                    </p>
-                  </div>
-                )}
-                
-                {/* Toll - Editable */}
-                {editMode && (
-                  <div className="col-span-2">
-                    <label className="text-sm font-medium text-gray-600 mb-1 block">Toll</label>
+                    <label className="text-sm font-medium text-gray-600 mb-1 block">Toll {selectedExpense.toll_id && '✓'}</label>
                     <select
                       value={editableToll}
                       onChange={async (e) => {
@@ -1008,16 +1440,16 @@ const AccountantExpensesPage: React.FC = () => {
                         setCustomToll('');
                         setEditableProject('');
                         setEditableBudgetCategory('');
+                        setEditableBudgetSubcategory('');
+                        setEditableBudgetSubSubcategory('');
                         
                         if (tollId && tollId !== 'custom') {
-                          // Filter projects for this toll
                           const { data: tollProjects } = await supabase
                             .from('projects')
                             .select('id, name')
                             .eq('toll_id', tollId);
                           setModalFilteredProjects(tollProjects || []);
                         } else if (editableCsrPartner && editableCsrPartner !== 'custom') {
-                          // Reset to CSR partner projects
                           const { data: partnerProjects } = await supabase
                             .from('projects')
                             .select('id, name')
@@ -1047,33 +1479,197 @@ const AccountantExpensesPage: React.FC = () => {
                   </div>
                 )}
                 
-                {/* Budget Category - Editable */}
-                {editMode && modalFilteredBudgetCategories.length > 0 && (
+                {/* Project - Editable */}
+                {editMode ? (
                   <div className="col-span-2">
-                    <label className="text-sm font-medium text-gray-600 mb-1 block">Budget Category</label>
+                    <label className="text-sm font-medium text-gray-600 mb-1 block">Project</label>
                     <select
-                      value={editableBudgetCategory}
-                      onChange={(e) => setEditableBudgetCategory(e.target.value)}
+                      value={editableProject}
+                      onChange={async (e) => {
+                        const projectId = e.target.value;
+                        setEditableProject(projectId);
+                        setCustomProject('');
+                        setEditableBudgetCategory('');
+                        setEditableBudgetSubcategory('');
+                        setEditableBudgetSubSubcategory('');
+                        
+                        if (projectId && projectId !== 'custom') {
+                          const { data } = await supabase
+                            .from('budget_categories')
+                            .select('id, name, parent_id')
+                            .eq('project_id', projectId);
+                          setModalFilteredBudgetCategories(data || []);
+                          
+                          // Re-check budget with new project
+                          if (selectedExpense) {
+                            const budgetCatId = editableBudgetSubSubcategory || editableBudgetSubcategory || editableBudgetCategory || null;
+                            await checkBudgetAvailability(projectId, budgetCatId, selectedExpense.total_amount);
+                          }
+                        } else {
+                          setModalFilteredBudgetCategories([]);
+                          setBudgetWarning({ show: false, level: null, message: '', stats: {} });
+                        }
+                      }}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     >
-                      <option value="">No Budget Category</option>
-                      {modalFilteredBudgetCategories.map(cat => (
-                        <option key={cat.id} value={cat.id}>
-                          {cat.parent_id ? `  ↳ ${cat.name}` : cat.name}
-                        </option>
+                      <option value="">Select Project</option>
+                      {modalFilteredProjects.map(project => (
+                        <option key={project.id} value={project.id}>{project.name}</option>
                       ))}
+                      <option value="custom">Custom (Enter Name)</option>
                     </select>
+                    {editableProject === 'custom' && (
+                      <input
+                        type="text"
+                        value={customProject}
+                        onChange={(e) => setCustomProject(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 mt-2"
+                        placeholder="Enter custom project name"
+                      />
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <label className="text-sm font-medium text-gray-600">Project</label>
+                    <p className="text-gray-900 font-semibold mt-1">
+                      {projects.find(p => p.id === selectedExpense.project_id)?.name || 'Unknown'}
+                    </p>
                   </div>
                 )}
                 
-                <div>
-                  <label className="text-sm font-medium text-gray-600">Category</label>
-                  <p className="text-gray-900 font-semibold mt-1">{selectedExpense.category}</p>
+                {/* Category - Editable */}
+                <div className="col-span-2">
+                  <label className="text-sm font-medium text-gray-600 mb-1 block">Category</label>
+                  <select
+                    value={editableCategory}
+                    onChange={(e) => setEditableCategory(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="">Select Category</option>
+                    {expenseCategories.map(cat => (
+                      <option key={cat.id} value={cat.id}>{cat.name}</option>
+                    ))}
+                  </select>
                 </div>
+                
+                {/* Budget Category - Editable with cascading dropdowns */}
+                {modalFilteredBudgetCategories.length > 0 && (
+                  <>
+                    <div className="col-span-2">
+                      <label className="text-sm font-medium text-gray-600 mb-1 block">Budget Category</label>
+                      <select
+                        value={editableBudgetCategory}
+                        onChange={async (e) => {
+                          const catId = e.target.value;
+                          setEditableBudgetCategory(catId);
+                          setEditableBudgetSubcategory('');
+                          setEditableBudgetSubSubcategory('');
+                          
+                          // Re-check budget
+                          if (selectedExpense && editableProject) {
+                            await checkBudgetAvailability(editableProject, catId || null, selectedExpense.total_amount);
+                          }
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      >
+                        <option value="">Select Budget Category</option>
+                        {modalFilteredBudgetCategories.filter(cat => !cat.parent_id).map(cat => (
+                          <option key={cat.id} value={cat.id}>{cat.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    
+                    {editableBudgetCategory && modalFilteredBudgetCategories.filter(cat => cat.parent_id === editableBudgetCategory).length > 0 && (
+                      <div className="col-span-2">
+                        <label className="text-sm font-medium text-gray-600 mb-1 block">Budget Sub-Category</label>
+                        <select
+                          value={editableBudgetSubcategory}
+                          onChange={async (e) => {
+                            const subCatId = e.target.value;
+                            setEditableBudgetSubcategory(subCatId);
+                            setEditableBudgetSubSubcategory('');
+                            
+                            // Re-check budget
+                            if (selectedExpense && editableProject) {
+                              await checkBudgetAvailability(editableProject, subCatId || editableBudgetCategory || null, selectedExpense.total_amount);
+                            }
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        >
+                          <option value="">Select Sub-Category</option>
+                          {modalFilteredBudgetCategories.filter(cat => cat.parent_id === editableBudgetCategory).map(cat => (
+                            <option key={cat.id} value={cat.id}>{cat.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    
+                    {editableBudgetSubcategory && modalFilteredBudgetCategories.filter(cat => cat.parent_id === editableBudgetSubcategory).length > 0 && (
+                      <div className="col-span-2">
+                        <label className="text-sm font-medium text-gray-600 mb-1 block">Budget Sub-Sub-Category</label>
+                        <select
+                          value={editableBudgetSubSubcategory}
+                          onChange={async (e) => {
+                            const subSubCatId = e.target.value;
+                            setEditableBudgetSubSubcategory(subSubCatId);
+                            
+                            // Re-check budget
+                            if (selectedExpense && editableProject) {
+                              await checkBudgetAvailability(editableProject, subSubCatId || editableBudgetSubcategory || editableBudgetCategory || null, selectedExpense.total_amount);
+                            }
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        >
+                          <option value="">Select Sub-Sub-Category</option>
+                          {modalFilteredBudgetCategories.filter(cat => cat.parent_id === editableBudgetSubcategory).map(cat => (
+                            <option key={cat.id} value={cat.id}>{cat.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </>
+                )}
+                
                 <div>
                   <label className="text-sm font-medium text-gray-600">Amount</label>
                   <p className="text-gray-900 font-semibold mt-1 text-2xl">₹{selectedExpense.total_amount.toLocaleString()}</p>
                 </div>
+              </div>
+              
+              {/* Budget Category Hierarchy */}
+              {(() => {
+                const budgetHierarchy = getBudgetCategoryHierarchy((selectedExpense as any).budget_category_id);
+                if (budgetHierarchy.category || budgetHierarchy.subcategory || budgetHierarchy.subSubcategory) {
+                  return (
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+                      <label className="text-sm font-semibold text-emerald-800 mb-2 block">Budget Category</label>
+                      <div className="space-y-2">
+                        {budgetHierarchy.category && (
+                          <div>
+                            <span className="text-xs font-medium text-emerald-600">Category: </span>
+                            <span className="text-sm text-gray-900 font-semibold">{budgetHierarchy.category}</span>
+                          </div>
+                        )}
+                        {budgetHierarchy.subcategory && (
+                          <div>
+                            <span className="text-xs font-medium text-emerald-600">Sub-Category: </span>
+                            <span className="text-sm text-gray-900 font-semibold">{budgetHierarchy.subcategory}</span>
+                          </div>
+                        )}
+                        {budgetHierarchy.subSubcategory && (
+                          <div>
+                            <span className="text-xs font-medium text-emerald-600">Sub-Sub-Category: </span>
+                            <span className="text-sm text-gray-900 font-semibold">{budgetHierarchy.subSubcategory}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+              
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium text-gray-600">Date</label>
                   <p className="text-gray-900 font-semibold mt-1">{new Date(selectedExpense.date).toLocaleDateString()}</p>
@@ -1132,14 +1728,12 @@ const AccountantExpensesPage: React.FC = () => {
                 </div>
               )}
               <div className="flex gap-3 pt-4 border-t">
-                {editMode && (
-                  <button
-                    onClick={handleSaveEdits}
-                    className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-medium py-3 px-4 rounded-lg transition-colors"
-                  >
-                    💾 Save Edits
-                  </button>
-                )}
+                <button
+                  onClick={handleSaveEdits}
+                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+                >
+                   Save Changes
+                </button>
                 <button
                   onClick={handleAccept}
                   disabled={selectedExpense.status === 'accepted' || selectedExpense.status === 'approved' || selectedExpense.status === 'paid' || selectedExpense.status === 'rejected'}
@@ -1163,10 +1757,7 @@ const AccountantExpensesPage: React.FC = () => {
                   Mark as Paid
                 </button>
                 <button
-                  onClick={() => {
-                    setShowModal(false);
-                    setEditMode(false);
-                  }}
+                  onClick={() => setShowModal(false)}
                   className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-3 px-4 rounded-lg transition-colors"
                 >
                   Close

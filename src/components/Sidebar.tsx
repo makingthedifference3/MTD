@@ -17,8 +17,8 @@ interface SidebarProps {
 
 const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'accountant', 'project_manager'] },
-  { id: 'csr-partners', label: 'CSR Partners', icon: Briefcase, roles: ['admin', 'accountant', 'project_manager'] },
-  { id: 'projects', label: 'Projects', icon: Briefcase, roles: ['admin', 'accountant', 'project_manager'] },
+  { id: 'csr-partners', label: 'CSR Partners', icon: Briefcase, roles: ['admin',  'project_manager'] },
+  { id: 'projects', label: 'Projects', icon: Briefcase, roles: ['admin', 'project_manager'] },
   { id: 'project-timeline', label: 'Project Timeline', icon: CalendarClock, roles: ['admin', 'project_manager'] },
   { id: 'todo', label: 'To-Do List Assignment', icon: CheckSquare, roles: ['admin', 'accountant', 'project_manager'] },
   { id: 'real-time-update', label: 'Real Time Update', icon: RefreshCw, roles: ['admin', 'project_manager'] },
@@ -30,8 +30,8 @@ const menuItems = [
   { id: 'acc-expense', label: 'Accountant Expenses', icon: FileText, roles: ['accountant'] },
   { id: 'daily-report', label: 'Daily Report', icon: ClipboardList, roles: ['admin', 'accountant', 'project_manager'] },
   { id: 'result-analysis', label: 'Result Analysis', icon: GraduationCap, roles: ['admin', 'project_manager', 'data_manager'] },
-  { id: 'upcoming-expenses', label: 'Upcoming Expenses', icon: TrendingUp, roles: ['admin', 'project_manager'] },
-  { id: 'bills', label: 'Bills', icon: Receipt, roles: ['admin', 'project_manager'] },
+  { id: 'upcoming-expenses', label: 'Upcoming Expenses', icon: TrendingUp, roles: ['admin', 'project_manager','accountant','team_members'] },
+  { id: 'bills', label: 'Bills', icon: Receipt, roles: ['admin','accountant'] },
   { id: 'csr-budget', label: 'CSR Budget', icon: CreditCard, roles: ['admin'] },
   { id: 'utilization-certificate', label: 'Utilization Certificate', icon: FileCheck, roles: ['admin', 'accountant'] },
   { id: 'tasks', label: 'My Tasks', icon: CheckSquare, roles: ['team_member'] },
