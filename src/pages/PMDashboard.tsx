@@ -4,9 +4,9 @@ import {
   FolderKanban, ChevronRight,
   ArrowLeft, MapPin, Briefcase, Leaf, Building2, Heart, Droplet, GraduationCap,
   CheckCircle2, Users, Activity, Award, type LucideIcon, BarChart3, Grid3x3,
-  Target, Zap
+  Target, Zap, Info
 } from 'lucide-react';
-import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Label, Legend } from 'recharts';
 import { useFilter } from '../context/useFilter';
 import { useProjectContext } from '../context/useProjectContext';
 import { useProjectContextLock } from '../hooks/useProjectContext';
@@ -52,6 +52,10 @@ const getIconComponent = (iconName?: string): LucideIcon => {
   return iconMap[iconName || 'FolderKanban'] || FolderKanban;
 };
 
+interface PMDashboardInnerProps {
+  shouldLockContext?: boolean;
+}
+
 // Helper function to format large metric values
 const formatMetricValue = (value: number): string => {
   if (value >= 1000000) {
@@ -75,10 +79,6 @@ interface ProjectWithBeneficiaries extends Project {
   trees_planted?: number;
   schools_renovated?: number;
   project_code: string;
-}
-
-interface PMDashboardInnerProps {
-  shouldLockContext?: boolean;
 }
 
 const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = {}) => {
@@ -108,10 +108,43 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
 
   const { isProjectSelected, csrPartnerId, projectId } = useProjectContext();
 
+  const currentYear = new Date().getFullYear();
+  const defaultStartDate = `${currentYear}-03-01`;
+  const defaultEndDate = `${currentYear + 1}-03-31`;
+
   const [viewMode, setViewMode] = useState<'partners' | 'projects' | 'folderDetails' | 'projectDetails'>('partners');
   const [selectedProjectData, setSelectedProjectData] = useState<ProjectWithBeneficiaries | null>(null);
   const [dashboardView, setDashboardView] = useState<'hierarchy' | 'analytics'>('analytics');
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
+  const [startDateFilter, setStartDateFilter] = useState<string>(defaultStartDate);
+  const [endDateFilter, setEndDateFilter] = useState<string>(defaultEndDate);
+
+  const DateFilters = () => (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+      <div>
+        <label className="block text-sm font-semibold text-gray-700 mb-1">Start Date</label>
+        <input
+          type="date"
+          value={startDateFilter}
+          onChange={(e) => setStartDateFilter(e.target.value)}
+          min={defaultStartDate}
+          max={defaultEndDate}
+          className="w-full rounded-xl border-2 border-emerald-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 px-3 py-2 text-sm"
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-semibold text-gray-700 mb-1">End Date</label>
+        <input
+          type="date"
+          value={endDateFilter}
+          onChange={(e) => setEndDateFilter(e.target.value)}
+          min={defaultStartDate}
+          max={defaultEndDate}
+          className="w-full rounded-xl border-2 border-emerald-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 px-3 py-2 text-sm"
+        />
+      </div>
+    </div>
+  );
 
   // When project is pre-selected from ProjectsDashboard, sync it to FilterContext
   useEffect(() => {
@@ -151,7 +184,24 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
     : null;
 
   // Get projects for selected partner - fall back to all filtered projects if no partner locked
-  const partnerProjects = selectedPartner ? filteredProjects.filter((p) => p.csr_partner_id === selectedPartner) : filteredProjects;
+  const analyticsProjects = useMemo(() => {
+    const parseDate = (value?: string) => (value ? new Date(value) : null);
+    const start = parseDate(startDateFilter);
+    const end = parseDate(endDateFilter);
+
+    return filteredProjects.filter((project) => {
+      const projectDate = parseDate(project.start_date) || parseDate(project.expected_end_date);
+
+      if (!projectDate) return true;
+      if (start && projectDate < start) return false;
+      if (end && projectDate > end) return false;
+      return true;
+    });
+    }, [filteredProjects, startDateFilter, endDateFilter]);
+
+    const partnerProjects = selectedPartner
+      ? analyticsProjects.filter((p) => p.csr_partner_id === selectedPartner)
+      : analyticsProjects;
 
   const groupedProjects = useMemo(() => {
     const grouped = partnerProjects.reduce<Record<string, {
@@ -366,8 +416,11 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
             <FilterBar />
           </div>
 
+          {/* Date Filters */}
+          <DateFilters />
+
           {/* Summary Stats - Updates with filters */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5 gap-4">
             {/* Total Projects Card */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -381,7 +434,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                 </div>
                 <span className="text-xs font-bold text-emerald-700 bg-emerald-200 px-3 py-1 rounded-full">TOTAL</span>
               </div>
-              <p className="text-3xl font-black text-emerald-900 mb-1">{filteredProjects.length}</p>
+              <p className="text-3xl font-black text-emerald-900 mb-1">{analyticsProjects.length}</p>
               <p className="text-sm text-emerald-700 font-semibold">All Projects</p>
             </motion.div>
 
@@ -398,7 +451,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                 </div>
                 <span className="text-xs font-bold text-blue-700 bg-blue-200 px-3 py-1 rounded-full">ACTIVE</span>
               </div>
-              <p className="text-3xl font-black text-blue-900 mb-1">{filteredProjects.filter((p: Project) => p.status === 'active').length}</p>
+              <p className="text-3xl font-black text-blue-900 mb-1">{analyticsProjects.filter((p: Project) => p.status === 'active').length}</p>
               <p className="text-sm text-blue-700 font-semibold">Active Projects</p>
             </motion.div>
 
@@ -416,75 +469,94 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                 <span className="text-xs font-bold text-purple-700 bg-purple-200 px-3 py-1 rounded-full">BUDGET</span>
               </div>
               <p className="text-3xl font-black text-purple-900 mb-1">
-                ₹{(filteredProjects.reduce((sum: number, p: Project) => sum + (p.total_budget || 0), 0) / 10000000).toFixed(1)}Cr
+                ₹{(analyticsProjects.reduce((sum: number, p: Project) => sum + (p.total_budget || 0), 0) / 10000000).toFixed(1)}Cr
               </p>
               <p className="text-sm text-purple-700 font-semibold">Total Budget</p>
             </motion.div>
 
-            {/* Total Beneficiaries Card */}
+            {/* Spent Budget Card */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
-              className="bg-linear-to-br from-orange-50 to-orange-100 border-2 border-orange-200 rounded-2xl p-6 shadow-lg hover:shadow-orange-500/20 transition-all"
+              transition={{ delay: 0.5 }}
+              className="bg-linear-to-br from-teal-50 to-teal-100 border-2 border-teal-200 rounded-2xl p-6 shadow-lg hover:shadow-teal-500/20 transition-all"
             >
               <div className="flex items-start justify-between mb-4">
-                <div className="p-3 bg-orange-200 rounded-xl">
-                  <Users className="w-6 h-6 text-orange-700" />
+                <div className="p-3 bg-teal-200 rounded-xl">
+                  <Zap className="w-6 h-6 text-teal-700" />
                 </div>
-                <span className="text-xs font-bold text-orange-700 bg-orange-200 px-3 py-1 rounded-full">PEOPLE</span>
+                <span className="text-xs font-bold text-teal-700 bg-teal-200 px-3 py-1 rounded-full">SPENT</span>
               </div>
-              <p className="text-3xl font-black text-orange-900 mb-1">
-                {formatMetricValue(filteredProjects.reduce((sum: number, p: Project) => sum + (p.direct_beneficiaries || 0), 0))}
+              <p className="text-3xl font-black text-teal-900 mb-1">
+                ₹{(analyticsProjects.reduce((sum: number, p: Project) => sum + (p.utilized_budget || 0), 0) / 10000000).toFixed(1)}Cr
               </p>
-              <p className="text-sm text-orange-700 font-semibold">Beneficiaries</p>
+              <p className="text-sm text-teal-700 font-semibold">Total Utilized</p>
+            </motion.div>
+
+            {/* Remaining Budget Card */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.6 }}
+              className="bg-linear-to-br from-amber-50 to-amber-100 border-2 border-amber-200 rounded-2xl p-6 shadow-lg hover:shadow-amber-500/20 transition-all"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div className="p-3 bg-amber-200 rounded-xl">
+                  <Target className="w-6 h-6 text-amber-700" />
+                </div>
+                <span className="text-xs font-bold text-amber-700 bg-amber-200 px-3 py-1 rounded-full">REMAINING</span>
+              </div>
+              <p className="text-3xl font-black text-amber-900 mb-1">
+                ₹{((analyticsProjects.reduce((sum: number, p: Project) => sum + (p.total_budget || 0), 0) - analyticsProjects.reduce((sum: number, p: Project) => sum + (p.utilized_budget || 0), 0)) / 10000000).toFixed(1)}Cr
+              </p>
+              <p className="text-sm text-amber-700 font-semibold">Budget Remaining</p>
             </motion.div>
           </div>
 
           {/* Charts Section */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Project Status Distribution */}
+            {/* Budget vs Utilization */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 }}
+              transition={{ delay: 0.55 }}
               className="bg-white border-2 border-gray-200 rounded-2xl p-8 shadow-lg"
             >
-              <h3 className="text-xl font-bold text-gray-900 mb-6">Project Status Distribution</h3>
-              <div className="flex items-center justify-center min-h-[300px]">
-                {filteredProjects.length === 0 ? (
-                  <div className="text-center py-12">
-                    <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
-                      <BarChart3 className="w-8 h-8 text-gray-400" />
-                    </div>
-                    <p className="text-gray-500 font-semibold">No project data available</p>
-                    <p className="text-gray-400 text-sm mt-1">Projects will appear here once data is added</p>
-                  </div>
-                ) : (
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">Budget vs Utilization</h3>
+                  {/* <p className="text-sm text-gray-500">Total budget split by utilized and remaining</p> */}
+                </div>
+              
+              </div>
+
+              {(() => {
+                const totalBudget = analyticsProjects.reduce((sum: number, p: Project) => sum + (p.total_budget || 0), 0);
+                const totalUtilized = analyticsProjects.reduce((sum: number, p: Project) => sum + (p.utilized_budget || 0), 0);
+                const totalRemaining = Math.max(totalBudget - totalUtilized, 0);
+                const pieData = [
+                  { name: 'Utilized', value: totalUtilized, color: '#10b981' },
+                  { name: 'Remaining', value: totalRemaining, color: '#f59e0b' },
+                ];
+                return (
                   <ResponsiveContainer width="100%" height={300}>
                     <PieChart>
-                      <Pie
-                        data={[
-                          { name: 'Active', value: filteredProjects.filter((p: Project) => p.status === 'active').length, fill: '#10b981' },
-                          { name: 'Completed', value: filteredProjects.filter((p: Project) => p.status === 'completed').length, fill: '#f59e0b' }
-                        ]}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={({ name, percent }: { name?: string; percent?: number }) => `${name || ''} ${((percent || 0) * 100).toFixed(0)}%`}
-                        outerRadius={80}
-                        fill="#8884d8"
-                        dataKey="value"
-                      >
-                        <Cell fill="#10b981" />
-                        <Cell fill="#3b82f6" />
-                        <Cell fill="#f59e0b" />
+                      <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={70} outerRadius={100} paddingAngle={2}>
+                        {pieData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                        <Label
+                          value={`₹${(totalUtilized / 10000000).toFixed(1)}Cr`}
+                          position="center"
+                          className="text-xl font-black text-gray-900"
+                        />
                       </Pie>
-                      <Tooltip formatter={(value) => `${value} projects`} />
+                      <Tooltip formatter={(value) => [`₹${(Number(value) / 10000000).toFixed(2)}Cr`, '']} />
+                      <Legend formatter={(value: string | number) => <span className="text-sm text-gray-700 font-semibold">{value}</span>} />
                     </PieChart>
                   </ResponsiveContainer>
-                )}
-              </div>
+                );
+              })()}
             </motion.div>
 
             {/* Top CSR Partners by Project Count */}
@@ -496,7 +568,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
             >
               <h3 className="text-xl font-bold text-gray-900 mb-6">Top Partners by Projects</h3>
               <div className="flex items-center justify-center min-h-[300px]">
-                {filteredProjects.length === 0 ? (
+                {analyticsProjects.length === 0 ? (
                   <div className="text-center py-12">
                     <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
                       <BarChart3 className="w-8 h-8 text-gray-400" />
@@ -508,7 +580,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                   <ResponsiveContainer width="100%" height={300}>
                     <BarChart data={csrPartners.slice(0, 8).map(partner => ({
                       name: partner.name.substring(0, 12),
-                      projects: filteredProjects.filter((p: Project) => p.csr_partner_id === partner.id).length
+                      projects: analyticsProjects.filter((p: Project) => p.csr_partner_id === partner.id).length
                     }))}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                       <XAxis dataKey="name" stroke="#6b7280" style={{ fontSize: '12px' }} />
@@ -540,7 +612,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                   <span className="text-sm font-bold text-emerald-700 uppercase">Total Beneficiaries</span>
                 </div>
                 <p className="text-3xl font-black text-emerald-900">
-                  {formatMetricValue(filteredProjects.reduce((sum: number, p: Project) => sum + (p.direct_beneficiaries || 0), 0))}
+                  {formatMetricValue(analyticsProjects.reduce((sum: number, p: Project) => sum + (p.direct_beneficiaries || 0), 0))}
                 </p>
               </div>
 
@@ -554,7 +626,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                 </div>
                 <p className="text-3xl font-black text-orange-900">
                   {formatMetricValue(
-                    filteredProjects.reduce((sum: number, p: Project) => {
+                    analyticsProjects.reduce((sum: number, p: Project) => {
                       const fromColumn = (p as ProjectWithBeneficiaries).meals_served || 0;
                       const fromJson = getImpactMetricValue(p.impact_metrics, 'meals_served');
                       return sum + Math.max(fromColumn, fromJson);
@@ -573,7 +645,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                 </div>
                 <p className="text-3xl font-black text-pink-900">
                   {formatMetricValue(
-                    filteredProjects.reduce((sum: number, p: Project) => {
+                    analyticsProjects.reduce((sum: number, p: Project) => {
                       const fromColumn = (p as ProjectWithBeneficiaries).pads_distributed || 0;
                       const fromJson = getImpactMetricValue(p.impact_metrics, 'pads_distributed');
                       return sum + Math.max(fromColumn, fromJson);
@@ -592,7 +664,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                 </div>
                 <p className="text-3xl font-black text-blue-900">
                   {formatMetricValue(
-                    filteredProjects.reduce((sum: number, p: Project) => {
+                    analyticsProjects.reduce((sum: number, p: Project) => {
                       const fromColumn = (p as ProjectWithBeneficiaries).students_enrolled || 0;
                       const fromJson = getImpactMetricValue(p.impact_metrics, 'students_enrolled');
                       return sum + Math.max(fromColumn, fromJson);
@@ -611,7 +683,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                 </div>
                 <p className="text-3xl font-black text-green-900">
                   {formatMetricValue(
-                    filteredProjects.reduce((sum: number, p: Project) => {
+                    analyticsProjects.reduce((sum: number, p: Project) => {
                       const fromColumn = (p as ProjectWithBeneficiaries).trees_planted || 0;
                       const fromJson = getImpactMetricValue(p.impact_metrics, 'trees_planted');
                       return sum + Math.max(fromColumn, fromJson);
@@ -629,7 +701,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                   <span className="text-sm font-bold text-purple-700 uppercase">Schools Renovated</span>
                 </div>
                 <p className="text-3xl font-black text-purple-900">
-                  {filteredProjects.reduce((sum: number, p: Project) => {
+                  {analyticsProjects.reduce((sum: number, p: Project) => {
                     const fromColumn = (p as ProjectWithBeneficiaries).schools_renovated || 0;
                     const fromJson = getImpactMetricValue(p.impact_metrics, 'schools_renovated');
                     return sum + Math.max(fromColumn, fromJson);
@@ -641,7 +713,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
               {(() => {
                 // Aggregate all custom metrics from all projects
                 const customMetrics: Record<string, number> = {};
-                filteredProjects.forEach((p: Project) => {
+                analyticsProjects.forEach((p: Project) => {
                   const metrics = p.impact_metrics || [];
                   metrics.forEach((metric) => {
                     if (metric.key === 'custom' && metric.customLabel && metric.value > 0) {
@@ -682,11 +754,10 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
       ) : (
         // HIERARCHY VIEW - All existing code
         <>
-          {/* Locked Filter Bar - Shows when project is pre-selected */}
-          {isProjectSelected && <LockedFilterBar />}
-          
-          {/* Regular Filter Bar - Shows when no project is pre-selected */}
-          {!isProjectSelected && <FilterBar />}
+          <div className="mb-4">
+            {isProjectSelected ? <LockedFilterBar /> : <FilterBar />}
+          </div>
+          <DateFilters />
 
           {/* Back Button */}
           {viewMode !== 'partners' && (
@@ -731,8 +802,8 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                 // When project is pre-selected, only show the selected partner
                 .filter(partner => !isProjectSelected || partner.id === selectedPartner)
                 .map((partner, index) => {
-                // Count projects for this partner from filteredProjects
-                const partnerProjectCount = filteredProjects.filter((p: Project) => p.csr_partner_id === partner.id).length;
+                // Count projects for this partner from the date-filtered list
+                const partnerProjectCount = analyticsProjects.filter((p: Project) => p.csr_partner_id === partner.id).length;
                 return (
                   <motion.button
                     key={partner.id}
