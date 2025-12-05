@@ -45,6 +45,7 @@ const FilterBar = ({ workFilter = '', onWorkFilterChange, workOptions = [] }: Fi
   const selectedTollName = selectedTollInfo?.toll_name || selectedTollInfo?.poc_name || null;
 
   const handlePartnerChange = (partnerId: string) => {
+    setSelectedToll(null); // clear toll when switching partners so stale toll filters disappear
     if (partnerId === 'all') {
       setSelectedPartner(null);
       setSelectedProject(null);

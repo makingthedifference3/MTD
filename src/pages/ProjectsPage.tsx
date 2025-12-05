@@ -175,7 +175,7 @@ const SECONDARY_IMPACT_METRICS: ImpactMetricKey[] = ['students_enrolled', 'schoo
 import type { Project as ServiceProject } from '../services/projectsService';
 
 const ProjectsPage = () => {
-  const { projects, filteredProjects, selectedProject, refreshData, setSelectedPartner, setSelectedProject, setSelectedToll } = useFilter();
+  const { projects, filteredProjects, selectedPartner, selectedToll, selectedProject, refreshData, setSelectedPartner, setSelectedProject, setSelectedToll } = useFilter();
   const { currentRole, currentUser } = useAuth();
   const navigate = useNavigate();
   const [selectedProjectDetails, setSelectedProjectDetails] = useState<Project | null>(null);
@@ -1008,19 +1008,27 @@ const ProjectsPage = () => {
   // 3. Otherwise show all projects
   // 4. Apply work filter if set
   const displayProjects: Project[] = useMemo(() => {
-    let projectList: Project[] = selectedProject 
-      ? (projects.find(p => p.id === selectedProject) ? [projects.find(p => p.id === selectedProject)!] : [])
-      : filteredProjects && filteredProjects.length > 0
-      ? filteredProjects
-      : projects;
+    // Respect filters even when they produce zero results; only fall back to all projects when no filters are active.
+    const hasActiveFilters = Boolean(selectedPartner || selectedToll || selectedProject);
+
+    let projectList: Project[] = [];
+
+    if (selectedProject) {
+      const match = projects.find((p) => p.id === selectedProject);
+      projectList = match ? [match] : [];
+    } else if (hasActiveFilters) {
+      projectList = filteredProjects;
+    } else {
+      projectList = projects;
+    }
 
     // Apply work filter
     if (workFilter) {
-      projectList = projectList.filter(p => p.work === workFilter);
+      projectList = projectList.filter((p) => p.work === workFilter);
     }
 
     return projectList;
-  }, [selectedProject, filteredProjects, projects, workFilter]);
+  }, [selectedProject, selectedPartner, selectedToll, filteredProjects, projects, workFilter]);
 
   const getStatusColor = (status: 'on-track' | 'completed') => {
     switch (status) {
