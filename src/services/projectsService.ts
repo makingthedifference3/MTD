@@ -486,44 +486,40 @@ class ProjectsService {
   }
 
   /**
-   * Delete project (soft delete)
+   * Delete project and its child projects (hard delete in Supabase)
    */
   async deleteProject(projectId: string): Promise<boolean> {
     try {
+      // Gather this project + its immediate children
+      const projectIds: string[] = [projectId];
+
+      const { data: childProjects, error: childFetchError } = await supabase
+        .from('projects')
+        .select('id')
+        .eq('parent_project_id', projectId);
+
+      if (childFetchError) throw childFetchError;
+      projectIds.push(...(childProjects || []).map((p) => p.id));
+
+      // Remove project team members tied to these projects first to satisfy FKs
+      const { error: ptmDeleteError } = await supabase
+        .from('project_team_members')
+        .delete()
+        .in('project_id', projectIds);
+
+      if (ptmDeleteError) throw ptmDeleteError;
+
+      // Delete projects themselves
       const { error } = await supabase
         .from('projects')
-        .update({
-          is_active: false,
-          status: 'archived',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', projectId);
+        .delete()
+        .in('id', projectIds);
 
       if (error) throw error;
-      await this.archiveChildProjects(projectId);
       return true;
     } catch (error) {
       console.error('Error deleting project:', error);
       return false;
-    }
-  }
-
-  private async archiveChildProjects(parentProjectId: string): Promise<void> {
-    try {
-      const { error } = await supabase
-        .from('projects')
-        .update({
-          is_active: false,
-          status: 'archived',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('parent_project_id', parentProjectId);
-
-      if (error) {
-        throw error;
-      }
-    } catch (error) {
-      console.error('Error archiving child projects:', error);
     }
   }
 

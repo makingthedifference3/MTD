@@ -354,7 +354,7 @@ const ArticlePage = () => {
     }
 
     if (hasToll && !selectedToll) {
-      alert('Please select Toll for this CSR Partner');
+      alert('Please select Subcompany for this CSR Partner');
       return;
     }
 
@@ -509,17 +509,17 @@ const ArticlePage = () => {
               </select>
             </div>
 
-            {/* Toll - Conditional */}
+            {/* Subcompany - Conditional */}
             {hasToll && (
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Toll *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Subcompany *</label>
                 <select
                   value={selectedToll}
                   onChange={(e) => setSelectedToll(e.target.value)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   required
                 >
-                  <option value="">Select Toll</option>
+                  <option value="">Select Subcompany</option>
                   {tolls.map((toll) => (
                     <option key={toll.id} value={toll.id}>{toll.toll_name}</option>
                   ))}
@@ -771,16 +771,16 @@ const ArticlePage = () => {
             </select>
           </div>
 
-          {/* Filter Toll - Conditional */}
+          {/* Filter Subcompany - Conditional */}
           {filterHasToll && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Toll</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Subcompany</label>
               <select
                 value={filterToll}
                 onChange={(e) => setFilterToll(e.target.value)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
               >
-                <option value="">All Tolls</option>
+                <option value="">All Subcompanies</option>
                 {filterTolls.map((toll) => (
                   <option key={toll.id} value={toll.id}>{toll.toll_name}</option>
                 ))}
@@ -878,7 +878,7 @@ const ArticlePage = () => {
                         </div>
                         {article.tolls && (
                           <div>
-                            <p className="text-xs text-gray-500 mb-1">Toll</p>
+                            <p className="text-xs text-gray-500 mb-1">Subcompany</p>
                             <p className="text-sm font-medium text-gray-900">
                               {article.tolls.toll_name}
                             </p>

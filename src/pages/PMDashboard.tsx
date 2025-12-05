@@ -1,12 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  FolderKanban, ChevronRight, ChevronDown,
+  FolderKanban, ChevronRight,
   ArrowLeft, MapPin, Briefcase, Leaf, Building2, Heart, Droplet, GraduationCap,
   CheckCircle2, Users, Activity, Award, type LucideIcon, BarChart3, Grid3x3,
   Target, Zap
 } from 'lucide-react';
-import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Label, Legend } from 'recharts';
 import { useFilter } from '../context/useFilter';
 import { useProjectContext } from '../context/useProjectContext';
 import { useProjectContextLock } from '../hooks/useProjectContext';
@@ -52,6 +52,10 @@ const getIconComponent = (iconName?: string): LucideIcon => {
   return iconMap[iconName || 'FolderKanban'] || FolderKanban;
 };
 
+interface PMDashboardInnerProps {
+  shouldLockContext?: boolean;
+}
+
 // Helper function to format large metric values
 const formatMetricValue = (value: number): string => {
   if (value >= 1000000) {
@@ -62,6 +66,9 @@ const formatMetricValue = (value: number): string => {
   return value.toLocaleString();
 };
 
+const getProjectDisplayTitle = (project: { name: string; project_code: string }) =>
+  `${project.name} - ${project.project_code}`;
+
 interface ProjectWithBeneficiaries extends Project {
   displayName?: string;
   total_budget?: number;
@@ -71,10 +78,7 @@ interface ProjectWithBeneficiaries extends Project {
   students_enrolled?: number;
   trees_planted?: number;
   schools_renovated?: number;
-}
-
-interface PMDashboardInnerProps {
-  shouldLockContext?: boolean;
+  project_code: string;
 }
 
 const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = {}) => {
@@ -104,10 +108,39 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
 
   const { isProjectSelected, csrPartnerId, projectId } = useProjectContext();
 
-  const [viewMode, setViewMode] = useState<'partners' | 'projects' | 'projectDetails'>('partners');
+  const currentYear = new Date().getFullYear();
+  const defaultStartDate = `${currentYear}-03-01`;
+  const defaultEndDate = `${currentYear + 1}-03-31`;
+
+  const [viewMode, setViewMode] = useState<'partners' | 'projects' | 'folderDetails' | 'projectDetails'>('partners');
   const [selectedProjectData, setSelectedProjectData] = useState<ProjectWithBeneficiaries | null>(null);
-  const [dashboardView, setDashboardView] = useState<'hierarchy' | 'analytics'>('hierarchy');
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const [dashboardView, setDashboardView] = useState<'hierarchy' | 'analytics'>('analytics');
+  const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
+  const [startDateFilter, setStartDateFilter] = useState<string>(defaultStartDate);
+  const [endDateFilter, setEndDateFilter] = useState<string>(defaultEndDate);
+
+  const DateFilters = () => (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+      <div>
+        <label className="block text-sm font-semibold text-gray-700 mb-1">Start Date</label>
+        <input
+          type="date"
+          value={startDateFilter}
+          onChange={(e) => setStartDateFilter(e.target.value)}
+          className="w-full rounded-xl border-2 border-emerald-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 px-3 py-2 text-sm"
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-semibold text-gray-700 mb-1">End Date</label>
+        <input
+          type="date"
+          value={endDateFilter}
+          onChange={(e) => setEndDateFilter(e.target.value)}
+          className="w-full rounded-xl border-2 border-emerald-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 px-3 py-2 text-sm"
+        />
+      </div>
+    </div>
+  );
 
   // When project is pre-selected from ProjectsDashboard, sync it to FilterContext
   useEffect(() => {
@@ -147,35 +180,82 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
     : null;
 
   // Get projects for selected partner - fall back to all filtered projects if no partner locked
-  const partnerProjects = selectedPartner ? filteredProjects.filter((p) => p.csr_partner_id === selectedPartner) : filteredProjects;
+  const analyticsProjects = useMemo(() => {
+    const parseDate = (value?: string) => (value ? new Date(value) : null);
+    const start = parseDate(startDateFilter);
+    const end = parseDate(endDateFilter);
+
+    return filteredProjects.filter((project) => {
+      const projectDate = parseDate(project.start_date) || parseDate(project.expected_end_date);
+
+      if (!projectDate) return true;
+      if (start && projectDate < start) return false;
+      if (end && projectDate > end) return false;
+      return true;
+    });
+    }, [filteredProjects, startDateFilter, endDateFilter]);
+
+    const partnerProjects = selectedPartner
+      ? analyticsProjects.filter((p) => p.csr_partner_id === selectedPartner)
+      : analyticsProjects;
 
   const groupedProjects = useMemo(() => {
     const grouped = partnerProjects.reduce<Record<string, {
       projects: Project[];
       totalBudget: number;
+      totalUtilized: number;
       totalBeneficiaries: number;
       activeCount: number;
       completedCount: number;
+      mealsServed: number;
+      padsDistributed: number;
+      studentsEnrolled: number;
+      treesPlanted: number;
+      schoolsRenovated: number;
+      customMetrics: Record<string, number>;
     }>>((acc, project) => {
       const key = (project.name || 'Untitled Project').trim();
       if (!acc[key]) {
         acc[key] = {
           projects: [],
           totalBudget: 0,
+          totalUtilized: 0,
           totalBeneficiaries: 0,
           activeCount: 0,
           completedCount: 0,
+          mealsServed: 0,
+          padsDistributed: 0,
+          studentsEnrolled: 0,
+          treesPlanted: 0,
+          schoolsRenovated: 0,
+          customMetrics: {},
         };
       }
 
       acc[key].projects.push(project);
       acc[key].totalBudget += project.total_budget || 0;
+      acc[key].totalUtilized += project.utilized_budget || 0;
       acc[key].totalBeneficiaries += project.direct_beneficiaries || 0;
       if (project.status === 'completed') {
         acc[key].completedCount += 1;
       } else {
         acc[key].activeCount += 1;
       }
+
+      const p = project as ProjectWithBeneficiaries;
+      acc[key].mealsServed += Math.max(p.meals_served || 0, getImpactMetricValue(project.impact_metrics, 'meals_served'));
+      acc[key].padsDistributed += Math.max(p.pads_distributed || 0, getImpactMetricValue(project.impact_metrics, 'pads_distributed'));
+      acc[key].studentsEnrolled += Math.max(p.students_enrolled || 0, getImpactMetricValue(project.impact_metrics, 'students_enrolled'));
+      acc[key].treesPlanted += Math.max(p.trees_planted || 0, getImpactMetricValue(project.impact_metrics, 'trees_planted'));
+      acc[key].schoolsRenovated += Math.max(p.schools_renovated || 0, getImpactMetricValue(project.impact_metrics, 'schools_renovated'));
+
+      const metrics = project.impact_metrics || [];
+      metrics.forEach((metric) => {
+        if (metric.key === 'custom' && metric.customLabel && metric.value > 0) {
+          const label = metric.customLabel;
+          acc[key].customMetrics[label] = (acc[key].customMetrics[label] || 0) + metric.value;
+        }
+      });
 
       return acc;
     }, {});
@@ -192,29 +272,6 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
         return b.projects.length - a.projects.length;
       });
   }, [partnerProjects]);
-
-  useEffect(() => {
-    setExpandedGroups((prev) => {
-      let changed = false;
-      const next: Record<string, boolean> = { ...prev };
-
-      groupedProjects.forEach((group) => {
-        if (next[group.name] === undefined) {
-          next[group.name] = group.projects.length > 1 || groupedProjects.length === 1;
-          changed = true;
-        }
-      });
-
-      Object.keys(next).forEach((key) => {
-        if (!groupedProjects.find((group) => group.name === key)) {
-          delete next[key];
-          changed = true;
-        }
-      });
-
-      return changed ? next : prev;
-    });
-  }, [groupedProjects]);
 
   console.log('PMDashboard - selectedPartner:', selectedPartner);
   console.log('PMDashboard - partnerProjects count:', partnerProjects.length);
@@ -247,18 +304,24 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
     setViewMode('projectDetails');
   };
 
-  const toggleGroup = (groupName: string) => {
-    setExpandedGroups((prev) => ({
-      ...prev,
-      [groupName]: !prev[groupName],
-    }));
+  const handleFolderClick = (folderName: string) => {
+    setSelectedFolder(folderName);
+    setViewMode('folderDetails');
   };
 
   const handleBack = () => {
     if (viewMode === 'projectDetails') {
-      setViewMode('projects');
+      // If we came from folder view, go back to folder
+      if (selectedFolder) {
+        setViewMode('folderDetails');
+      } else {
+        setViewMode('projects');
+      }
       setSelectedProjectData(null);
       setSelectedProject(null);
+    } else if (viewMode === 'folderDetails') {
+      setViewMode('projects');
+      setSelectedFolder(null);
     } else if (viewMode === 'projects') {
       setViewMode('partners');
       setSelectedPartner(null);
@@ -290,6 +353,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                     <>
                       {viewMode === 'partners' && 'Select CSR Partner to view their projects'}
                       {viewMode === 'projects' && selectedPartnerObject && `Projects by ${selectedPartnerObject.name}`}
+                      {viewMode === 'folderDetails' && selectedFolder && `Folder: ${selectedFolder}`}
                       {viewMode === 'projectDetails' && selectedProjectData && `Project: ${selectedProjectData.name}`}
                     </>
                   ) : (
@@ -348,8 +412,11 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
             <FilterBar />
           </div>
 
+          {/* Date Filters */}
+          <DateFilters />
+
           {/* Summary Stats - Updates with filters */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5 gap-4">
             {/* Total Projects Card */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -363,7 +430,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                 </div>
                 <span className="text-xs font-bold text-emerald-700 bg-emerald-200 px-3 py-1 rounded-full">TOTAL</span>
               </div>
-              <p className="text-3xl font-black text-emerald-900 mb-1">{filteredProjects.length}</p>
+              <p className="text-3xl font-black text-emerald-900 mb-1">{analyticsProjects.length}</p>
               <p className="text-sm text-emerald-700 font-semibold">All Projects</p>
             </motion.div>
 
@@ -380,7 +447,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                 </div>
                 <span className="text-xs font-bold text-blue-700 bg-blue-200 px-3 py-1 rounded-full">ACTIVE</span>
               </div>
-              <p className="text-3xl font-black text-blue-900 mb-1">{filteredProjects.filter((p: Project) => p.status === 'active').length}</p>
+              <p className="text-3xl font-black text-blue-900 mb-1">{analyticsProjects.filter((p: Project) => p.status === 'active').length}</p>
               <p className="text-sm text-blue-700 font-semibold">Active Projects</p>
             </motion.div>
 
@@ -398,75 +465,94 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                 <span className="text-xs font-bold text-purple-700 bg-purple-200 px-3 py-1 rounded-full">BUDGET</span>
               </div>
               <p className="text-3xl font-black text-purple-900 mb-1">
-                ₹{(filteredProjects.reduce((sum: number, p: Project) => sum + (p.total_budget || 0), 0) / 10000000).toFixed(1)}Cr
+                ₹{(analyticsProjects.reduce((sum: number, p: Project) => sum + (p.total_budget || 0), 0) / 10000000).toFixed(1)}Cr
               </p>
               <p className="text-sm text-purple-700 font-semibold">Total Budget</p>
             </motion.div>
 
-            {/* Total Beneficiaries Card */}
+            {/* Spent Budget Card */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
-              className="bg-linear-to-br from-orange-50 to-orange-100 border-2 border-orange-200 rounded-2xl p-6 shadow-lg hover:shadow-orange-500/20 transition-all"
+              transition={{ delay: 0.5 }}
+              className="bg-linear-to-br from-teal-50 to-teal-100 border-2 border-teal-200 rounded-2xl p-6 shadow-lg hover:shadow-teal-500/20 transition-all"
             >
               <div className="flex items-start justify-between mb-4">
-                <div className="p-3 bg-orange-200 rounded-xl">
-                  <Users className="w-6 h-6 text-orange-700" />
+                <div className="p-3 bg-teal-200 rounded-xl">
+                  <Zap className="w-6 h-6 text-teal-700" />
                 </div>
-                <span className="text-xs font-bold text-orange-700 bg-orange-200 px-3 py-1 rounded-full">PEOPLE</span>
+                <span className="text-xs font-bold text-teal-700 bg-teal-200 px-3 py-1 rounded-full">SPENT</span>
               </div>
-              <p className="text-3xl font-black text-orange-900 mb-1">
-                {formatMetricValue(filteredProjects.reduce((sum: number, p: Project) => sum + (p.direct_beneficiaries || 0), 0))}
+              <p className="text-3xl font-black text-teal-900 mb-1">
+                ₹{(analyticsProjects.reduce((sum: number, p: Project) => sum + (p.utilized_budget || 0), 0) / 10000000).toFixed(1)}Cr
               </p>
-              <p className="text-sm text-orange-700 font-semibold">Beneficiaries</p>
+              <p className="text-sm text-teal-700 font-semibold">Total Utilized</p>
+            </motion.div>
+
+            {/* Remaining Budget Card */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.6 }}
+              className="bg-linear-to-br from-amber-50 to-amber-100 border-2 border-amber-200 rounded-2xl p-6 shadow-lg hover:shadow-amber-500/20 transition-all"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div className="p-3 bg-amber-200 rounded-xl">
+                  <Target className="w-6 h-6 text-amber-700" />
+                </div>
+                <span className="text-xs font-bold text-amber-700 bg-amber-200 px-3 py-1 rounded-full">REMAINING</span>
+              </div>
+              <p className="text-3xl font-black text-amber-900 mb-1">
+                ₹{((analyticsProjects.reduce((sum: number, p: Project) => sum + (p.total_budget || 0), 0) - analyticsProjects.reduce((sum: number, p: Project) => sum + (p.utilized_budget || 0), 0)) / 10000000).toFixed(1)}Cr
+              </p>
+              <p className="text-sm text-amber-700 font-semibold">Budget Remaining</p>
             </motion.div>
           </div>
 
           {/* Charts Section */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Project Status Distribution */}
+            {/* Budget vs Utilization */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 }}
+              transition={{ delay: 0.55 }}
               className="bg-white border-2 border-gray-200 rounded-2xl p-8 shadow-lg"
             >
-              <h3 className="text-xl font-bold text-gray-900 mb-6">Project Status Distribution</h3>
-              <div className="flex items-center justify-center min-h-[300px]">
-                {filteredProjects.length === 0 ? (
-                  <div className="text-center py-12">
-                    <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
-                      <BarChart3 className="w-8 h-8 text-gray-400" />
-                    </div>
-                    <p className="text-gray-500 font-semibold">No project data available</p>
-                    <p className="text-gray-400 text-sm mt-1">Projects will appear here once data is added</p>
-                  </div>
-                ) : (
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">Budget vs Utilization</h3>
+                  <p className="text-sm text-gray-500">Total budget split by utilized and remaining</p>
+                </div>
+                <span className="text-sm text-gray-500">{analyticsProjects.length} projects</span>
+              </div>
+
+              {(() => {
+                const totalBudget = analyticsProjects.reduce((sum: number, p: Project) => sum + (p.total_budget || 0), 0);
+                const totalUtilized = analyticsProjects.reduce((sum: number, p: Project) => sum + (p.utilized_budget || 0), 0);
+                const totalRemaining = Math.max(totalBudget - totalUtilized, 0);
+                const pieData = [
+                  { name: 'Utilized', value: totalUtilized, color: '#10b981' },
+                  { name: 'Remaining', value: totalRemaining, color: '#f59e0b' },
+                ];
+                return (
                   <ResponsiveContainer width="100%" height={300}>
                     <PieChart>
-                      <Pie
-                        data={[
-                          { name: 'Active', value: filteredProjects.filter((p: Project) => p.status === 'active').length, fill: '#10b981' },
-                          { name: 'Completed', value: filteredProjects.filter((p: Project) => p.status === 'completed').length, fill: '#f59e0b' }
-                        ]}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={({ name, percent }: { name?: string; percent?: number }) => `${name || ''} ${((percent || 0) * 100).toFixed(0)}%`}
-                        outerRadius={80}
-                        fill="#8884d8"
-                        dataKey="value"
-                      >
-                        <Cell fill="#10b981" />
-                        <Cell fill="#3b82f6" />
-                        <Cell fill="#f59e0b" />
+                      <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={70} outerRadius={100} paddingAngle={2}>
+                        {pieData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                        <Label
+                          value={`₹${(totalUtilized / 10000000).toFixed(1)}Cr`}
+                          position="center"
+                          className="text-xl font-black text-gray-900"
+                        />
                       </Pie>
-                      <Tooltip formatter={(value) => `${value} projects`} />
+                      <Tooltip formatter={(value) => [`₹${(Number(value) / 10000000).toFixed(2)}Cr`, '']} />
+                      <Legend formatter={(value: string | number) => <span className="text-sm text-gray-700 font-semibold">{value}</span>} />
                     </PieChart>
                   </ResponsiveContainer>
-                )}
-              </div>
+                );
+              })()}
             </motion.div>
 
             {/* Top CSR Partners by Project Count */}
@@ -478,7 +564,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
             >
               <h3 className="text-xl font-bold text-gray-900 mb-6">Top Partners by Projects</h3>
               <div className="flex items-center justify-center min-h-[300px]">
-                {filteredProjects.length === 0 ? (
+                {analyticsProjects.length === 0 ? (
                   <div className="text-center py-12">
                     <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
                       <BarChart3 className="w-8 h-8 text-gray-400" />
@@ -490,7 +576,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                   <ResponsiveContainer width="100%" height={300}>
                     <BarChart data={csrPartners.slice(0, 8).map(partner => ({
                       name: partner.name.substring(0, 12),
-                      projects: filteredProjects.filter((p: Project) => p.csr_partner_id === partner.id).length
+                      projects: analyticsProjects.filter((p: Project) => p.csr_partner_id === partner.id).length
                     }))}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                       <XAxis dataKey="name" stroke="#6b7280" style={{ fontSize: '12px' }} />
@@ -522,7 +608,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                   <span className="text-sm font-bold text-emerald-700 uppercase">Total Beneficiaries</span>
                 </div>
                 <p className="text-3xl font-black text-emerald-900">
-                  {formatMetricValue(filteredProjects.reduce((sum: number, p: Project) => sum + (p.direct_beneficiaries || 0), 0))}
+                  {formatMetricValue(analyticsProjects.reduce((sum: number, p: Project) => sum + (p.direct_beneficiaries || 0), 0))}
                 </p>
               </div>
 
@@ -536,7 +622,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                 </div>
                 <p className="text-3xl font-black text-orange-900">
                   {formatMetricValue(
-                    filteredProjects.reduce((sum: number, p: Project) => {
+                    analyticsProjects.reduce((sum: number, p: Project) => {
                       const fromColumn = (p as ProjectWithBeneficiaries).meals_served || 0;
                       const fromJson = getImpactMetricValue(p.impact_metrics, 'meals_served');
                       return sum + Math.max(fromColumn, fromJson);
@@ -555,7 +641,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                 </div>
                 <p className="text-3xl font-black text-pink-900">
                   {formatMetricValue(
-                    filteredProjects.reduce((sum: number, p: Project) => {
+                    analyticsProjects.reduce((sum: number, p: Project) => {
                       const fromColumn = (p as ProjectWithBeneficiaries).pads_distributed || 0;
                       const fromJson = getImpactMetricValue(p.impact_metrics, 'pads_distributed');
                       return sum + Math.max(fromColumn, fromJson);
@@ -574,7 +660,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                 </div>
                 <p className="text-3xl font-black text-blue-900">
                   {formatMetricValue(
-                    filteredProjects.reduce((sum: number, p: Project) => {
+                    analyticsProjects.reduce((sum: number, p: Project) => {
                       const fromColumn = (p as ProjectWithBeneficiaries).students_enrolled || 0;
                       const fromJson = getImpactMetricValue(p.impact_metrics, 'students_enrolled');
                       return sum + Math.max(fromColumn, fromJson);
@@ -593,7 +679,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                 </div>
                 <p className="text-3xl font-black text-green-900">
                   {formatMetricValue(
-                    filteredProjects.reduce((sum: number, p: Project) => {
+                    analyticsProjects.reduce((sum: number, p: Project) => {
                       const fromColumn = (p as ProjectWithBeneficiaries).trees_planted || 0;
                       const fromJson = getImpactMetricValue(p.impact_metrics, 'trees_planted');
                       return sum + Math.max(fromColumn, fromJson);
@@ -611,7 +697,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                   <span className="text-sm font-bold text-purple-700 uppercase">Schools Renovated</span>
                 </div>
                 <p className="text-3xl font-black text-purple-900">
-                  {filteredProjects.reduce((sum: number, p: Project) => {
+                  {analyticsProjects.reduce((sum: number, p: Project) => {
                     const fromColumn = (p as ProjectWithBeneficiaries).schools_renovated || 0;
                     const fromJson = getImpactMetricValue(p.impact_metrics, 'schools_renovated');
                     return sum + Math.max(fromColumn, fromJson);
@@ -623,7 +709,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
               {(() => {
                 // Aggregate all custom metrics from all projects
                 const customMetrics: Record<string, number> = {};
-                filteredProjects.forEach((p: Project) => {
+                analyticsProjects.forEach((p: Project) => {
                   const metrics = p.impact_metrics || [];
                   metrics.forEach((metric) => {
                     if (metric.key === 'custom' && metric.customLabel && metric.value > 0) {
@@ -664,11 +750,10 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
       ) : (
         // HIERARCHY VIEW - All existing code
         <>
-          {/* Locked Filter Bar - Shows when project is pre-selected */}
-          {isProjectSelected && <LockedFilterBar />}
-          
-          {/* Regular Filter Bar - Shows when no project is pre-selected */}
-          {!isProjectSelected && <FilterBar />}
+          <div className="mb-4">
+            {isProjectSelected ? <LockedFilterBar /> : <FilterBar />}
+          </div>
+          <DateFilters />
 
           {/* Back Button */}
           {viewMode !== 'partners' && (
@@ -713,8 +798,8 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                 // When project is pre-selected, only show the selected partner
                 .filter(partner => !isProjectSelected || partner.id === selectedPartner)
                 .map((partner, index) => {
-                // Count projects for this partner from filteredProjects
-                const partnerProjectCount = filteredProjects.filter((p: Project) => p.csr_partner_id === partner.id).length;
+                // Count projects for this partner from the date-filtered list
+                const partnerProjectCount = analyticsProjects.filter((p: Project) => p.csr_partner_id === partner.id).length;
                 return (
                   <motion.button
                     key={partner.id}
@@ -775,115 +860,100 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
             </div>
 
             {groupedProjects.length > 0 ? (
-              <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {groupedProjects.map((group, index) => {
-                  const isExpanded = expandedGroups[group.name];
                   const projectLabel = group.projects.length === 1 ? 'Project' : 'Projects';
                   const formattedBudget = group.totalBudget > 0
                     ? `₹${(group.totalBudget / 10000000).toFixed(2)}Cr`
-                    : 'Budget pending';
+                    : '';
+
+                  const impactItems = [
+                    { label: 'Schools Renovated', value: group.schoolsRenovated, color: 'purple' },
+                    { label: 'Students Enrolled', value: group.studentsEnrolled, color: 'blue' },
+                    { label: 'Trees Planted', value: group.treesPlanted, color: 'green' },
+                    { label: 'Meals Served', value: group.mealsServed, color: 'orange' },
+                    { label: 'Pads Distributed', value: group.padsDistributed, color: 'pink' },
+                  ].filter(item => item.value > 0);
+
+                  const customItems = Object.entries(group.customMetrics).map(([label, value]) => ({
+                    label,
+                    value,
+                    color: 'gray',
+                  }));
+
+                  const allImpactItems = [...impactItems, ...customItems];
 
                   return (
-                    <motion.div
+                    <motion.button
                       key={group.name}
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.08 }}
-                      className="bg-white border-2 border-gray-200 rounded-3xl p-5 shadow-sm"
+                      transition={{ delay: index * 0.05 }}
+                      onClick={() => handleFolderClick(group.name)}
+                      className="group relative text-left"
                     >
-                      <button
-                        type="button"
-                        onClick={() => toggleGroup(group.name)}
-                        className="w-full flex flex-col gap-4 text-left"
-                      >
-                        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                          <div>
-                            <p className="text-sm font-semibold text-emerald-600 uppercase tracking-wide">Common Project</p>
-                            <h3 className="text-2xl font-bold text-gray-900">{group.name}</h3>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-3">
-                            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-semibold">
-                              <FolderKanban className="w-4 h-4" />
+                      <div className="absolute inset-0 bg-linear-to-br from-emerald-500/20 to-emerald-600/20 rounded-2xl blur-2xl group-hover:blur-3xl transition-all opacity-0 group-hover:opacity-100"></div>
+                      
+                      <div className="relative bg-white border-2 border-gray-200 hover:border-emerald-500 rounded-2xl p-6 transition-all duration-300 hover:shadow-2xl hover:shadow-emerald-500/20 hover:-translate-y-2 overflow-hidden h-full">
+                        <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-bl-3xl group-hover:bg-emerald-500/10 transition-colors"></div>
+                        
+                        <div className="relative z-10">
+                          <div className="flex items-start justify-between mb-4">
+                            <div className="p-3 bg-emerald-100 group-hover:bg-emerald-200 rounded-xl transition-all">
+                              <FolderKanban className="w-6 h-6 text-emerald-600" />
+                            </div>
+                            <span className="text-sm font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">
                               {group.projects.length} {projectLabel}
                             </span>
-                            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-yellow-50 text-yellow-700 font-semibold">
-                              <Target className="w-4 h-4" />
+                          </div>
+                          
+                          <h3 className="text-xl font-bold text-gray-900 mb-3">{group.name}</h3>
+                          
+                          <div className="flex flex-wrap gap-2 mb-3">
+                            <span className="text-xs font-semibold text-yellow-700 bg-yellow-50 px-2 py-1 rounded-full">
                               {group.activeCount} Active
                             </span>
-                            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-semibold">
-                              <CheckCircle2 className="w-4 h-4" />
+                            <span className="text-xs font-semibold text-blue-700 bg-blue-50 px-2 py-1 rounded-full">
                               {group.completedCount} Completed
                             </span>
-                            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-50 text-purple-700 font-semibold">
-                              <Users className="w-4 h-4" />
+                          </div>
+
+                          <div className="flex flex-wrap gap-2 mb-3">
+                            <span className="text-xs font-semibold text-purple-700 bg-purple-50 px-2 py-1 rounded-full">
                               {formatMetricValue(group.totalBeneficiaries)} Beneficiaries
                             </span>
-                            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-50 text-orange-700 font-semibold">
-                              <Zap className="w-4 h-4" />
-                              {formattedBudget}
-                            </span>
-                            <span className={`p-2 rounded-full border border-gray-200 transition-transform ${isExpanded ? 'bg-emerald-50 text-emerald-600 rotate-180' : 'text-gray-500'}`}>
-                              <ChevronDown className="w-5 h-5" />
-                            </span>
+                            {formattedBudget && (
+                              <span className="text-xs font-semibold text-orange-700 bg-orange-50 px-2 py-1 rounded-full">
+                                {formattedBudget}
+                              </span>
+                            )}
+                          </div>
+
+                          {allImpactItems.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 pt-2 border-t border-gray-100">
+                              {allImpactItems.slice(0, 3).map((item) => (
+                                <span
+                                  key={item.label}
+                                  className={`text-xs font-medium px-2 py-1 rounded-full bg-${item.color}-100 text-${item.color}-700`}
+                                >
+                                  {item.label}: {formatMetricValue(item.value)}
+                                </span>
+                              ))}
+                              {allImpactItems.length > 3 && (
+                                <span className="text-xs font-medium px-2 py-1 rounded-full bg-gray-100 text-gray-600">
+                                  +{allImpactItems.length - 3} more
+                                </span>
+                              )}
+                            </div>
+                          )}
+
+                          <div className="flex items-center gap-2 text-emerald-600 font-semibold text-sm mt-4 group-hover:gap-3 transition-all">
+                            View Projects
+                            <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                           </div>
                         </div>
-                      </button>
-
-                      <AnimatePresence initial={false}>
-                        {isExpanded && (
-                          <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: 'auto', opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            transition={{ duration: 0.25 }}
-                            className="mt-5 border-t border-gray-100 pt-5"
-                          >
-                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                              {group.projects.map((project, projectIndex) => {
-                                const Icon = getIconComponent(project.display_icon);
-                                const colorClass = project.display_color || 'emerald';
-
-                                return (
-                                  <motion.button
-                                    key={project.id}
-                                    initial={{ opacity: 0, y: 15 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ delay: projectIndex * 0.05 }}
-                                    onClick={() => handleProjectClick(project)}
-                                    className="group relative text-left"
-                                  >
-                                    <div className={`absolute inset-0 bg-linear-to-br from-${colorClass}-500/15 to-${colorClass}-600/15 rounded-2xl blur-2xl group-hover:blur-3xl transition-all opacity-0 group-hover:opacity-100`}></div>
-
-                                    <div className="relative bg-white border-2 border-gray-200 hover:border-emerald-500 rounded-2xl p-6 transition-all duration-300 hover:shadow-2xl hover:shadow-emerald-500/20 hover:-translate-y-2 overflow-hidden">
-                                      <div className={`absolute top-0 right-0 w-24 h-24 bg-${colorClass}-500/5 rounded-bl-3xl group-hover:bg-${colorClass}-500/10 transition-colors`}></div>
-
-                                      <div className="relative z-10">
-                                        <div className="flex items-start justify-between mb-4">
-                                          <div className={`p-3 bg-${colorClass}-100 group-hover:bg-${colorClass}-200 rounded-xl transition-all`}>
-                                            <Icon className={`w-6 h-6 text-${colorClass}-600`} />
-                                          </div>
-                                          <div className={`text-sm font-bold text-${colorClass}-600 bg-${colorClass}-50 px-3 py-1 rounded-full`}>
-                                            {project.status || 'Active'}
-                                          </div>
-                                        </div>
-
-                                        <h3 className="text-lg font-bold text-gray-900 mb-1">{project.name}</h3>
-                                        <p className="text-sm text-gray-600 mb-4 line-clamp-2">{project.description}</p>
-
-                                        <div className="flex items-center gap-2 text-emerald-600 font-semibold text-sm group-hover:gap-3 transition-all">
-                                          View Details
-                                          <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </motion.button>
-                                );
-                              })}
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </motion.div>
+                      </div>
+                    </motion.button>
                   );
                 })}
               </div>
@@ -895,6 +965,167 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
             )}
           </motion.div>
         )}
+
+        {/* FOLDER DETAILS VIEW */}
+        {viewMode === 'folderDetails' && selectedFolder && (() => {
+          const folderData = groupedProjects.find(g => g.name === selectedFolder);
+          if (!folderData) return null;
+
+          const impactItems = [
+            { label: 'Schools Renovated', value: folderData.schoolsRenovated, color: 'purple', icon: '🏫' },
+            { label: 'Students Enrolled', value: folderData.studentsEnrolled, color: 'blue', icon: '🎓' },
+            { label: 'Trees Planted', value: folderData.treesPlanted, color: 'green', icon: '🌳' },
+            { label: 'Meals Served', value: folderData.mealsServed, color: 'orange', icon: '🍽️' },
+            { label: 'Pads Distributed', value: folderData.padsDistributed, color: 'pink', icon: '🩸' },
+          ].filter(item => item.value > 0);
+
+          const customItems = Object.entries(folderData.customMetrics).map(([label, value]) => ({
+            label,
+            value,
+            color: 'cyan',
+            icon: '📊',
+          }));
+
+          const allImpactItems = [...impactItems, ...customItems];
+
+          return (
+            <motion.div
+              key="folderDetails"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+            >
+              {/* Folder Header */}
+              <div className="mb-6">
+                <div className="flex flex-wrap items-center gap-3 mb-4">
+                  <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-100 text-emerald-700 rounded-full font-semibold">
+                    <Building2 className="w-4 h-4" />
+                    {selectedPartnerObject?.name}
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-gray-400" />
+                  <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-full font-semibold">
+                    <FolderKanban className="w-4 h-4" />
+                    {selectedFolder}
+                  </div>
+                </div>
+              </div>
+
+              {/* Folder Stats Card */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-white border-2 border-gray-200 rounded-3xl p-6 mb-6 shadow-lg"
+              >
+                <div className="flex items-center gap-4 mb-6">
+                  <div className="p-4 bg-emerald-100 rounded-2xl">
+                    <FolderKanban className="w-8 h-8 text-emerald-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900">{selectedFolder}</h2>
+                    <p className="text-gray-600">{folderData.projects.length} {folderData.projects.length === 1 ? 'Project' : 'Projects'} in this folder</p>
+                  </div>
+                </div>
+
+                {/* Summary Stats */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-center">
+                    <p className="text-2xl font-bold text-yellow-700">{folderData.activeCount}</p>
+                    <p className="text-xs font-semibold text-yellow-600 uppercase">Active</p>
+                  </div>
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
+                    <p className="text-2xl font-bold text-blue-700">{folderData.completedCount}</p>
+                    <p className="text-xs font-semibold text-blue-600 uppercase">Completed</p>
+                  </div>
+                  <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 text-center">
+                    <p className="text-2xl font-bold text-purple-700">{formatMetricValue(folderData.totalBeneficiaries)}</p>
+                    <p className="text-xs font-semibold text-purple-600 uppercase">Beneficiaries</p>
+                  </div>
+                  <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 text-center">
+                    <p className="text-2xl font-bold text-orange-700">
+                      {folderData.totalBudget > 0 ? `₹${(folderData.totalBudget / 10000000).toFixed(2)}Cr` : '—'}
+                    </p>
+                    <p className="text-xs font-semibold text-orange-600 uppercase">Total Budget</p>
+                  </div>
+                </div>
+
+                {/* Impact Metrics Grid */}
+                {allImpactItems.length > 0 && (
+                  <>
+                    <h3 className="text-sm font-bold text-gray-700 uppercase mb-4">Folder Impact Totals</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                      {folderData.totalUtilized > 0 && (
+                        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-lg">💰</span>
+                            <span className="text-xs font-bold text-emerald-700 uppercase">Utilized</span>
+                          </div>
+                          <p className="text-xl font-bold text-emerald-800">₹{formatMetricValue(folderData.totalUtilized)}</p>
+                        </div>
+                      )}
+                      {allImpactItems.map((item) => (
+                        <div key={item.label} className={`bg-${item.color}-50 border border-${item.color}-200 rounded-xl p-4`}>
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-lg">{item.icon}</span>
+                            <span className={`text-xs font-bold text-${item.color}-700 uppercase`}>{item.label}</span>
+                          </div>
+                          <p className={`text-xl font-bold text-${item.color}-800`}>{formatMetricValue(item.value)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </motion.div>
+
+              {/* Projects Grid */}
+              <h3 className="text-lg font-bold text-gray-900 mb-4">Projects in {selectedFolder}</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                {folderData.projects.map((project, projectIndex) => {
+                  const Icon = getIconComponent(project.display_icon);
+                  const colorClass = project.display_color || 'emerald';
+
+                  return (
+                    <motion.button
+                      key={project.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: projectIndex * 0.05 }}
+                      onClick={() => handleProjectClick(project)}
+                      className="group relative text-left"
+                    >
+                      <div className={`absolute inset-0 bg-linear-to-br from-${colorClass}-500/15 to-${colorClass}-600/15 rounded-2xl blur-2xl group-hover:blur-3xl transition-all opacity-0 group-hover:opacity-100`}></div>
+
+                      <div className="relative bg-white border-2 border-gray-200 hover:border-emerald-500 rounded-2xl p-6 transition-all duration-300 hover:shadow-2xl hover:shadow-emerald-500/20 hover:-translate-y-2 overflow-hidden">
+                        <div className={`absolute top-0 right-0 w-24 h-24 bg-${colorClass}-500/5 rounded-bl-3xl group-hover:bg-${colorClass}-500/10 transition-colors`}></div>
+
+                        <div className="relative z-10">
+                          <div className="flex items-start justify-between mb-4">
+                            <div className={`p-3 bg-${colorClass}-100 group-hover:bg-${colorClass}-200 rounded-xl transition-all`}>
+                              <Icon className={`w-6 h-6 text-${colorClass}-600`} />
+                            </div>
+                            <div className={`text-sm font-bold text-${colorClass}-600 bg-${colorClass}-50 px-3 py-1 rounded-full`}>
+                              {project.status || 'Active'}
+                            </div>
+                          </div>
+
+                          <h3 className="text-lg font-bold text-gray-900 mb-1">{getProjectDisplayTitle(project)}</h3>
+                          {project.description && (
+                            <p className="text-sm text-gray-600 mb-4 line-clamp-2">{project.description}</p>
+                          )}
+
+                          <div className="flex items-center gap-2 text-emerald-600 font-semibold text-sm group-hover:gap-3 transition-all">
+                            View Details
+                            <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                          </div>
+                        </div>
+                      </div>
+                    </motion.button>
+                  );
+                })}
+              </div>
+            </motion.div>
+          );
+        })()}
 
         {/* PROJECT DETAILS VIEW */}
         {viewMode === 'projectDetails' && selectedProjectData && (
@@ -920,7 +1151,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                     })()}
                   </div>
                   <div className="flex-1">
-                    <h2 className="text-3xl font-bold text-gray-900 mb-2">{selectedProjectData.name}</h2>
+                    <h2 className="text-3xl font-bold text-gray-900 mb-2">{getProjectDisplayTitle(selectedProjectData)}</h2>
                     <div className="flex flex-wrap gap-3">
                       <span className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-100 text-emerald-700 rounded-full font-semibold text-sm">
                         <CheckCircle2 className="w-4 h-4" />

@@ -235,9 +235,9 @@ const CSRBudgetPage = () => {
             </div>
           </div>
 
-          {/* Toll Filter */}
+          {/* Subcompany Filter */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Toll</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Subcompany</label>
             <div className="relative">
               <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-emerald-600" />
               <select
@@ -249,7 +249,7 @@ const CSRBudgetPage = () => {
                 disabled={!selectedPartner || tolls.length === 0}
                 className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white font-medium disabled:bg-gray-100 disabled:cursor-not-allowed"
               >
-                <option value="all">All Tolls</option>
+                <option value="all">All Subcompanies</option>
                 {tolls.map(toll => (
                   <option key={toll.id} value={toll.id}>{toll.toll_name}</option>
                 ))}

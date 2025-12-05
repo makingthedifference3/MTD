@@ -459,7 +459,7 @@ const AdminExpensesPage: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Toll</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Subcompany</label>
               <select
                 value={filterToll}
                 onChange={async (e) => {
@@ -487,7 +487,7 @@ const AdminExpensesPage: React.FC = () => {
                 }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
               >
-                <option value="">All Tolls</option>
+                <option value="">All Subcompanies</option>
                 {filteredTolls.map(toll => (
                   <option key={toll.id} value={toll.id}>{toll.toll_name}</option>
                 ))}

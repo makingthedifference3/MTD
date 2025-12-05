@@ -170,28 +170,59 @@ export const csrPartnerService = {
   },
 
   async deletePartnerCascade(partnerId: string): Promise<boolean> {
-    const timestamp = new Date().toISOString();
     try {
-      const { error: partnerError } = await supabase
+      // Collect projects for this partner
+      const { data: partnerProjects, error: projectFetchError } = await supabase
+        .from('projects')
+        .select('id')
+        .eq('csr_partner_id', partnerId);
+
+      if (projectFetchError) throw projectFetchError;
+
+      const projectIds = (partnerProjects || []).map((p) => p.id);
+
+      // Remove project team members tied to partner's projects
+      if (projectIds.length > 0) {
+        const { error: ptmDeleteError } = await supabase
+          .from('project_team_members')
+          .delete()
+          .in('project_id', projectIds);
+
+        if (ptmDeleteError) throw ptmDeleteError;
+
+        const { error: projectsDeleteError } = await supabase
+          .from('projects')
+          .delete()
+          .in('id', projectIds);
+
+        if (projectsDeleteError) throw projectsDeleteError;
+      }
+
+      // Delete tolls for partner
+      const { data: partnerTolls, error: tollFetchError } = await supabase
+        .from('csr_partner_tolls')
+        .select('id')
+        .eq('csr_partner_id', partnerId);
+
+      if (tollFetchError) throw tollFetchError;
+
+      if ((partnerTolls || []).length > 0) {
+        const tollIds = partnerTolls.map((toll) => toll.id);
+        const { error: tollDeleteError } = await supabase
+          .from('csr_partner_tolls')
+          .delete()
+          .in('id', tollIds);
+
+        if (tollDeleteError) throw tollDeleteError;
+      }
+
+      // Delete partner itself
+      const { error: partnerDeleteError } = await supabase
         .from('csr_partners')
-        .update({ is_active: false, updated_at: timestamp })
+        .delete()
         .eq('id', partnerId);
 
-      if (partnerError) throw partnerError;
-
-      const { error: tollError } = await supabase
-        .from('csr_partner_tolls')
-        .update({ is_active: false, updated_at: timestamp })
-        .eq('csr_partner_id', partnerId);
-
-      if (tollError) throw tollError;
-
-      const { error: projectError } = await supabase
-        .from('projects')
-        .update({ is_active: false, status: 'archived', updated_at: timestamp })
-        .eq('csr_partner_id', partnerId);
-
-      if (projectError) throw projectError;
+      if (partnerDeleteError) throw partnerDeleteError;
 
       return true;
     } catch (error) {

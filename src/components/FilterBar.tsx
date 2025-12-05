@@ -187,11 +187,11 @@ const FilterBar = ({ workFilter = '', onWorkFilterChange, workOptions = [] }: Fi
           </div>
         </div>
 
-        {/* Toll Dropdown */}
+        {/* Subcompany Dropdown */}
         {selectedPartner && (
           <div className="flex-1 min-w-[250px]">
             <label className="block text-xs font-semibold text-emerald-700 mb-2">
-              Toll / Subcompany {filtersLocked && <span className="text-blue-600">(Locked)</span>}
+              Subcompany {filtersLocked && <span className="text-blue-600">(Locked)</span>}
             </label>
             <div className="relative">
               <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-600" />
@@ -201,7 +201,7 @@ const FilterBar = ({ workFilter = '', onWorkFilterChange, workOptions = [] }: Fi
                 disabled={tolls.length === 0 || isLoading || filtersLocked}
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl border-2 border-emerald-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all bg-white text-gray-900 font-medium text-sm appearance-none cursor-pointer hover:border-emerald-300 disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-gray-50"
               >
-                <option value="all">{tolls.length ? 'All Tolls (Partner-wise)' : 'No tolls available'}</option>
+                <option value="all">{tolls.length ? 'All Subcompanies (Partner-wise)' : 'No subcompanies available'}</option>
                 {tolls.map((toll: Toll) => (
                   <option key={toll.id} value={toll.id}>
                     {toll.toll_name || toll.poc_name}

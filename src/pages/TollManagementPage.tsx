@@ -19,6 +19,7 @@ import {
 import { useFilter } from '@/context/useFilter';
 import { INDIAN_STATES } from '@/constants/indianStates';
 import PasswordViewer from '@/components/PasswordViewer';
+import { formatIndianRupee } from '@/utils/currency';
 
 const INITIAL_TOLL_FORM = {
   toll_name: '',
@@ -285,7 +286,7 @@ const TollManagementPage = () => {
                 <p className="text-gray-600">{partner.company_name}</p>
               </div>
             </div>
-            <p className="text-gray-600 mt-2">Manage tolls/subcompanies for this CSR partner</p>
+            <p className="text-gray-600 mt-2">Manage subcompanies for this CSR partner</p>
           </div>
           <button
             onClick={() => {
@@ -341,7 +342,7 @@ const TollManagementPage = () => {
             <DollarSign className="w-5 h-5 text-emerald-600" />
             <div>
               <p className="text-xs text-gray-500">Budget Allocated</p>
-              <p className="font-medium text-gray-900">₹{partnerBudgetTotal.toLocaleString()}</p>
+              <p className="font-medium text-gray-900">{formatIndianRupee(partnerBudgetTotal)}</p>
             </div>
           </div>
         </div>
@@ -366,7 +367,7 @@ const TollManagementPage = () => {
         >
           <p className="text-gray-600 text-sm font-medium mb-1">Total Budget</p>
           <h3 className="text-3xl font-bold text-emerald-600">
-            ₹{partnerBudgetTotal.toLocaleString()}
+            {formatIndianRupee(partnerBudgetTotal)}
           </h3>
         </motion.div>
         <motion.div
@@ -426,7 +427,7 @@ const TollManagementPage = () => {
                 )}
                 <div className="flex items-center text-sm text-gray-600">
                   <DollarSign className="w-4 h-4 mr-2 text-blue-600" />
-                  Budget: ₹{(tollBudgetMap.get(toll.id) || 0).toLocaleString()}
+                  Budget: {formatIndianRupee(tollBudgetMap.get(toll.id) ?? 0)}
                 </div>
               </div>
 
