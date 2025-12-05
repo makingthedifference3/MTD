@@ -469,13 +469,13 @@ const MediaPage = () => {
             )}
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Toll</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Subcompany</label>
             {filterPartner === 'all' || availableFilterTolls.length === 0 ? (
               <select
                 disabled
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-400 cursor-not-allowed"
               >
-                <option>No tolls available</option>
+                <option>No subcompanies available</option>
               </select>
             ) : (
               <select
@@ -483,7 +483,7 @@ const MediaPage = () => {
                 onChange={(e) => setFilterToll(e.target.value)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
               >
-                <option value="all">All Tolls</option>
+                <option value="all">All Subcompanies</option>
                 {availableFilterTolls.map(toll => (
                   <option key={toll.id} value={toll.id}>{toll.toll_name || toll.poc_name}</option>
                 ))}
@@ -612,7 +612,7 @@ const MediaPage = () => {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Toll (Optional)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Subcompany (Optional)</label>
                 {uploadForm.csr_partner_id ? (
                   uploadFormTolls.length > 0 ? (
                     <select
@@ -620,7 +620,7 @@ const MediaPage = () => {
                       onChange={(e) => setUploadForm(prev => ({ ...prev, toll_id: e.target.value }))}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
                     >
-                      <option value="">Select Toll</option>
+                      <option value="">Select Subcompany</option>
                       {uploadFormTolls.map(toll => (
                         <option key={toll.id} value={toll.id}>{toll.toll_name || toll.poc_name}</option>
                       ))}
@@ -630,7 +630,7 @@ const MediaPage = () => {
                       disabled
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-400 cursor-not-allowed"
                     >
-                      <option>No tolls for selected partner</option>
+                      <option>No subcompanies for selected partner</option>
                     </select>
                   )
                 ) : (
@@ -638,7 +638,7 @@ const MediaPage = () => {
                     disabled
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-400 cursor-not-allowed"
                   >
-                    <option>Select CSR partner to load tolls</option>
+                    <option>Select CSR partner to load subcompanies</option>
                   </select>
                 )}
               </div>
@@ -991,7 +991,7 @@ const MediaPage = () => {
                       </select>
                     </div>
                     <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Toll (Optional)</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Subcompany (Optional)</label>
                       {uploadForm.csr_partner_id ? (
                         uploadFormTolls.length > 0 ? (
                           <select
@@ -999,7 +999,7 @@ const MediaPage = () => {
                             onChange={(e) => setUploadForm(prev => ({ ...prev, toll_id: e.target.value }))}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
                           >
-                            <option value="">Select Toll</option>
+                            <option value="">Select Subcompany</option>
                             {uploadFormTolls.map(toll => (
                               <option key={toll.id} value={toll.id}>{toll.toll_name || toll.poc_name}</option>
                             ))}
@@ -1009,7 +1009,7 @@ const MediaPage = () => {
                             disabled
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-400 cursor-not-allowed"
                           >
-                            <option>No tolls for selected partner</option>
+                              <option>No subcompanies for selected partner</option>
                           </select>
                         )
                       ) : (
@@ -1017,7 +1017,7 @@ const MediaPage = () => {
                           disabled
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-400 cursor-not-allowed"
                         >
-                          <option>Select CSR partner to load tolls</option>
+                            <option>Select CSR partner to load subcompanies</option>
                         </select>
                       )}
                     </div>

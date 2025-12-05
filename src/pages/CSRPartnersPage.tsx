@@ -193,7 +193,7 @@ const CSRPartnersPage = () => {
 
   const localStats = [
     { label: 'Total Partners', value: stats.totalPartners },
-    { label: 'Total Tolls', value: stats.totalTolls },
+    { label: 'Total Subcompany', value: stats.totalTolls },
     { label: 'Total Projects', value: stats.totalProjects },
     {
       label: 'Total Budget',
@@ -210,7 +210,7 @@ const CSRPartnersPage = () => {
       return;
     }
     if (!formData.hasToll && (!formData.contactPerson.trim() || !formData.email.trim() || !formData.phone.trim())) {
-      setFormError('Please fill in contact person, email, and phone when tolls are not managed separately.');
+      setFormError('Please fill in contact person, email, and phone when subcompanies are not managed separately.');
       return;
     }
     if (formData.poc_password && formData.poc_password !== formData.confirmPassword) {
@@ -320,7 +320,7 @@ const CSRPartnersPage = () => {
       return;
     }
     if (!editFormData.hasToll && (!editFormData.contactPerson.trim() || !editFormData.email.trim() || !editFormData.phone.trim())) {
-      setEditFormError('Please fill in contact person, email, and phone when tolls are not managed separately.');
+    setEditFormError('Please fill in contact person, email, and phone when subcompanies are not managed separately.');
       return;
     }
     if (editFormData.poc_password && editFormData.poc_password !== editFormData.confirmPassword) {
@@ -460,7 +460,7 @@ const CSRPartnersPage = () => {
                   <p className="text-xl font-bold text-emerald-600">{formatIndianRupee(partnerBudgetValue)}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-600 mb-1">Tolls</p>
+                  <p className="text-xs text-gray-600 mb-1">Subcompanies</p>
                   <p className="text-xl font-bold text-blue-600">{tollCounts[partner.id] || 0}</p>
                 </div>
               </div>
@@ -497,7 +497,7 @@ const CSRPartnersPage = () => {
                   className="flex items-center justify-center gap-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold py-2 px-4 rounded-lg transition-colors border border-blue-100"
                 >
                   <Settings className="w-4 h-4" />
-                  Tolls
+                  Subcompany
                 </button>
               )}
             </div>
@@ -536,7 +536,7 @@ const CSRPartnersPage = () => {
           directBudget={selectedPartnerBudgetInfo?.directBudget ?? 0}
           tollBudgets={selectedPartnerBudgetInfo ? Object.entries(selectedPartnerBudgetInfo.tollBudgets).map(([tollId, info]) => ({
             tollId,
-            tollName: info.name || 'Toll',
+            tollName: info.name || 'Subcompany',
             total: info.total,
           })) : []}
           onClose={() => {
@@ -590,7 +590,7 @@ const CSRPartnersPage = () => {
             </div>
             <p className="text-gray-600">
               Are you sure you want to delete {partnerPendingDeleteName || 'this partner'}?
-              This action removes the partner, its tolls, and projects from the dashboard.
+              This action removes the partner, its subcompanies, and projects from the dashboard.
             </p>
             <div className="mt-6 flex justify-end gap-3">
               <button
@@ -776,7 +776,7 @@ const AddPartnerModal = ({ formData, setFormData, isSubmitting, formError, onClo
         </button>
       </div>
       <form onSubmit={onSubmit} className="p-6 space-y-6">
-        {/* Has Toll Toggle */}
+        {/* Has Subcompany Toggle */}
         <div className="flex items-center gap-3 p-4 bg-blue-50 rounded-xl border border-blue-100">
           <input
             type="checkbox"
@@ -791,11 +791,11 @@ const AddPartnerModal = ({ formData, setFormData, isSubmitting, formError, onClo
             className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
           />
           <label htmlFor="hasToll" className="text-sm font-medium text-blue-700">
-            This partner has toll locations
+            This partner has subcompany locations
           </label>
           {formData.hasToll && (
             <span className="ml-auto text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
-              Manage tolls after creation
+              Manage subcompanies after creation
             </span>
           )}
         </div>
@@ -823,12 +823,12 @@ const AddPartnerModal = ({ formData, setFormData, isSubmitting, formError, onClo
           ))}
         </div>
 
-        {/* Conditional City/State/Budget - only show if no toll */}
+        {/* Conditional City/State/Budget - only show if no subcompany */}
         {!formData.hasToll && (
           <>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-gray-50 rounded-xl border border-gray-100">
               <p className="col-span-full text-sm text-gray-600 mb-2">
-                Since this partner has no tolls, specify location and budget here:
+                Since this partner has no subcompanies, specify location and budget here:
               </p>
               <label className="text-sm font-medium text-gray-700">
                 City
@@ -908,8 +908,8 @@ const AddPartnerModal = ({ formData, setFormData, isSubmitting, formError, onClo
         {formData.hasToll && (
           <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
             <p className="text-sm text-blue-700">
-              <strong>Note:</strong> City, state, and budget will be managed through individual tolls. 
-              After creating this partner, use the "Tolls" button to add toll locations.
+              <strong>Note:</strong> City, state, and budget will be managed through individual subcompanies. 
+              After creating this partner, use the "Subcompany" button to add subcompany locations.
             </p>
           </div>
         )}
@@ -980,11 +980,11 @@ const EditPartnerModal = ({ formData, setFormData, isSubmitting, formError, onCl
             className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
           />
           <label htmlFor="editHasToll" className="text-sm font-medium text-blue-700">
-            This partner has toll locations
+            This partner has subcompany locations
           </label>
           {formData.hasToll && (
             <span className="ml-auto text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
-              Manage tolls separately
+              Manage subcompanies separately
             </span>
           )}
         </div>
@@ -1012,12 +1012,12 @@ const EditPartnerModal = ({ formData, setFormData, isSubmitting, formError, onCl
           ))}
         </div>
 
-        {/* Conditional City/State/Budget - only show if no toll */}
+        {/* Conditional City/State/Budget - only show if no subcompany */}
         {!formData.hasToll && (
           <>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-gray-50 rounded-xl border border-gray-100">
             <p className="col-span-full text-sm text-gray-600 mb-2">
-              Since this partner has no tolls, specify location and budget here:
+              Since this partner has no subcompanies, specify location and budget here:
             </p>
             <label className="text-sm font-medium text-gray-700">
               City
@@ -1106,8 +1106,8 @@ const EditPartnerModal = ({ formData, setFormData, isSubmitting, formError, onCl
         {formData.hasToll && (
           <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
             <p className="text-sm text-blue-700">
-              <strong>Note:</strong> City, state, and budget are managed through individual tolls. 
-              Use the "Tolls" button on the partner card to manage toll locations.
+              <strong>Note:</strong> City, state, and budget are managed through individual subcompanies. 
+              Use the "Subcompany" button on the partner card to manage subcompany locations.
             </p>
           </div>
         )}

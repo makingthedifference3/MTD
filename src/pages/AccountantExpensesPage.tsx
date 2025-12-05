@@ -599,11 +599,11 @@ const AccountantExpensesPage: React.FC = () => {
       // Toll
       if (editableToll === 'custom') {
         if (!customToll.trim()) {
-          alert('Please enter a custom toll name');
+          alert('Please enter a custom subcompany name');
           return;
         }
         updates.toll_id = null;
-        updates.description = (updates.description || selectedExpense.description || '') + ` [Custom Toll: ${customToll}]`;
+        updates.description = (updates.description || selectedExpense.description || '') + ` [Custom Subcompany: ${customToll}]`;
       } else if (editableToll) {
         updates.toll_id = editableToll;
       } else {
@@ -1039,7 +1039,7 @@ const AccountantExpensesPage: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Toll</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Subcompany</label>
               <select
                 value={filterToll}
                 onChange={async (e) => {
@@ -1068,7 +1068,7 @@ const AccountantExpensesPage: React.FC = () => {
                 }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
               >
-                <option value="">All Tolls</option>
+                <option value="">All Subcompanies</option>
                 {filteredTolls.map(toll => (
                   <option key={toll.id} value={toll.id}>{toll.toll_name}</option>
                 ))}
@@ -1309,7 +1309,7 @@ const AccountantExpensesPage: React.FC = () => {
             </div>
             <div className="p-6 space-y-4 overflow-y-auto flex-1">
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-                <p className="text-sm text-blue-800 font-medium">✏️ Edit Mode: You can modify CSR Partner, Project, Toll, Category, and Budget Categories below.</p>
+                <p className="text-sm text-blue-800 font-medium">✏️ Edit Mode: You can modify CSR Partner, Project, Subcompany, Category, and Budget Categories below.</p>
               </div>
               
               {/* Budget Warning Alert */}
@@ -1431,7 +1431,7 @@ const AccountantExpensesPage: React.FC = () => {
                 {/* Toll - Editable (if exists) */}
                 {(selectedExpense.toll_id || modalFilteredTolls.length > 0) && (
                   <div className="col-span-2">
-                    <label className="text-sm font-medium text-gray-600 mb-1 block">Toll {selectedExpense.toll_id && '✓'}</label>
+                    <label className="text-sm font-medium text-gray-600 mb-1 block">Subcompany {selectedExpense.toll_id && '✓'}</label>
                     <select
                       value={editableToll}
                       onChange={async (e) => {
@@ -1461,7 +1461,7 @@ const AccountantExpensesPage: React.FC = () => {
                       }}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     >
-                      <option value="">No Toll / Select Toll</option>
+                      <option value="">No Subcompany / Select Subcompany</option>
                       {modalFilteredTolls.map(toll => (
                         <option key={toll.id} value={toll.id}>{toll.toll_name}</option>
                       ))}
@@ -1473,7 +1473,7 @@ const AccountantExpensesPage: React.FC = () => {
                         value={customToll}
                         onChange={(e) => setCustomToll(e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 mt-2"
-                        placeholder="Enter custom toll name"
+                        placeholder="Enter custom subcompany name"
                       />
                     )}
                   </div>

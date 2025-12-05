@@ -286,7 +286,7 @@ const TollManagementPage = () => {
                 <p className="text-gray-600">{partner.company_name}</p>
               </div>
             </div>
-            <p className="text-gray-600 mt-2">Manage tolls/subcompanies for this CSR partner</p>
+            <p className="text-gray-600 mt-2">Manage subcompanies for this CSR partner</p>
           </div>
           <button
             onClick={() => {

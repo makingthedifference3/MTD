@@ -77,7 +77,7 @@ const AdminCSRPartnerManagement = () => {
   const handleScheduleTollDelete = (toll: CSRPartnerToll) => {
     if (isPending('toll', toll.id)) return;
 
-    scheduleAction('toll', toll.id, `Toll: ${toll.poc_name || toll.toll_name || toll.id}`, async () => {
+    scheduleAction('toll', toll.id, `Subcompany: ${toll.poc_name || toll.toll_name || toll.id}`, async () => {
       const success = await csrPartnerService.deleteToll(toll.id);
       if (!success) return;
       await loadCSRPartners();
@@ -140,11 +140,11 @@ const AdminCSRPartnerManagement = () => {
           budget_allocation: '',
         });
         setShowTollForm(false);
-        alert('Toll added successfully!');
+        alert('Subcompany added successfully!');
       }
     } catch (error) {
-      console.error('Error adding toll:', error);
-      alert('Failed to add toll');
+      console.error('Error adding subcompany:', error);
+      alert('Failed to add subcompany');
     }
   };
 
@@ -168,7 +168,7 @@ const AdminCSRPartnerManagement = () => {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-4xl font-bold text-gray-900">CSR Partner Management</h1>
-              <p className="text-gray-600 mt-2">Manage CSR partners and their toll operations</p>
+              <p className="text-gray-600 mt-2">Manage CSR partners and their subcompany operations</p>
             </div>
             <button
               onClick={() => setShowPartnerForm(!showPartnerForm)}
@@ -183,7 +183,7 @@ const AdminCSRPartnerManagement = () => {
         {pendingActions.length > 0 && (
           <div className="mb-6 space-y-3">
             {pendingActions.map((action) => {
-              const entityLabel = action.entityType === 'partner' ? 'CSR Partner' : 'Toll';
+              const entityLabel = action.entityType === 'partner' ? 'CSR Partner' : 'Subcompany';
               const secondsLeft = Math.max(0, Math.ceil((action.expiresAt - Date.now()) / 1000));
               return (
                 <div
@@ -330,7 +330,7 @@ const AdminCSRPartnerManagement = () => {
                     <div className="flex items-center justify-between mb-4">
                       <h4 className="font-semibold text-gray-900 flex items-center space-x-2">
                         <Users className="w-5 h-5" />
-                        <span>Tolls/Sub-offices ({tolls[partner.id]?.length || 0})</span>
+                        <span>Subcompanies/Sub-offices ({tolls[partner.id]?.length || 0})</span>
                       </h4>
                       <button
                         onClick={(e) => {
@@ -340,7 +340,7 @@ const AdminCSRPartnerManagement = () => {
                         className="flex items-center space-x-1 bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded-lg text-sm"
                       >
                         <Plus className="w-4 h-4" />
-                        <span>Add Toll</span>
+                        <span>Add Subcompany</span>
                       </button>
                     </div>
 
@@ -455,9 +455,9 @@ const AdminCSRPartnerManagement = () => {
                               </div>
                               <div className="mt-3">
                                 <PasswordViewer
-                                  label="Toll Password"
+                                  label="Subcompany Password"
                                   password={toll.poc_password ?? null}
-                                  description="Stored password for this toll's POC"
+                                  description="Stored password for this subcompany's POC"
                                   className="rounded-2xl border border-gray-200 bg-gray-50 p-3"
                                 />
                               </div>
@@ -478,7 +478,7 @@ const AdminCSRPartnerManagement = () => {
                         })}
                       </div>
                     ) : (
-                      <p className="text-sm text-gray-500 text-center py-4">No tolls added yet</p>
+                      <p className="text-sm text-gray-500 text-center py-4">No subcompanies added yet</p>
                     )}
                   </motion.div>
                 )}

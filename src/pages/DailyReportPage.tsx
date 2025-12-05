@@ -727,16 +727,16 @@ const DailyReportPage = () => {
             </select>
           </div>
 
-          {/* Toll Filter - Conditional */}
+          {/* Subcompany Filter - Conditional */}
           {hasToll && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Toll</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Subcompany</label>
               <select
                 value={selectedToll}
                 onChange={(e) => setSelectedToll(e.target.value)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
               >
-                <option value="">All Tolls</option>
+                <option value="">All Subcompanies</option>
                 {tolls.map((toll) => (
                   <option key={toll.id} value={toll.id}>
                     {toll.toll_name}

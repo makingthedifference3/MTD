@@ -726,10 +726,10 @@ const ProjectExpenses: React.FC = () => {
                   )}
                 </div>
 
-                {/* Toll - Conditional */}
+                {/* Subcompany - Conditional */}
                 {hasToll && selectedCsrPartner && selectedCsrPartner !== 'others' && (
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Toll *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Subcompany *</label>
                     <select
                       value={selectedToll}
                       onChange={(e) => {
@@ -745,7 +745,7 @@ const ProjectExpenses: React.FC = () => {
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
                       required
                     >
-                      <option value="">Select Toll</option>
+                      <option value="">Select Subcompany</option>
                       {tolls.map((toll) => (
                         <option key={toll.id} value={toll.id}>
                           {toll.toll_name}

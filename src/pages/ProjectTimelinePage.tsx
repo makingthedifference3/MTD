@@ -409,7 +409,7 @@ const ProjectTimelinePage = () => {
   const getBreadcrumb = () => {
     const parts = ['Project Timeline'];
     if (selectedPartnerData) parts.push(selectedPartnerData.name);
-    if (selectedTollData) parts.push(selectedTollData.toll_name || selectedTollData.poc_name || 'Toll');
+    if (selectedTollData) parts.push(selectedTollData.toll_name || selectedTollData.poc_name || 'Subcompany');
     if (selectedProjectData) parts.push(selectedProjectData.name);
     return parts.join(' → ');
   };
@@ -519,7 +519,7 @@ const ProjectTimelinePage = () => {
                           {partnerHasTolls && (
                             <div className="flex items-center gap-1 text-emerald-600">
                               <MapPin className="w-4 h-4" />
-                              <span>Has Tolls</span>
+                              <span>Has Subcompanies</span>
                             </div>
                           )}
                         </div>
@@ -532,7 +532,7 @@ const ProjectTimelinePage = () => {
           </motion.div>
         )}
 
-        {/* TOLLS VIEW */}
+        {/* SUBCOMPANIES VIEW */}
         {viewMode === 'tolls' && (
           <motion.div
             key="tolls"
@@ -567,7 +567,7 @@ const ProjectTimelinePage = () => {
                       </div>
                       
                       <h3 className="text-lg font-bold text-gray-900 mb-2 line-clamp-2">
-                        {toll.toll_name || toll.poc_name || 'Unnamed Toll'}
+                        {toll.toll_name || toll.poc_name || 'Unnamed Subcompany'}
                       </h3>
                       
                       <div className="flex items-center gap-1 text-sm text-gray-600">
@@ -594,7 +594,7 @@ const ProjectTimelinePage = () => {
             {getProjectsForView().length === 0 ? (
               <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-8 text-center">
                 <p className="text-amber-800 font-semibold text-lg">No Projects found</p>
-                <p className="text-amber-700 mt-2">No projects available for the selected partner/toll</p>
+                <p className="text-amber-700 mt-2">No projects available for the selected partner/subcompany</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

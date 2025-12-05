@@ -1111,7 +1111,7 @@ const ProjectsPage = () => {
                     <h3 className="font-bold text-gray-900 text-lg">{project.name}</h3>
                     <p className="text-sm text-gray-600">{project.project_code} • {project.location}</p>
                     {project.toll?.toll_name && (
-                      <p className="text-xs text-emerald-600 mt-1">Toll: {project.toll.toll_name}</p>
+                      <p className="text-xs text-emerald-600 mt-1">Subcompany: {project.toll.toll_name}</p>
                     )}
                   </div>
                 </div>
@@ -1275,14 +1275,14 @@ const ProjectsPage = () => {
                   )}
                   {showTollColumn && selectedProjectTollName && (
                     <div>
-                      <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Toll / Subcompany</p>
+                      <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Subcompany</p>
                       <p className="text-gray-900 font-medium">{selectedProjectTollName}</p>
                       {selectedProjectDetails.toll &&
                         [selectedProjectDetails.toll.city, selectedProjectDetails.toll.state].some(Boolean) && (
-                        <p className="text-sm text-gray-500">
-                          {[selectedProjectDetails.toll.city, selectedProjectDetails.toll.state].filter(Boolean).join(', ')}
-                        </p>
-                      )}
+                          <p className="text-sm text-gray-500">
+                            {[selectedProjectDetails.toll.city, selectedProjectDetails.toll.state].filter(Boolean).join(', ')}
+                          </p>
+                        )}
                     </div>
                   )}
                 </div>
@@ -2657,10 +2657,10 @@ const AddProjectModal = ({
             )}
           </label>
 
-          {/* Toll Selection - Only show if partner has tolls */}
+          {/* Subcompany Selection - Only show if partner has subcompanies */}
           {formData.csrPartnerId && partnerHasTolls && (
             <label className="text-sm font-medium text-gray-700">
-              Toll / Subcompany
+              Subcompany
               {tollsLoading ? (
                 <div className="mt-1 flex items-center gap-2 text-gray-500">
                   <Loader className="w-4 h-4 animate-spin" />
@@ -2672,7 +2672,7 @@ const AddProjectModal = ({
                   onChange={(e) => handleTollSelection(e.target.value)}
                   className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                 >
-                  <option value="">No Toll (Direct Partner)</option>
+                  <option value="">Direct Partner</option>
                   {tolls.map((toll) => (
                     <option key={toll.id} value={toll.id}>
                       {toll.toll_name || toll.poc_name}
@@ -2682,14 +2682,14 @@ const AddProjectModal = ({
                 </select>
               ) : (
                 <div className="mt-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-500 text-sm">
-                  No tolls available for this partner
+                  No subcompanies available for this partner
                 </div>
               )}
             </label>
           )}
           {formData.csrPartnerId && !partnerHasTolls && (
             <div className="p-3 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-600">
-              This partner does not manage tolls separately. Project location will use the CSR partner's city/state.
+              This partner does not manage subcompanies separately. Project location will use the CSR partner's city/state.
             </div>
           )}
         </div>
