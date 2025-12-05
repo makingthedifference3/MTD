@@ -13,6 +13,7 @@ export interface AuthUser {
   role: 'admin' | 'accountant' | 'project_manager' | 'team_member' | 'client' | 'data_manager';
   is_active: boolean;
   csr_partner_id?: string;
+  password?: string;
 }
 
 /**
@@ -89,7 +90,7 @@ export const getAllUsers = async (): Promise<AuthUser[]> => {
   try {
     const { data, error } = await supabase
       .from('users')
-      .select('id, username, email, full_name, role, is_active')
+      .select('id, username, email, full_name, role, is_active, password')
       .order('created_at', { ascending: false });
 
     if (error) {

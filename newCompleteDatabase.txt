@@ -83,6 +83,25 @@ CREATE TABLE public.budget_allocation (
   CONSTRAINT budget_allocation_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id),
   CONSTRAINT budget_allocation_category_id_fkey FOREIGN KEY (category_id) REFERENCES public.expense_categories(id)
 );
+CREATE TABLE public.budget_categories (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  project_id uuid NOT NULL,
+  parent_id uuid,
+  name character varying NOT NULL,
+  allocated_amount numeric DEFAULT 0 CHECK (allocated_amount >= 0::numeric),
+  utilized_amount numeric DEFAULT 0 CHECK (utilized_amount >= 0::numeric),
+  pending_amount numeric DEFAULT 0 CHECK (pending_amount >= 0::numeric),
+  available_amount numeric DEFAULT ((allocated_amount - utilized_amount) - pending_amount),
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  created_by uuid,
+  updated_by uuid,
+  CONSTRAINT budget_categories_pkey PRIMARY KEY (id),
+  CONSTRAINT budget_categories_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id),
+  CONSTRAINT budget_categories_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES public.budget_categories(id),
+  CONSTRAINT budget_categories_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id),
+  CONSTRAINT budget_categories_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id)
+);
 CREATE TABLE public.budget_utilization (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   csr_partner_id uuid NOT NULL,
@@ -156,7 +175,7 @@ CREATE TABLE public.calendar_events (
 CREATE TABLE public.campaign_question_papers (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   paper_code character varying NOT NULL UNIQUE,
-  project_id text,
+  project_id_old text,
   campaign_type character varying CHECK (campaign_type::text = ANY (ARRAY['pre'::character varying::text, 'post'::character varying::text])),
   title character varying NOT NULL,
   description text,
@@ -177,15 +196,19 @@ CREATE TABLE public.campaign_question_papers (
   updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
   created_by uuid,
   updated_by uuid,
+  project_id uuid,
+  csr_partner_id uuid,
   CONSTRAINT campaign_question_papers_pkey PRIMARY KEY (id),
   CONSTRAINT campaign_question_papers_verified_by_fkey FOREIGN KEY (verified_by) REFERENCES public.users(id),
   CONSTRAINT campaign_question_papers_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id),
-  CONSTRAINT campaign_question_papers_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id)
+  CONSTRAINT campaign_question_papers_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id),
+  CONSTRAINT campaign_question_papers_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id),
+  CONSTRAINT campaign_question_papers_csr_partner_id_fkey FOREIGN KEY (csr_partner_id) REFERENCES public.csr_partners(id)
 );
 CREATE TABLE public.campaign_results (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   result_code character varying NOT NULL UNIQUE,
-  project_id text NOT NULL,
+  project_id_old text,
   student_name character varying NOT NULL,
   student_roll_number character varying,
   pre_answer_sheet_id uuid,
@@ -209,11 +232,15 @@ CREATE TABLE public.campaign_results (
   updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
   created_by uuid,
   updated_by uuid,
+  project_id uuid,
+  csr_partner_id uuid,
   CONSTRAINT campaign_results_pkey PRIMARY KEY (id),
   CONSTRAINT campaign_results_pre_answer_sheet_id_fkey FOREIGN KEY (pre_answer_sheet_id) REFERENCES public.student_answer_sheets(id),
   CONSTRAINT campaign_results_post_answer_sheet_id_fkey FOREIGN KEY (post_answer_sheet_id) REFERENCES public.student_answer_sheets(id),
   CONSTRAINT campaign_results_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id),
-  CONSTRAINT campaign_results_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id)
+  CONSTRAINT campaign_results_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id),
+  CONSTRAINT campaign_results_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id),
+  CONSTRAINT campaign_results_csr_partner_id_fkey FOREIGN KEY (csr_partner_id) REFERENCES public.csr_partners(id)
 );
 CREATE TABLE public.communications (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -478,6 +505,7 @@ CREATE TABLE public.media_articles (
   csr_parter_id uuid,
   toll_id uuid,
   is_article boolean DEFAULT true,
+  file_url text,
   CONSTRAINT media_articles_pkey PRIMARY KEY (id),
   CONSTRAINT media_articles_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id),
   CONSTRAINT media_articles_task_id_fkey FOREIGN KEY (task_id) REFERENCES public.tasks(id),
@@ -518,6 +546,55 @@ CREATE TABLE public.notifications (
   CONSTRAINT notifications_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id),
   CONSTRAINT notifications_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id)
 );
+CREATE TABLE public.project_activities (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  activity_code character varying UNIQUE,
+  project_id uuid NOT NULL,
+  csr_partner_id uuid NOT NULL,
+  toll_id uuid,
+  title character varying NOT NULL,
+  description text,
+  section character varying DEFAULT 'General'::character varying,
+  section_order integer DEFAULT 1,
+  activity_order integer DEFAULT 1,
+  start_date date,
+  end_date date,
+  actual_start_date date,
+  actual_end_date date,
+  status character varying DEFAULT 'not_started'::character varying CHECK (status::text = ANY (ARRAY['not_started'::character varying, 'in_progress'::character varying, 'completed'::character varying, 'on_hold'::character varying, 'cancelled'::character varying]::text[])),
+  completion_percentage integer DEFAULT 0 CHECK (completion_percentage >= 0 AND completion_percentage <= 100),
+  assigned_to uuid,
+  responsible_person character varying,
+  priority character varying DEFAULT 'medium'::character varying CHECK (priority::text = ANY (ARRAY['low'::character varying, 'medium'::character varying, 'high'::character varying, 'critical'::character varying]::text[])),
+  remarks text,
+  blockers text,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  created_by uuid,
+  updated_by uuid,
+  CONSTRAINT project_activities_pkey PRIMARY KEY (id),
+  CONSTRAINT project_activities_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id),
+  CONSTRAINT project_activities_csr_partner_id_fkey FOREIGN KEY (csr_partner_id) REFERENCES public.csr_partners(id),
+  CONSTRAINT project_activities_toll_id_fkey FOREIGN KEY (toll_id) REFERENCES public.csr_partner_tolls(id),
+  CONSTRAINT project_activities_assigned_to_fkey FOREIGN KEY (assigned_to) REFERENCES public.users(id),
+  CONSTRAINT project_activities_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id),
+  CONSTRAINT project_activities_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.project_activity_items (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  activity_id uuid NOT NULL,
+  item_text text NOT NULL,
+  item_order integer DEFAULT 1,
+  is_completed boolean DEFAULT false,
+  completed_at timestamp with time zone,
+  completed_by uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT project_activity_items_pkey PRIMARY KEY (id),
+  CONSTRAINT project_activity_items_activity_id_fkey FOREIGN KEY (activity_id) REFERENCES public.project_activities(id),
+  CONSTRAINT project_activity_items_completed_by_fkey FOREIGN KEY (completed_by) REFERENCES public.users(id)
+);
 CREATE TABLE public.project_expenses (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   expense_code character varying NOT NULL UNIQUE,
@@ -552,7 +629,7 @@ CREATE TABLE public.project_expenses (
   invoice_drive_link character varying,
   receipt_drive_link character varying,
   supporting_docs jsonb DEFAULT '{}'::jsonb,
-  status character varying CHECK (status::text = ANY (ARRAY['draft'::character varying::text, 'submitted'::character varying::text, 'pending'::character varying::text, 'approved'::character varying::text, 'rejected'::character varying::text, 'reimbursed'::character varying::text, 'paid'::character varying::text])),
+  status character varying CHECK (status::text = ANY (ARRAY['draft'::character varying::text, 'submitted'::character varying::text, 'pending'::character varying::text, 'accepted'::character varying::text, 'approved'::character varying::text, 'rejected'::character varying::text, 'reimbursed'::character varying::text, 'paid'::character varying::text])),
   submitted_by uuid,
   submitted_date date,
   reviewed_by uuid,
@@ -579,6 +656,7 @@ CREATE TABLE public.project_expenses (
   updated_by uuid,
   csr_partner_id uuid,
   toll_id uuid,
+  budget_category_id uuid,
   CONSTRAINT project_expenses_pkey PRIMARY KEY (id),
   CONSTRAINT project_expenses_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id),
   CONSTRAINT project_expenses_category_id_fkey FOREIGN KEY (category_id) REFERENCES public.expense_categories(id),
@@ -590,7 +668,8 @@ CREATE TABLE public.project_expenses (
   CONSTRAINT project_expenses_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id),
   CONSTRAINT project_expenses_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id),
   CONSTRAINT project_expenses_csr_partner_id_fkey FOREIGN KEY (csr_partner_id) REFERENCES public.csr_partners(id),
-  CONSTRAINT project_expenses_toll_id_fkey FOREIGN KEY (toll_id) REFERENCES public.csr_partner_tolls(id)
+  CONSTRAINT project_expenses_toll_id_fkey FOREIGN KEY (toll_id) REFERENCES public.csr_partner_tolls(id),
+  CONSTRAINT project_expenses_budget_category_id_fkey FOREIGN KEY (budget_category_id) REFERENCES public.budget_categories(id)
 );
 CREATE TABLE public.project_team_members (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -796,7 +875,7 @@ CREATE TABLE public.student_answer_sheets (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   sheet_code character varying NOT NULL UNIQUE,
   question_paper_id uuid NOT NULL,
-  project_id text,
+  project_id_old text,
   student_name character varying NOT NULL,
   student_roll_number character varying,
   student_class character varying,
@@ -825,11 +904,15 @@ CREATE TABLE public.student_answer_sheets (
   updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
   created_by uuid,
   updated_by uuid,
+  project_id uuid,
+  csr_partner_id uuid,
   CONSTRAINT student_answer_sheets_pkey PRIMARY KEY (id),
   CONSTRAINT student_answer_sheets_question_paper_id_fkey FOREIGN KEY (question_paper_id) REFERENCES public.campaign_question_papers(id),
   CONSTRAINT student_answer_sheets_verified_by_fkey FOREIGN KEY (verified_by) REFERENCES public.users(id),
   CONSTRAINT student_answer_sheets_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id),
-  CONSTRAINT student_answer_sheets_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id)
+  CONSTRAINT student_answer_sheets_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id),
+  CONSTRAINT student_answer_sheets_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id),
+  CONSTRAINT student_answer_sheets_csr_partner_id_fkey FOREIGN KEY (csr_partner_id) REFERENCES public.csr_partners(id)
 );
 CREATE TABLE public.system_logs (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -950,7 +1033,7 @@ CREATE TABLE public.users (
   city character varying,
   state character varying,
   pincode character varying,
-  role character varying NOT NULL CHECK (role::text = ANY (ARRAY['admin'::character varying, 'accountant'::character varying, 'project_manager'::character varying, 'team_member'::character varying, 'client'::character varying]::text[])),
+  role character varying NOT NULL CHECK (role::text = ANY (ARRAY['admin'::character varying::text, 'accountant'::character varying::text, 'project_manager'::character varying::text, 'team_member'::character varying::text, 'client'::character varying::text, 'data_manager'::character varying::text])),
   department character varying,
   team character varying,
   designation character varying,
@@ -981,7 +1064,7 @@ CREATE TABLE public.utilization_certificates (
   project_id uuid NOT NULL,
   csr_partner_id uuid NOT NULL,
   certificate_heading character varying,
-  certificate_type character varying CHECK (certificate_type::text = ANY (ARRAY['Quarterly'::character varying, 'Annual'::character varying, 'Project Completion'::character varying]::text[])),
+  certificate_type character varying CHECK (certificate_type::text = ANY (ARRAY['Quarterly'::character varying::text, 'Half-Yearly'::character varying::text, 'Annual'::character varying::text, 'Project Completion'::character varying::text, 'Project-Specific'::character varying::text])),
   period_from date,
   period_to date,
   fiscal_year character varying,
@@ -1006,6 +1089,17 @@ CREATE TABLE public.utilization_certificates (
   updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
   created_by uuid,
   updated_by uuid,
+  certificate_bucket_path character varying,
+  certificate_file_name character varying,
+  certificate_file_size_mb numeric DEFAULT 0,
+  certificate_file_type character varying,
+  annexure_bucket_path character varying,
+  annexure_file_name character varying,
+  annexure_file_size_mb numeric DEFAULT 0,
+  annexure_file_type character varying,
+  supporting_files jsonb DEFAULT '[]'::jsonb,
+  uploaded_by uuid,
+  file_upload_date timestamp with time zone,
   CONSTRAINT utilization_certificates_pkey PRIMARY KEY (id),
   CONSTRAINT utilization_certificates_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id),
   CONSTRAINT utilization_certificates_csr_partner_id_fkey FOREIGN KEY (csr_partner_id) REFERENCES public.csr_partners(id),
@@ -1013,7 +1107,8 @@ CREATE TABLE public.utilization_certificates (
   CONSTRAINT utilization_certificates_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES public.users(id),
   CONSTRAINT utilization_certificates_approved_by_fkey FOREIGN KEY (approved_by) REFERENCES public.users(id),
   CONSTRAINT utilization_certificates_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id),
-  CONSTRAINT utilization_certificates_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id)
+  CONSTRAINT utilization_certificates_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id),
+  CONSTRAINT utilization_certificates_uploaded_by_fkey FOREIGN KEY (uploaded_by) REFERENCES public.users(id)
 );
 CREATE TABLE public.whatsapp_templates (
   id uuid NOT NULL DEFAULT gen_random_uuid(),

@@ -18,6 +18,7 @@ import {
 } from '@/services/tollsService';
 import { useFilter } from '@/context/useFilter';
 import { INDIAN_STATES } from '@/constants/indianStates';
+import PasswordViewer from '@/components/PasswordViewer';
 
 const INITIAL_TOLL_FORM = {
   toll_name: '',
@@ -134,8 +135,12 @@ const TollManagementPage = () => {
         city: formData.city.trim() || undefined,
         state: formData.state.trim() || undefined,
         is_active: true,
-        poc_password: formData.poc_password.trim() || undefined,
       };
+
+      const trimmedPassword = formData.poc_password.trim();
+      if (trimmedPassword) {
+        payload.poc_password = trimmedPassword;
+      }
 
       await createToll(payload);
       setIsAddModalOpen(false);
@@ -173,8 +178,12 @@ const TollManagementPage = () => {
         contact_number: formData.contact_number.trim() || undefined,
         email_id: formData.email_id.trim() || undefined,
         city: formData.city.trim() || undefined,
-        poc_password: formData.poc_password.trim() || undefined,
       };
+
+      const trimmedPassword = formData.poc_password.trim();
+      if (trimmedPassword) {
+        payload.poc_password = trimmedPassword;
+      }
 
       await updateToll(selectedToll.id, payload);
       setIsEditModalOpen(false);
@@ -421,6 +430,15 @@ const TollManagementPage = () => {
                 </div>
               </div>
 
+              <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4 mb-4">
+                <PasswordViewer
+                  label="POC Password"
+                  password={toll.poc_password ?? null}
+                  description="Click the eye icon to reveal the stored password."
+                  className="w-full"
+                />
+              </div>
+
               <div className="flex gap-2">
                 <button
                   onClick={() => openEditModal(toll)}
@@ -486,6 +504,7 @@ const TollManagementPage = () => {
               }
             }}
             onSubmit={handleEditToll}
+            currentPassword={selectedToll?.poc_password ?? null}
           />
         )}
       </AnimatePresence>
@@ -552,6 +571,7 @@ interface TollFormModalProps {
   formError: string | null;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  currentPassword?: string | null;
 }
 
 const TollFormModal = ({
@@ -562,6 +582,7 @@ const TollFormModal = ({
   formError,
   onClose,
   onSubmit,
+  currentPassword,
 }: TollFormModalProps) => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -707,6 +728,17 @@ const TollFormModal = ({
                 placeholder="Enter custom state"
               />
             </label>
+          )}
+
+          {currentPassword !== undefined && (
+            <div className="md:col-span-2">
+              <PasswordViewer
+                label="Current POC Password"
+                password={currentPassword}
+                description="Leave this field untouched unless you need to update the existing password."
+                className="rounded-xl border border-gray-200 bg-gray-50 p-4"
+              />
+            </div>
           )}
           
           {/* Password Fields */}

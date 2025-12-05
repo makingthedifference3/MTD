@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import { deleteToll as deleteTollCascade } from './tollsService';
 
 // Updated CSR Partner interface to match new schema
 export interface CSRPartner {
@@ -10,12 +11,14 @@ export interface CSRPartner {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  poc_password?: string | null;
 }
 
 // New CSR Partner Toll interface
 export interface CSRPartnerToll {
   id: string;
   csr_partner_id: string;
+  toll_name?: string;
   poc_name: string;
   contact_number?: string;
   email_id?: string;
@@ -25,6 +28,7 @@ export interface CSRPartnerToll {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  poc_password?: string | null;
 }
 
 export const csrPartnerService = {
@@ -162,16 +166,36 @@ export const csrPartnerService = {
   },
 
   async deleteToll(tollId: string): Promise<boolean> {
-    try {
-      const { error } = await supabase
-        .from('csr_partner_tolls')
-        .update({ is_active: false, updated_at: new Date().toISOString() })
-        .eq('id', tollId);
+    return deleteTollCascade(tollId);
+  },
 
-      if (error) throw error;
+  async deletePartnerCascade(partnerId: string): Promise<boolean> {
+    const timestamp = new Date().toISOString();
+    try {
+      const { error: partnerError } = await supabase
+        .from('csr_partners')
+        .update({ is_active: false, updated_at: timestamp })
+        .eq('id', partnerId);
+
+      if (partnerError) throw partnerError;
+
+      const { error: tollError } = await supabase
+        .from('csr_partner_tolls')
+        .update({ is_active: false, updated_at: timestamp })
+        .eq('csr_partner_id', partnerId);
+
+      if (tollError) throw tollError;
+
+      const { error: projectError } = await supabase
+        .from('projects')
+        .update({ is_active: false, status: 'archived', updated_at: timestamp })
+        .eq('csr_partner_id', partnerId);
+
+      if (projectError) throw projectError;
+
       return true;
     } catch (error) {
-      console.error('Error deleting toll:', error);
+      console.error('Error deleting CSR partner cascade:', error);
       return false;
     }
   },
