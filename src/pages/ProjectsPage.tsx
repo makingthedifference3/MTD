@@ -5,6 +5,7 @@ import { Plus, FolderKanban, DollarSign, X, MapPin, Calendar, Loader, LayoutDash
 import { useFilter } from '../context/useFilter';
 import { useAuth } from '../context/useAuth';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '../services/supabaseClient';
 import FilterBar from '../components/FilterBar';
 import type { Project } from '../services/filterService';
 import type { Project as ProjectServiceProject } from '../services/projectsService';
@@ -85,6 +86,7 @@ interface ProjectFormData {
   teamMembers: TeamMemberFormEntry[];
   enableBudgetCategories: boolean;
   budgetCategories: BudgetCategoryFormEntry[];
+  uc_link: string;
 }
 const createInitialProjectFormState = (): ProjectFormData => ({
   name: '',
@@ -108,6 +110,7 @@ const createInitialProjectFormState = (): ProjectFormData => ({
   teamMembers: [],
   enableBudgetCategories: false,
   budgetCategories: [],
+  uc_link: '',
 });
 
 const formatRoleLabel = (role?: string | null) => {
@@ -166,6 +169,7 @@ const mapProjectToFormData = (
     })),
     enableBudgetCategories: false, // Will be loaded separately
     budgetCategories: [], // Will be loaded separately
+    uc_link: (project as any).uc_link ?? '',
   };
 };
 
@@ -179,6 +183,34 @@ const ProjectsPage = () => {
   const { projects, filteredProjects, selectedPartner, selectedToll, selectedProject, refreshData, setSelectedPartner, setSelectedProject, setSelectedToll } = useFilter();
   const { currentRole, currentUser } = useAuth();
   const navigate = useNavigate();
+  
+  // Get effective role from project context for non-admin users
+  const getEffectiveRole = () => {
+    // Admin always uses role from users table
+    if (currentRole === 'admin' || currentRole === 'accountant') {
+      return currentRole;
+    }
+    
+    // For non-admin users, use role from project context
+    const projectContextStr = localStorage.getItem('projectContext');
+    if (projectContextStr) {
+      try {
+        const projectContext = JSON.parse(projectContextStr);
+        if (projectContext.projectRole) {
+          const normalized = projectContext.projectRole.toLowerCase().trim().replace(/\s+/g, '_');
+          return normalized;
+        }
+      } catch (error) {
+        console.error('Error parsing project context:', error);
+      }
+    }
+    
+    // Fallback to currentRole from users table
+    return currentRole;
+  };
+  
+  const effectiveRole = getEffectiveRole();
+  
   const [selectedProjectDetails, setSelectedProjectDetails] = useState<Project | null>(null);
   const [selectedProjectTeamMembers, setSelectedProjectTeamMembers] = useState<ProjectTeamMemberWithUser[]>([]);
   const [teamMembersLoading, setTeamMembersLoading] = useState(false);
@@ -206,6 +238,8 @@ const ProjectsPage = () => {
 
   // Add project modal state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [ucFile, setUcFile] = useState<File | null>(null);
+  const [uploadingUcFile, setUploadingUcFile] = useState(false);
   const [formData, setFormData] = useState<ProjectFormData>(createInitialProjectFormState);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -448,6 +482,46 @@ const ProjectsPage = () => {
       return;
     }
 
+    // Handle UC file upload if present
+    let ucLinkToSave = formData.uc_link;
+    if (ucFile) {
+      setUploadingUcFile(true);
+      try {
+        const fileExt = ucFile.name.split('.').pop();
+        const projectCode = formData.projectCode || `PRJ-${Date.now()}`;
+        const timestamp = Date.now();
+        const fileName = `UC_${projectCode}_${timestamp}.${fileExt}`;
+        const filePath = `UC/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('MTD_Bills')
+          .upload(filePath, ucFile, {
+            cacheControl: '3600',
+            upsert: false
+          });
+        
+        if (uploadError) {
+          console.error('UC upload error:', uploadError);
+          throw uploadError;
+        }
+
+        // Get public URL
+        const { data: urlData } = supabase.storage
+          .from('MTD_Bills')
+          .getPublicUrl(filePath);
+
+        ucLinkToSave = urlData.publicUrl;
+        console.log('UC uploaded successfully. Public URL:', ucLinkToSave);
+      } catch (error) {
+        console.error('Error uploading UC file:', error);
+        setFormError('Failed to upload UC document. Please try again.');
+        setUploadingUcFile(false);
+        return;
+      } finally {
+        setUploadingUcFile(false);
+      }
+    }
+
     try {
       setIsSubmitting(true);
       setFormError(null);
@@ -455,10 +529,14 @@ const ProjectsPage = () => {
       let projectId = editingProjectId;
 
       if (editingProjectId) {
-        const updatePayload = buildProjectUpdatePayload(formData);
+        const updatePayload = buildProjectUpdatePayload(formData, ucLinkToSave);
+        console.log('Updating project with UC link:', ucLinkToSave);
+        console.log('Update payload:', updatePayload);
         await projectsService.updateProject(editingProjectId, updatePayload);
       } else {
-        const payload = buildProjectPayload(formData);
+        const payload = buildProjectPayload(formData, ucLinkToSave);
+        console.log('Creating project with UC link:', ucLinkToSave);
+        console.log('Create payload:', payload);
         const newProject = await projectsService.createProject(payload);
 
         if (!newProject?.id) {
@@ -551,11 +629,14 @@ const ProjectsPage = () => {
     if (isSubmitting) return;
     setIsAddModalOpen(false);
     setFormError(null);
+    setUcFile(null);
     resetFormState();
   };
 
   const handleEditProject = async (project: Project) => {
     console.log('Editing project:', project.id, project.name);
+    console.log('Project UC Link:', (project as any).uc_link);
+    console.log('Full project data:', project);
     setFormError(null);
     setIsPreparingEdit(true);
     setEditingProjectId(project.id);
@@ -1070,7 +1151,7 @@ const ProjectsPage = () => {
             <h1 className="text-3xl font-bold text-gray-900">Projects</h1>
             <p className="text-gray-600 mt-2">Manage and track all CSR projects</p>
           </div>
-          {currentRole === 'admin' && (
+          {effectiveRole === 'admin' && (
             <button
               onClick={handleOpenCreateModal}
               className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-lg font-medium flex items-center space-x-2 transition-colors"
@@ -1119,7 +1200,7 @@ const ProjectsPage = () => {
                   <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(getProjectStatus(project))}`}>
                     {getProjectStatus(project).replace('-', ' ').toUpperCase()}
                   </span>
-                  {currentRole === 'admin' && (
+                  {effectiveRole === 'admin' && (
                     <button
                       onClick={() => openProjectDeleteModal(project)}
                       disabled={isCurrentDeleting}
@@ -1156,9 +1237,32 @@ const ProjectsPage = () => {
                 </div>
               </div>
 
+              {/* UC Certificate Indicator */}
+              {(project as any).uc_link && (
+                <div className="mb-3 flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+                  <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="text-xs font-medium text-blue-700">Utilization Certificate Available</span>
+                  <a
+                    href={(project as any).uc_link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="ml-auto text-xs text-blue-600 hover:text-blue-800 font-medium underline"
+                  >
+                    View
+                  </a>
+                </div>
+              )}
+
               <div className="flex gap-2 mt-4">
                 <button
-                  onClick={() => setSelectedProjectDetails(project)}
+                  onClick={() => {
+                    console.log('Viewing project details. UC Link:', (project as any).uc_link);
+                    console.log('Full project:', project);
+                    setSelectedProjectDetails(project);
+                  }}
                   className="flex-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-medium py-2 rounded-lg transition-colors"
                 >
                   View Details
@@ -1217,7 +1321,7 @@ const ProjectsPage = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  {currentRole === 'admin' && (
+                  {(effectiveRole === 'admin' || effectiveRole === 'accountant') && (
                     <button
                       type="button"
                       onClick={() => handleEditProject(selectedProjectDetails)}
@@ -1227,7 +1331,7 @@ const ProjectsPage = () => {
                       {isPreparingEdit ? 'Preparing...' : 'Edit Project'}
                     </button>
                   )}
-                  {currentRole === 'admin' && (
+                  {effectiveRole === 'admin' && (
                     <button
                       type="button"
                       onClick={() => openProjectDeleteModal(selectedProjectDetails)}
@@ -1343,6 +1447,33 @@ const ProjectsPage = () => {
                     )}
                   </div>
                 </div>
+
+                {/* Utilization Certificate */}
+                {selectedProjectDetails.uc_link && (
+                  <div className="border border-blue-200 bg-blue-50 rounded-2xl p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="font-semibold text-blue-900">Utilization Certificate</h3>
+                      <span className="text-xs bg-blue-200 text-blue-800 px-2 py-1 rounded-full">Uploaded</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <a
+                        href={selectedProjectDetails.uc_link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium text-center transition-colors"
+                      >
+                        View UC Document
+                      </a>
+                      <a
+                        href={selectedProjectDetails.uc_link}
+                        download
+                        className="px-4 py-2 bg-white border border-blue-300 hover:bg-blue-50 text-blue-700 rounded-lg text-sm font-medium transition-colors"
+                      >
+                        Download
+                      </a>
+                    </div>
+                  </div>
+                )}
 
                 {/* Budget Categories */}
                 {(projectBudgetCategories.length > 0 || budgetCategoriesLoading) && (
@@ -1499,7 +1630,7 @@ const ProjectsPage = () => {
                       <h3 className="font-semibold text-gray-900">Impact Metrics</h3>
                       <p className="text-xs text-gray-500">Primary and secondary metrics recorded for this project</p>
                     </div>
-                    {currentRole === 'admin' && !isEditingImpactMetrics && (
+                    {effectiveRole === 'admin' && !isEditingImpactMetrics && (
                       <button
                         onClick={handleStartEditImpactMetrics}
                         className="text-xs text-emerald-600 hover:text-emerald-700 font-medium"
@@ -1860,7 +1991,7 @@ const ProjectsPage = () => {
                 <div className="border border-gray-200 rounded-xl p-4">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-sm font-semibold text-gray-900">Impact Metrics</h3>
-                    {currentRole === 'admin' && !isEditingSubProjectMetrics && (
+                    {effectiveRole === 'admin' && !isEditingSubProjectMetrics && (
                       <button
                         onClick={handleStartEditSubProjectMetrics}
                         className="text-xs text-emerald-600 hover:text-emerald-700 font-medium"
@@ -2037,7 +2168,7 @@ const ProjectsPage = () => {
                       ) : (
                         <p className="text-sm text-gray-500 text-center py-2">
                           No impact metrics recorded yet.
-                          {currentRole === 'admin' && ' Click "Edit Metrics" to add.'}
+                          {effectiveRole === 'admin' && ' Click "Edit Metrics" to add.'}
                         </p>
                       )}
                     </>
@@ -2085,6 +2216,9 @@ const ProjectsPage = () => {
           tollsLoading={tollsLoading}
           teamUsers={teamUsers}
           teamUsersLoading={teamUsersLoading}
+          ucFile={ucFile}
+          setUcFile={setUcFile}
+          uploadingUcFile={uploadingUcFile}
           onClose={handleModalClose}
           onSubmit={handleSaveProject}
           isEditing={Boolean(editingProjectId)}
@@ -2105,7 +2239,7 @@ const generateProjectCode = () => {
 };
 
 // Build payload for creating a new project
-const buildProjectPayload = (values: ProjectFormData) => {
+const buildProjectPayload = (values: ProjectFormData, ucLink?: string) => {
   const now = new Date().toISOString();
   const budgetValue = Number(values.totalBudget) || 0;
   const beneficiaries = Number(values.directBeneficiaries) || 0;
@@ -2143,12 +2277,13 @@ const buildProjectPayload = (values: ProjectFormData) => {
     metadata: {
       beneficiary_type: values.beneficiaryType.trim() || 'Direct Beneficiaries',
     },
+    uc_link: ucLink || undefined,
     created_by: undefined,
     updated_by: undefined,
   };
 };
 
-const buildProjectUpdatePayload = (values: ProjectFormData): Partial<ProjectServiceProject> => {
+const buildProjectUpdatePayload = (values: ProjectFormData, ucLink?: string): Partial<ProjectServiceProject> => {
   const budgetValue = values.totalBudget ? Number(values.totalBudget) : undefined;
   const beneficiaries = values.directBeneficiaries ? Number(values.directBeneficiaries) : undefined;
 
@@ -2184,6 +2319,9 @@ const buildProjectUpdatePayload = (values: ProjectFormData): Partial<ProjectServ
   }
   if (beneficiaries !== undefined) {
     payload.direct_beneficiaries = beneficiaries;
+  }
+  if (ucLink) {
+    (payload as any).uc_link = ucLink;
   }
 
   return payload;
@@ -2449,6 +2587,9 @@ interface AddProjectModalProps {
   tollsLoading: boolean;
   teamUsers: User[];
   teamUsersLoading: boolean;
+  ucFile: File | null;
+  setUcFile: Dispatch<SetStateAction<File | null>>;
+  uploadingUcFile: boolean;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   isEditing: boolean;
@@ -2466,6 +2607,9 @@ const AddProjectModal = ({
   tollsLoading,
   teamUsers,
   teamUsersLoading,
+  ucFile,
+  setUcFile,
+  uploadingUcFile,
   onClose,
   onSubmit,
   isEditing,
@@ -3293,6 +3437,71 @@ const AddProjectModal = ({
           </div>
         </div>
 
+        {/* Utilization Certificate Upload */}
+        <div className="border border-gray-200 rounded-xl p-4">
+          <h4 className="text-sm font-semibold text-gray-700 mb-3">Utilization Certificate (Optional)</h4>
+          
+          {/* Show current UC document if exists */}
+          {formData.uc_link && !ucFile && (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-blue-900">Current UC </p>
+                  <p className="text-xs text-blue-700 mt-1">A Utilization certificate has been uploaded for this project</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={formData.uc_link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-medium transition-colors"
+                  >
+                    View
+                  </a>
+                  <a
+                    href={formData.uc_link}
+                    download
+                    className="px-3 py-1.5 bg-white border border-blue-300 hover:bg-blue-50 text-blue-700 rounded-lg text-xs font-medium transition-colors"
+                  >
+                    Download
+                  </a>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              {formData.uc_link ? 'Replace UC Document' : 'Upload UC Document'}
+            </label>
+            <input
+              type="file"
+              accept="image/*,.pdf"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  if (file.size > 10 * 1024 * 1024) {
+                    alert('File size must be less than 10MB');
+                    e.target.value = '';
+                    return;
+                  }
+                  setUcFile(file);
+                }
+              }}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Upload UC document as image or PDF (max 10MB)
+            </p>
+            {ucFile && (
+              <div className="mt-2 p-2 bg-emerald-50 border border-emerald-200 rounded-lg">
+                <p className="text-xs font-medium text-emerald-700">New file selected: {ucFile.name}</p>
+                <p className="text-xs text-emerald-600 mt-1">This will replace the current UC document when you save</p>
+              </div>
+            )}
+          </div>
+        </div>
+
         {formError && <p className="text-sm text-red-600">{formError}</p>}
 
         <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100">
@@ -3306,10 +3515,15 @@ const AddProjectModal = ({
           </button>
           <button
             type="submit"
-            disabled={isSubmitting || partnersLoading}
+            disabled={isSubmitting || partnersLoading || uploadingUcFile}
             className="px-6 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold shadow-lg shadow-emerald-500/20 disabled:opacity-60 flex items-center gap-2"
           >
-            {isSubmitting ? (
+            {uploadingUcFile ? (
+              <>
+                <Loader className="w-4 h-4 animate-spin" />
+                Uploading UC...
+              </>
+            ) : isSubmitting ? (
               <>
                 <Loader className="w-4 h-4 animate-spin" />
                 {isEditing ? 'Saving...' : 'Creating...'}

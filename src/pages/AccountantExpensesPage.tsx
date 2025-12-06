@@ -714,63 +714,8 @@ const AccountantExpensesPage: React.FC = () => {
         throw updateError;
       }
 
-      // Only update budget utilization AFTER successfully marking as paid
-      const expenseAmount = selectedExpense.total_amount;
-      
-      // Update budget category utilized amount if budget_category_id exists
-      const budgetCategoryId = (selectedExpense as any).budget_category_id;
-      if (budgetCategoryId) {
-        try {
-          // Get current utilized amount
-          const { data: budgetCatData, error: fetchError } = await supabase
-            .from('budget_categories')
-            .select('utilized_amount')
-            .eq('id', budgetCategoryId)
-            .single();
-          
-          if (!fetchError) {
-            const currentUtilized = budgetCatData?.utilized_amount || 0;
-            
-            // Update utilized amount
-            const { error: updateCatError } = await supabase
-              .from('budget_categories')
-              .update({ utilized_amount: currentUtilized + expenseAmount })
-              .eq('id', budgetCategoryId);
-            
-            if (updateCatError) {
-              console.warn('Could not update budget category utilized amount:', updateCatError);
-            }
-          }
-        } catch (err) {
-          console.warn('Budget category update skipped:', err);
-        }
-      }
-      
-      // Update project utilized budget
-      if (selectedExpense.project_id) {
-        try {
-          const { data: projectData, error: fetchProjError } = await supabase
-            .from('projects')
-            .select('utilized_budget')
-            .eq('id', selectedExpense.project_id)
-            .single();
-          
-          if (!fetchProjError) {
-            const currentProjectUtilized = projectData?.utilized_budget || 0;
-            
-            const { error: updateProjError } = await supabase
-              .from('projects')
-              .update({ utilized_budget: currentProjectUtilized + expenseAmount })
-              .eq('id', selectedExpense.project_id);
-            
-            if (updateProjError) {
-              console.warn('Could not update project utilized budget:', updateProjError);
-            }
-          }
-        } catch (err) {
-          console.warn('Project budget update skipped:', err);
-        }
-      }
+      // Note: Budget utilization is automatically updated by database trigger
+      // when status changes to 'paid'. No manual updates needed here.
 
       setShowReceiptUploadModal(false);
       setShowModal(false);

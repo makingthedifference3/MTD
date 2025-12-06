@@ -2,12 +2,13 @@
 import { useAuth } from './context/useAuth';
 import { FilterProvider } from './context/FilterContext';
 import { ProjectProvider } from './context/ProjectContext';
+import { NotificationProvider } from './context/NotificationContext';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from './components/LoginPage';
 import Sidebar from './components/Sidebar';
 import PMDashboard from './pages/PMDashboard';
 import ToDoList from './pages/ToDoList';
-import ProjectExpenses from './pages/ProjectExpenses';
+import ProjectExpensesWrapper from './wrappers/ProjectExpensesWrapper';
 import AdminExpensesPage from './pages/AdminExpensesPage';
 import AccountantExpensesPage from './pages/AccountantExpensesPage';
 import Bills from './pages/Bills';
@@ -92,7 +93,7 @@ function AppRoutes() {
       <Route path="/team-members" element={<ProtectedRoute><Sidebar currentPage="team-members" onNavigate={() => {}}><TeamMembersPage /></Sidebar></ProtectedRoute>} />
       <Route path="/dashboard-forms" element={<ProtectedRoute><Sidebar currentPage="dashboard-forms" onNavigate={() => {}}><DashboardFormsPage /></Sidebar></ProtectedRoute>} />
       <Route path="/calendar" element={<ProtectedRoute><Sidebar currentPage="calendar" onNavigate={() => {}}><CalendarPage /></Sidebar></ProtectedRoute>} />
-      <Route path="/project-expenses" element={<ProtectedRoute><Sidebar currentPage="project-expenses" onNavigate={() => {}}><ProjectExpenses /></Sidebar></ProtectedRoute>} />
+      <Route path="/project-expenses" element={<ProtectedRoute><ProjectExpensesWrapper /></ProtectedRoute>} />
       <Route path="/admin-expenses" element={<ProtectedRoute><Sidebar currentPage="admin-expenses" onNavigate={() => {}}><AdminExpensesPage /></Sidebar></ProtectedRoute>} />
       <Route path="/acc-expense" element={<ProtectedRoute><Sidebar currentPage="acc-expense" onNavigate={() => {}}><AccountantExpensesPage /></Sidebar></ProtectedRoute>} />
       <Route path="/daily-report" element={<ProtectedRoute><Sidebar currentPage="daily-report" onNavigate={() => {}}><DailyReportPage /></Sidebar></ProtectedRoute>} />
@@ -123,11 +124,13 @@ function App() {
   return (
     <Router>
       <AuthProvider>
-        <FilterProvider>
-          <ProjectProvider>
-            <AppRoutes />
-          </ProjectProvider>
-        </FilterProvider>
+        <NotificationProvider>
+          <FilterProvider>
+            <ProjectProvider>
+              <AppRoutes />
+            </ProjectProvider>
+          </FilterProvider>
+        </NotificationProvider>
       </AuthProvider>
     </Router>
   );

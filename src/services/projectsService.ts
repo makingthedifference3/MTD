@@ -61,6 +61,7 @@ export interface Project {
   tags?: string[];
   notes?: string;
   metadata?: Record<string, unknown>;
+  uc_link?: string;
   created_at?: string;
   updated_at?: string;
   created_by?: string;

@@ -5,6 +5,7 @@ import { projectExpensesService } from '../services/projectExpensesService';
 import type { ProjectExpense, ExpenseStats, ExpenseCategory } from '../services/projectExpensesService';
 import { supabase } from '../services/supabaseClient';
 import { useAuth } from '../context/useAuth';
+import { useNotifications } from '../context/NotificationContext';
 
 interface UserMap {
   [key: string]: string;
@@ -12,6 +13,7 @@ interface UserMap {
 
 const ProjectExpenses: React.FC = () => {
   const { currentUser } = useAuth();
+  const { markReceiptAsSeen } = useNotifications();
   const [expenses, setExpenses] = useState<ProjectExpense[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
@@ -104,7 +106,6 @@ const ProjectExpenses: React.FC = () => {
       console.error('Error loading data:', error);
     }
   };
-
   const fetchUsers = async (): Promise<UserMap> => {
     try {
       const { data, error } = await supabase
@@ -327,7 +328,8 @@ const ProjectExpenses: React.FC = () => {
           const userName = currentUser.full_name.replace(/\s+/g, '_');
           const now = new Date();
           const dateStr = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
-          const fileName = `${userName}_${dateStr}.${fileExt}`;
+          const timestamp = now.getTime(); // Add timestamp to make filename unique
+          const fileName = `${userName}_${dateStr}_${timestamp}.${fileExt}`;
           const filePath = `bills/${fileName}`;
 
           const { data: uploadData, error: uploadError } = await supabase.storage
@@ -637,16 +639,28 @@ const ProjectExpenses: React.FC = () => {
                             </td>
                           )}
                           <td className="px-4 py-3 text-sm">
-                            <button
-                              onClick={() => {
-                                setSelectedExpense(expense);
-                                setShowStatusModal(false);
-                                setShowModal(true);
-                              }}
-                              className="text-emerald-600 hover:text-emerald-700 font-medium hover:underline"
-                            >
-                              View
-                            </button>
+                            {selectedStatus === 'paid' && (expense as any).receipt_drive_link ? (
+                              <button
+                                onClick={() => {
+                                  setBillUrl((expense as any).receipt_drive_link || '');
+                                  setShowBillModal(true);
+                                  markReceiptAsSeen(expense.id); // Mark as seen when viewing receipt
+                                }}
+                                className="text-blue-600 hover:text-blue-700 font-medium hover:underline"
+                              >
+                                View Receipt
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  setBillUrl((expense as any).bill_drive_link || '');
+                                  setShowBillModal(true);
+                                }}
+                                className="text-emerald-600 hover:text-emerald-700 font-medium hover:underline"
+                              >
+                                View Bill
+                              </button>
+                            )}
                           </td>
                         </motion.tr>
                       ))}

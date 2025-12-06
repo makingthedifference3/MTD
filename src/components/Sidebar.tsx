@@ -3,10 +3,11 @@ import type { ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Menu, X, LogOut, LayoutDashboard, Briefcase, CheckSquare, Image, FileText, Users, Calendar,
-  DollarSign, Receipt, CreditCard, RefreshCw, ClipboardList, GraduationCap, TrendingUp, FileCheck, CalendarClock
+  DollarSign, Receipt, CreditCard, RefreshCw, ClipboardList, GraduationCap, TrendingUp, FileCheck, CalendarClock, Bell
 } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useNotifications } from '../context/NotificationContext';
 
 
 interface SidebarProps {
@@ -18,7 +19,7 @@ interface SidebarProps {
 const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'accountant', 'project_manager'] },
   { id: 'csr-partners', label: 'CSR Partners', icon: Briefcase, roles: ['admin',  'project_manager'] },
-  { id: 'projects', label: 'Projects', icon: Briefcase, roles: ['admin', 'project_manager'] },
+  { id: 'projects', label: 'Projects', icon: Briefcase, roles: ['admin', 'project_manager','accountant'] },
   { id: 'project-timeline', label: 'Project Timeline', icon: CalendarClock, roles: ['admin', 'project_manager'] },
   { id: 'todo', label: 'To-Do List Assignment', icon: CheckSquare, roles: ['admin', 'accountant', 'project_manager'] },
   { id: 'real-time-update', label: 'Real Time Update', icon: RefreshCw, roles: ['admin', 'project_manager'] },
@@ -33,8 +34,8 @@ const menuItems = [
   { id: 'upcoming-expenses', label: 'Upcoming Expenses', icon: TrendingUp, roles: ['admin', 'project_manager','accountant','team_members'] },
   { id: 'acc-upcoming-expenses', label: 'Manage Upcoming Expenses', icon: TrendingUp, roles: ['admin', 'accountant'] },
   { id: 'bills', label: 'Bills', icon: Receipt, roles: ['admins'] },
-  { id: 'csr-budget', label: 'CSR Budget', icon: CreditCard, roles: ['admin','accountant'] },
-  { id: 'utilization-certificate', label: 'Utilization Certificate', icon: FileCheck, roles: ['admin', 'accountant'] },
+  { id: 'csr-budget', label: 'CSR Budget', icon: CreditCard, roles: ['admin'] },
+  // { id: 'utilization-certificate', label: 'Utilization Certificate', icon: FileCheck, roles: ['admin', 'accountant'] },
   { id: 'tasks', label: 'My Tasks', icon: CheckSquare, roles: ['team_member'] },
   // Admin Only
   { id: 'user-management', label: 'User Management', icon: Users, roles: ['admin'] },
@@ -43,6 +44,7 @@ const menuItems = [
 const Sidebar = ({ children, currentPage, onNavigate }: SidebarProps) => {
   const [isOpen, setIsOpen] = useState(true);
   const { currentRole, currentUser, logout } = useAuth();
+  const { notificationCounts, totalNotifications } = useNotifications();
   const navigate = useNavigate();
   const location = useLocation();
   
@@ -179,7 +181,20 @@ const Sidebar = ({ children, currentPage, onNavigate }: SidebarProps) => {
                         <span className={`text-sm font-medium flex-1 text-left ${isActive ? 'font-semibold' : ''}`}>
                           {item.label}
                         </span>
-                        {isActive && (
+                        {notificationCounts[item.id] > 0 && (
+                          <motion.span
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            className={`px-2 py-0.5 text-xs font-bold rounded-full ${
+                              isActive 
+                                ? 'bg-white text-emerald-600' 
+                                : 'bg-red-500 text-white'
+                            }`}
+                          >
+                            {notificationCounts[item.id]}
+                          </motion.span>
+                        )}
+                        {isActive && !notificationCounts[item.id] && (
                           <motion.div 
                             initial={{ scale: 0 }}
                             animate={{ scale: 1 }}
@@ -213,14 +228,30 @@ const Sidebar = ({ children, currentPage, onNavigate }: SidebarProps) => {
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="bg-white/70 backdrop-blur-xl shadow-sm border-b border-gray-200 px-8 py-5 flex items-center justify-between">
-          {!isOpen && (
-            <button onClick={() => setIsOpen(true)} className="p-2 hover:bg-emerald-100 rounded-lg">
-              <Menu className="w-6 h-6 text-emerald-700" />
-            </button>
+          <div className="flex items-center gap-4">
+            {!isOpen && (
+              <button onClick={() => setIsOpen(true)} className="p-2 hover:bg-emerald-100 rounded-lg">
+                <Menu className="w-6 h-6 text-emerald-700" />
+              </button>
+            )}
+            <h2 className="text-2xl font-bold text-emerald-800">
+              {filteredMenuItems.find((item) => item.id === currentPage)?.label || 'Dashboard'}
+            </h2>
+          </div>
+          {totalNotifications > 0 && (
+            <div className="relative">
+              <button className="p-2 hover:bg-emerald-100 rounded-lg relative">
+                <Bell className="w-6 h-6 text-emerald-700" />
+                <motion.span
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center"
+                >
+                  {totalNotifications}
+                </motion.span>
+              </button>
+            </div>
           )}
-          <h2 className="text-2xl font-bold text-emerald-800">
-            {filteredMenuItems.find((item) => item.id === currentPage)?.label || 'Dashboard'}
-          </h2>
         </header>
         
         <main className="flex-1 overflow-y-auto p-8 bg-slate-50">{children}</main>

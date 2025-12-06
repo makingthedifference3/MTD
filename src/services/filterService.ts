@@ -28,6 +28,7 @@ const PROJECT_SELECT_FIELDS = `
   trees_planted,
   students_enrolled,
   schools_renovated,
+  uc_link,
   toll:csr_partner_tolls!projects_toll_id_fkey(id, toll_name, poc_name, city, state)
 `;
 
@@ -98,6 +99,8 @@ export interface Project {
   // UI display properties from database
   display_color?: string;
   display_icon?: string;
+  // Utilization Certificate
+  uc_link?: string;
 }
 
 /**
