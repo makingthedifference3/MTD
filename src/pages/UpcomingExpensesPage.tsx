@@ -9,7 +9,7 @@ const UpcomingExpensesPage = () => {
   const { currentUser } = useAuth();
   const [upcomingExpenses, setUpcomingExpenses] = useState<ProjectExpense[]>([]);
   const [categories, setCategories] = useState<Array<{id: string; name: string}>>([]);
-  const [projects, setProjects] = useState<Array<{id: string; name: string; project_code: string}>>([]);
+  const [_projects, setProjects] = useState<Array<{id: string; name: string; project_code: string}>>([]);
   const [csrPartners, setCSRPartners] = useState<Array<{id: string; name: string; has_toll: boolean}>>([]);
   const [tolls, setTolls] = useState<Array<{id: string; toll_name: string}>>([]);
   const [budgetCategories, setBudgetCategories] = useState<Array<{id: string; name: string; parent_id: string | null}>>([]);

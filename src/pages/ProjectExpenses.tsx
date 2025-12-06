@@ -20,9 +20,9 @@ const ProjectExpenses: React.FC = () => {
   const [showBillModal, setShowBillModal] = useState(false);
   const [billUrl, setBillUrl] = useState<string>('');
   const [selectedStatus, setSelectedStatus] = useState<'pending' | 'approved' | 'rejected' | 'paid' | null>(null);
-  const [_selectedExpense, setSelectedExpense] = useState<ProjectExpense | null>(null);
+  const [_selectedExpense] = useState<ProjectExpense | null>(null);
   const [_userMap, setUserMap] = useState<UserMap>({});
-  const [_showModal, setShowModal] = useState(false);
+  const [_showModal] = useState(false);
   
   // Suppress unused variable warnings
   void _selectedExpense;

@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Menu, X, LogOut, LayoutDashboard, Briefcase, CheckSquare, Image, FileText, Users, Calendar,
-  DollarSign, Receipt, CreditCard, RefreshCw, ClipboardList, GraduationCap, TrendingUp, FileCheck, CalendarClock, Bell
+  DollarSign, Receipt, CreditCard, RefreshCw, ClipboardList, GraduationCap, TrendingUp, CalendarClock, Bell
 } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import { useNavigate, useLocation } from 'react-router-dom';
