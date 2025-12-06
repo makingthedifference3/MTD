@@ -75,16 +75,56 @@ const CSRBudgetPage = () => {
     };
   }, [filteredProjects]);
 
+  // Calculate company-wise (CSR Partner) financial data
+  const companyWiseData = useMemo(() => {
+    const companyMap = new Map<string, { id: string; name: string; donation: number; expense: number; balance: number }>();
+    
+    filteredProjects.forEach((project) => {
+      const partnerId = project.csr_partner_id;
+      const partner = csrPartners.find(p => p.id === partnerId);
+      
+      if (partner) {
+        const existing = companyMap.get(partnerId) || { id: partnerId, name: partner.name, donation: 0, expense: 0, balance: 0 };
+        existing.donation += project.total_budget || 0;
+        existing.expense += project.utilized_budget || 0;
+        existing.balance = existing.donation - existing.expense;
+        companyMap.set(partnerId, existing);
+      }
+    });
+    
+    return Array.from(companyMap.values()).sort((a, b) => b.donation - a.donation);
+  }, [filteredProjects, csrPartners]);
+
+  // Calculate operation-wise (work type) data
+  const operationWiseData = useMemo(() => {
+    const operationMap = new Map<string, { name: string; donation: number; expense: number; projectCount: number }>();
+    
+    filteredProjects.forEach((project) => {
+      const workType = project.work || 'Others';
+      const existing = operationMap.get(workType) || { name: workType, donation: 0, expense: 0, projectCount: 0 };
+      existing.donation += project.total_budget || 0;
+      existing.expense += project.utilized_budget || 0;
+      existing.projectCount += 1;
+      operationMap.set(workType, existing);
+    });
+    
+    return Array.from(operationMap.values()).sort((a, b) => b.donation - a.donation).slice(0, 8);
+  }, [filteredProjects]);
+
   // Prepare chart data for all projects
   const projectChartData = useMemo(() => {
     const colors = ['#10b981', '#f59e0b', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#06b6d4'];
     
-    return filteredProjects.slice(0, 10).map((project, index) => ({
-      name: project.name.length > 20 ? project.name.substring(0, 20) + '...' : project.name,
-      allocated: project.total_budget || 0,
-      utilized: project.utilized_budget || 0,
-      color: colors[index % colors.length],
-    }));
+    return filteredProjects.slice(0, 10).map((project, index) => {
+      const location = project.location || 'N/A';
+      const displayName = `${project.name} : ${location} : ${project.project_code}`;
+      return {
+        name: displayName.length > 40 ? displayName.substring(0, 37) + '...' : displayName,
+        allocated: project.total_budget || 0,
+        utilized: project.utilized_budget || 0,
+        color: colors[index % colors.length],
+      };
+    });
   }, [filteredProjects]);
 
   // Budget stats for selected project
@@ -191,6 +231,11 @@ const CSRBudgetPage = () => {
                     ? `Budget Details - ${selectedProjectData.name}` 
                     : 'Comprehensive budget overview across all projects'}
                 </p>
+                {viewMode === 'overview' && (
+                  <p className="text-sm text-gray-500 mt-2 italic">
+                    "<span className="font-semibold">A budget is telling your money where to go</span> instead of wondering where it went."
+                  </p>
+                )}
               </div>
             </div>
             {viewMode === 'projectDetail' && (
@@ -287,9 +332,9 @@ const CSRBudgetPage = () => {
           transition={{ duration: 0.3 }}
           className="space-y-6"
         >
-          {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {/* Total Allocated Card */}
+          {/* Top 3 Summary Cards - Donation/Expense/Balance */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Total Donation Card */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -300,98 +345,194 @@ const CSRBudgetPage = () => {
               <div className="relative z-10">
                 <div className="flex items-center justify-between mb-6">
                   <div className="p-3 bg-white/10 backdrop-blur-sm rounded-2xl">
-                    <Wallet className="w-7 h-7" />
+                    <Wallet className="w-8 h-8" />
                   </div>
                   <ArrowUpRight className="w-6 h-6 opacity-70" />
                 </div>
                 <div className="space-y-2">
-                  <p className="text-emerald-100 text-sm font-medium uppercase tracking-wide">Total Allocated</p>
-                  <h3 className="text-4xl font-bold wrap-break-word">₹{(overallStats.totalAllocated / 100000).toFixed(2)}L</h3>
-                  <p className="text-emerald-200 text-xs">{filteredProjects.length} Projects</p>
+                  <p className="text-emerald-100 text-sm font-medium uppercase tracking-wide">Total Donation</p>
+                  <h3 className="text-5xl font-bold">₹{(overallStats.totalAllocated / 10000000).toFixed(2)}Cr</h3>
+                  <p className="text-emerald-200 text-sm mt-2">{filteredProjects.length} Projects Active</p>
                 </div>
               </div>
             </motion.div>
 
-            {/* Total Utilized Card */}
+            {/* Total Expense Card */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
-              className="bg-black rounded-3xl p-8 text-white shadow-xl relative overflow-hidden group hover:shadow-2xl transition-all duration-500"
+              className="bg-linear-to-br from-orange-500 to-orange-600 rounded-3xl p-8 text-white shadow-xl shadow-orange-500/20 relative overflow-hidden group hover:shadow-2xl hover:shadow-orange-500/30 transition-all duration-500"
             >
-              <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full -mr-32 -mt-32 group-hover:scale-150 transition-transform duration-700"></div>
+              <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 group-hover:scale-150 transition-transform duration-700"></div>
               <div className="relative z-10">
                 <div className="flex items-center justify-between mb-6">
-                  <div className="p-3 bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10">
-                    <TrendingUp className="w-7 h-7 text-amber-400" />
+                  <div className="p-3 bg-white/10 backdrop-blur-sm rounded-2xl">
+                    <TrendingUp className="w-8 h-8" />
                   </div>
-                  <ArrowDownRight className="w-6 h-6 text-amber-400 opacity-70" />
+                  <ArrowDownRight className="w-6 h-6 opacity-70" />
                 </div>
                 <div className="space-y-2">
-                  <p className="text-gray-400 text-sm font-medium uppercase tracking-wide">Total Utilized</p>
-                  <h3 className="text-4xl font-bold wrap-break-word">₹{(overallStats.totalUtilized / 100000).toFixed(2)}L</h3>
-                  <div className="flex items-center gap-2 pt-2">
-                    <span className="px-3 py-1 bg-amber-500/20 backdrop-blur-sm rounded-full text-xs font-semibold text-amber-400">
-                      {overallStats.utilizationRate}% used
+                  <p className="text-orange-100 text-sm font-medium uppercase tracking-wide">Total Expense</p>
+                  <h3 className="text-5xl font-bold">₹{(overallStats.totalUtilized / 10000000).toFixed(2)}Cr</h3>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full text-xs font-semibold">
+                      {overallStats.utilizationRate}% utilized
                     </span>
                   </div>
                 </div>
               </div>
             </motion.div>
 
-            {/* Total Remaining Card */}
+            {/* Total Balance Card */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
-              className="bg-white rounded-3xl p-8 shadow-lg border border-gray-100 relative overflow-hidden group hover:shadow-xl transition-all duration-500"
-            >
-              <div className="absolute top-0 right-0 w-48 h-48 bg-emerald-50 rounded-full -mr-24 -mt-24 group-hover:scale-125 transition-transform duration-700"></div>
-              <div className="relative z-10">
-                <div className="flex items-center justify-between mb-6">
-                  <div className="p-3 bg-emerald-50 rounded-2xl">
-                    <Activity className="w-7 h-7 text-emerald-600" />
-                  </div>
-                  <span className={`text-xs font-semibold px-3 py-1 rounded-full ${
-                    overallStats.totalRemaining > 0 ? 'text-emerald-600 bg-emerald-50' : 'text-red-600 bg-red-50'
-                  }`}>
-                    {overallStats.totalRemaining > 0 ? 'Available' : 'Exceeded'}
-                  </span>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-gray-600 text-sm font-medium uppercase tracking-wide">Total Remaining</p>
-                  <h3 className="text-4xl font-bold text-black wrap-break-word">₹{(Math.abs(overallStats.totalRemaining) / 100000).toFixed(2)}L</h3>
-                </div>
-              </div>
-            </motion.div>
-
-            {/* Utilization Rate Card */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
-              className="bg-linear-to-br from-purple-500 to-purple-600 rounded-3xl p-8 text-white shadow-xl shadow-purple-500/20 relative overflow-hidden group hover:shadow-2xl hover:shadow-purple-500/30 transition-all duration-500"
+              className="bg-linear-to-br from-blue-500 to-blue-600 rounded-3xl p-8 text-white shadow-xl shadow-blue-500/20 relative overflow-hidden group hover:shadow-2xl hover:shadow-blue-500/30 transition-all duration-500"
             >
               <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 group-hover:scale-150 transition-transform duration-700"></div>
               <div className="relative z-10">
                 <div className="flex items-center justify-between mb-6">
                   <div className="p-3 bg-white/10 backdrop-blur-sm rounded-2xl">
-                    <Activity className="w-7 h-7" />
+                    <Activity className="w-8 h-8" />
                   </div>
+                  <span className={`text-xs font-semibold px-3 py-1 rounded-full bg-white/20`}>
+                    {overallStats.totalRemaining > 0 ? 'Available' : 'Exceeded'}
+                  </span>
                 </div>
                 <div className="space-y-2">
-                  <p className="text-purple-100 text-sm font-medium uppercase tracking-wide">Utilization Rate</p>
-                  <h3 className="text-5xl font-bold">{overallStats.utilizationRate}%</h3>
-                  <div className="w-full bg-white/20 rounded-full h-3 mt-4">
-                    <div
-                      className="bg-white rounded-full h-3 transition-all duration-500"
-                      style={{ width: `${Math.min(overallStats.utilizationRate, 100)}%` }}
-                    ></div>
-                  </div>
+                  <p className="text-blue-100 text-sm font-medium uppercase tracking-wide">Total Balance</p>
+                  <h3 className="text-5xl font-bold">₹{(Math.abs(overallStats.totalRemaining) / 10000000).toFixed(2)}Cr</h3>
                 </div>
               </div>
             </motion.div>
           </div>
+
+          {/* Company-wise Financial Overview */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="bg-white rounded-3xl p-8 shadow-lg border border-gray-100"
+          >
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold text-black mb-1">Company-wise Financial Overview</h2>
+              <p className="text-gray-500 text-sm">CSR Partner-wise donation, expense, and balance breakdown</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {companyWiseData.map((company, index) => (
+                <motion.div
+                  key={company.id}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.4 + index * 0.05 }}
+                  className="bg-linear-to-br from-gray-50 to-white border-2 border-gray-200 rounded-2xl p-5 hover:border-emerald-400 hover:shadow-lg transition-all duration-300"
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 bg-emerald-100 rounded-lg">
+                      <Building2 className="w-5 h-5 text-emerald-600" />
+                    </div>
+                    <h3 className="font-bold text-gray-900 text-sm truncate">{company.name}</h3>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-600">Donation</span>
+                      <span className="text-sm font-bold text-emerald-600">₹{(company.donation / 100000).toFixed(1)}L</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-600">Expense</span>
+                      <span className="text-sm font-bold text-orange-600">₹{(company.expense / 100000).toFixed(1)}L</span>
+                    </div>
+                    <div className="flex justify-between items-center pt-2 border-t border-gray-200">
+                      <span className="text-xs font-semibold text-gray-700">Balance</span>
+                      <span className="text-sm font-bold text-blue-600">₹{(company.balance / 100000).toFixed(1)}L</span>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+
+          {/* Operation-wise Breakdown */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5 }}
+            className="bg-white rounded-3xl p-8 shadow-lg border border-gray-100"
+          >
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold text-black mb-1">Operation-wise Breakdown</h2>
+              <p className="text-gray-500 text-sm">Work type distribution across projects</p>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Operation Cards */}
+              <div className="lg:col-span-1 space-y-3">
+                {operationWiseData.slice(0, 4).map((op, index) => (
+                  <motion.div
+                    key={op.name}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.5 + index * 0.05 }}
+                    className="bg-linear-to-r from-gray-50 to-white border border-gray-200 rounded-xl p-4 hover:border-emerald-400 transition-all"
+                  >
+                    <div className="flex justify-between items-center mb-2">
+                      <h4 className="font-bold text-gray-900 text-sm">{op.name}</h4>
+                      <span className="text-xs bg-emerald-100 text-emerald-600 px-2 py-1 rounded-full font-semibold">
+                        {op.projectCount} projects
+                      </span>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-gray-600">Donation:</span>
+                        <span className="font-semibold text-emerald-600">₹{(op.donation / 100000).toFixed(1)}L</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-gray-600">Expense:</span>
+                        <span className="font-semibold text-orange-600">₹{(op.expense / 100000).toFixed(1)}L</span>
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+              
+              {/* Bar Chart */}
+              <div className="lg:col-span-2">
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={operationWiseData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                    <XAxis 
+                      dataKey="name" 
+                      stroke="#9ca3af" 
+                      style={{ fontSize: '11px', fontWeight: 500 }}
+                      tickLine={false}
+                      axisLine={false}
+                      angle={-30}
+                      textAnchor="end"
+                      height={100}
+                    />
+                    <YAxis 
+                      stroke="#9ca3af" 
+                      style={{ fontSize: '12px', fontWeight: 500 }}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: '#000', 
+                        border: 'none', 
+                        borderRadius: '12px',
+                        color: '#fff',
+                        padding: '12px 16px'
+                      }}
+                    />
+                    <Bar dataKey="donation" fill="#10b981" name="Donation" radius={[8, 8, 0, 0]} />
+                    <Bar dataKey="expense" fill="#f97316" name="Expense" radius={[8, 8, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </motion.div>
 
           {/* Charts Section */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -440,7 +581,7 @@ const CSRBudgetPage = () => {
               </ResponsiveContainer>
             </motion.div>
 
-            {/* Pie Chart - Budget Distribution */}
+            {/* Pie Chart - Company-wise Expense Distribution */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -450,23 +591,24 @@ const CSRBudgetPage = () => {
               <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 rounded-full -mr-32 -mt-32"></div>
               <div className="relative z-10">
                 <div className="mb-6">
-                  <h2 className="text-2xl font-bold mb-1">Budget Distribution</h2>
-                  <p className="text-gray-400 text-sm">Allocation across top projects</p>
+                  <h2 className="text-2xl font-bold mb-1">Company-wise Expense</h2>
+                  <p className="text-gray-400 text-sm">Expense distribution by CSR Partners</p>
                 </div>
                 <ResponsiveContainer width="100%" height={250}>
                   <PieChart>
                     <Pie
-                      data={projectChartData}
+                      data={companyWiseData.map((c, i) => ({ name: c.name, value: c.expense, color: ['#10b981', '#f59e0b', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#06b6d4'][i % 8] }))}
                       cx="50%"
                       cy="50%"
                       innerRadius={60}
                       outerRadius={90}
                       paddingAngle={4}
-                      dataKey="allocated"
+                      dataKey="value"
                     >
-                      {projectChartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
-                      ))}
+                      {companyWiseData.map((_entry, index) => {
+                        const colors = ['#10b981', '#f59e0b', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#06b6d4'];
+                        return <Cell key={`cell-${index}`} fill={colors[index % colors.length]} stroke="none" />;
+                      })}
                     </Pie>
                     <Tooltip 
                       contentStyle={{ 
@@ -482,12 +624,15 @@ const CSRBudgetPage = () => {
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="grid grid-cols-2 gap-3 mt-6">
-                  {projectChartData.slice(0, 6).map((item, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }}></div>
-                      <span className="text-xs text-gray-300 truncate">{item.name}</span>
-                    </div>
-                  ))}
+                  {companyWiseData.slice(0, 6).map((item, index) => {
+                    const colors = ['#10b981', '#f59e0b', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6'];
+                    return (
+                      <div key={index} className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: colors[index % colors.length] }}></div>
+                        <span className="text-xs text-gray-300 truncate">{item.name}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </motion.div>
@@ -529,7 +674,7 @@ const CSRBudgetPage = () => {
                             <FolderKanban className="w-6 h-6 text-emerald-600" />
                           </div>
                           <div className={`text-xs font-bold px-3 py-1 rounded-full ${
-                            utilizationRate > 100 ? 'bg-red-100 text-red-600' :
+                            utilizationRate > 100 ? 'bg-orange-100 text-orange-600' :
                             utilizationRate > 80 ? 'bg-amber-100 text-amber-600' :
                             'bg-emerald-100 text-emerald-600'
                           }`}>
@@ -538,7 +683,12 @@ const CSRBudgetPage = () => {
                         </div>
                         
                         <h3 className="text-lg font-bold text-gray-900 mb-1 line-clamp-2">{project.name}</h3>
-                        <p className="text-sm text-gray-500 mb-4">{project.project_code}</p>
+                        <p className="text-sm font-semibold text-gray-700 mb-1">
+                          {project.toll?.toll_name || csrPartners.find(p => p.id === project.csr_partner_id)?.name || 'N/A'}
+                        </p>
+                        <p className="text-xs text-gray-500 mb-4">
+                          {project.project_code} - {project.location ? `${project.location}, ${project.state || ''}` : project.state || 'Location N/A'}
+                        </p>
                         
                         <div className="space-y-3">
                           <div className="flex items-center justify-between text-sm">
@@ -552,7 +702,7 @@ const CSRBudgetPage = () => {
                           <div className="flex items-center justify-between text-sm">
                             <span className="text-gray-600">Remaining</span>
                             <span className={`font-bold truncate ml-2 ${
-                              ((project.total_budget || 0) - (project.utilized_budget || 0)) >= 0 ? 'text-emerald-600' : 'text-red-600'
+                              ((project.total_budget || 0) - (project.utilized_budget || 0)) >= 0 ? 'text-emerald-600' : 'text-orange-600'
                             }`}>
                               ₹{(Math.abs((project.total_budget || 0) - (project.utilized_budget || 0)) / 100000).toFixed(2)}L
                             </span>
@@ -562,7 +712,7 @@ const CSRBudgetPage = () => {
                           <div className="w-full bg-gray-200 rounded-full h-2">
                             <div
                               className={`rounded-full h-2 transition-all duration-500 ${
-                                utilizationRate > 100 ? 'bg-red-500' :
+                                utilizationRate > 100 ? 'bg-orange-500' :
                                 utilizationRate > 80 ? 'bg-amber-500' :
                                 'bg-emerald-500'
                               }`}
@@ -659,7 +809,7 @@ const CSRBudgetPage = () => {
                     <Activity className="w-7 h-7 text-emerald-600" />
                   </div>
                   <span className={`text-xs font-semibold px-3 py-1 rounded-full ${
-                    projectBudgetStats.remaining > 0 ? 'text-emerald-600 bg-emerald-50' : 'text-red-600 bg-red-50'
+                    projectBudgetStats.remaining > 0 ? 'text-emerald-600 bg-emerald-50' : 'text-orange-600 bg-orange-50'
                   }`}>
                     {projectBudgetStats.remaining > 0 ? 'Available' : 'Exceeded'}
                   </span>
@@ -770,7 +920,7 @@ const CSRBudgetPage = () => {
                                   <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
                                     <div
                                       className={`h-full rounded-full transition-all ${
-                                        utilizationPercent > 100 ? 'bg-red-500' :
+                                        utilizationPercent > 100 ? 'bg-orange-500' :
                                         utilizationPercent > 80 ? 'bg-amber-500' :
                                         'bg-emerald-500'
                                       }`}
