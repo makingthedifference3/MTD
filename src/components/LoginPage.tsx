@@ -37,9 +37,11 @@ export default function LoginPage() {
       // Login successful - store user info
       login(authenticatedUser);
       
-      // Route based on role: admin goes to admin dashboard, data_manager goes to result analysis, others go to projects dashboard
+      // Route based on role: admin goes to admin dashboard, accountant to accountant dashboard, data_manager goes to result analysis, others go to projects dashboard
       if (authenticatedUser.role === 'admin') {
         navigate('/admin-dashboard');
+      } else if (authenticatedUser.role === 'accountant') {
+        navigate('/accountant-dashboard');
       } else if (authenticatedUser.role === 'data_manager') {
         navigate('/data-manager');
       } else {
