@@ -753,7 +753,9 @@ const ProjectTimelinePage = () => {
                         <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-emerald-600 group-hover:translate-x-1 transition-all" />
                       </div>
                       
-                      <h3 className="text-lg font-bold text-gray-900 mb-2 line-clamp-2">{project.name}</h3>
+                      <h3 className="text-lg font-bold text-gray-900 mb-2 line-clamp-2">
+                        {project.name}{project.project_code ? ` : ${project.project_code}` : ''}
+                      </h3>
                       
                       <div className="flex items-center gap-2 mb-3">
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -766,11 +768,33 @@ const ProjectTimelinePage = () => {
                       </div>
                       
                       {project.location && (
-                        <div className="flex items-center gap-1 text-sm text-gray-600">
+                        <div className="flex items-center gap-1 text-sm text-gray-600 mb-3">
                           <MapPin className="w-4 h-4" />
                           <span className="line-clamp-1">{project.location}</span>
                         </div>
                       )}
+                      
+                      {/* Budget Information */}
+                      <div className="grid grid-cols-3 gap-2 mt-auto pt-3 border-t border-gray-100">
+                        <div>
+                          <p className="text-xs text-gray-500">Budget</p>
+                          <p className="text-sm font-bold text-blue-600">
+                            ₹{((project.total_budget || 0) / 100000).toFixed(1)}L
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Utilized</p>
+                          <p className="text-sm font-bold text-orange-600">
+                            ₹{((project.utilized_budget || 0) / 100000).toFixed(1)}L
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Remaining</p>
+                          <p className="text-sm font-bold text-purple-600">
+                            ₹{(((project.total_budget || 0) - (project.utilized_budget || 0)) / 100000).toFixed(1)}L
+                          </p>
+                        </div>
+                      </div>
                     </div>
                   </motion.button>
                 ))}

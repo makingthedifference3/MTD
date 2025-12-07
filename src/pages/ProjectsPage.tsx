@@ -3139,7 +3139,7 @@ const AddProjectModal = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <label className="text-sm font-medium text-gray-700">
             <span className="flex items-center gap-1">
-              <Calendar className="w-4 h-4" /> Start Date
+              <Calendar className="w-4 h-4" /> Start Date *
             </span>
             <input
               type="date"
@@ -3150,12 +3150,13 @@ const AddProjectModal = ({
                   startDate: e.target.value,
                 }))
               }
+              required
               className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
             />
           </label>
           <label className="text-sm font-medium text-gray-700">
             <span className="flex items-center gap-1">
-              <Calendar className="w-4 h-4" /> Expected End Date
+              <Calendar className="w-4 h-4" /> Expected End Date *
             </span>
             <input
               type="date"
@@ -3166,6 +3167,7 @@ const AddProjectModal = ({
                   expectedEndDate: e.target.value,
                 }))
               }
+              required
               className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
             />
           </label>
