@@ -43,10 +43,11 @@ const ProjectTimelinePage = () => {
   // Use _selectedProject if needed for filter sync
   void _selectedProject;
   
-  // View mode: partners -> tolls -> projects -> activities
-  const [viewMode, setViewMode] = useState<'partners' | 'tolls' | 'projects' | 'activities'>('partners');
+  // View mode: partners -> tolls -> folders -> projects -> activities
+  const [viewMode, setViewMode] = useState<'partners' | 'tolls' | 'folders' | 'projects' | 'activities'>('partners');
   const [selectedPartnerData, setSelectedPartnerData] = useState<{ id: string; name: string } | null>(null);
   const [selectedTollData, setSelectedTollData] = useState<Toll | null>(null);
+  const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   const [selectedProjectData, setSelectedProjectData] = useState<Project | null>(null);
   
   // Activities state
@@ -99,6 +100,39 @@ const ProjectTimelinePage = () => {
     }
     return [];
   }, [filteredProjects, selectedPartner, selectedToll]);
+
+  // Group projects by name (similar to PMDashboard)
+  const groupedProjects = useCallback(() => {
+    const projectsToGroup = getProjectsForView();
+    const grouped = projectsToGroup.reduce<Record<string, {
+      projects: Project[];
+      activeCount: number;
+      completedCount: number;
+    }>>((acc, project) => {
+      const key = (project.name || 'Untitled Project').trim();
+      if (!acc[key]) {
+        acc[key] = {
+          projects: [],
+          activeCount: 0,
+          completedCount: 0,
+        };
+      }
+
+      acc[key].projects.push(project);
+      if (project.status === 'completed') {
+        acc[key].completedCount += 1;
+      } else {
+        acc[key].activeCount += 1;
+      }
+
+      return acc;
+    }, {});
+
+    return Object.entries(grouped).map(([name, data]) => ({
+      name,
+      ...data,
+    })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [getProjectsForView]);
 
   // Fetch team members for the selected project
   const fetchTeamMembers = useCallback(async () => {
@@ -177,7 +211,7 @@ const ProjectTimelinePage = () => {
     if (partnerHasTolls) {
       setViewMode('tolls');
     } else {
-      setViewMode('projects');
+      setViewMode('folders');
     }
   };
 
@@ -185,6 +219,12 @@ const ProjectTimelinePage = () => {
   const handleTollClick = (toll: Toll) => {
     setSelectedTollData(toll);
     setSelectedToll(toll.id);
+    setViewMode('folders');
+  };
+
+  // Handle folder click
+  const handleFolderClick = (folderName: string) => {
+    setSelectedFolder(folderName);
     setViewMode('projects');
   };
 
@@ -203,7 +243,10 @@ const ProjectTimelinePage = () => {
       setSelectedProject(null);
       setActivities([]);
     } else if (viewMode === 'projects') {
-      if (selectedTollData) {
+      if (selectedFolder) {
+        setViewMode('folders');
+        setSelectedFolder(null);
+      } else if (selectedTollData) {
         setViewMode('tolls');
         setSelectedTollData(null);
         setSelectedToll(null);
@@ -212,6 +255,13 @@ const ProjectTimelinePage = () => {
         setSelectedPartnerData(null);
         setSelectedPartner(null);
       }
+    } else if (viewMode === 'folders') {
+      if (selectedTollData) {
+        setViewMode('tolls');
+      } else {
+        setViewMode('partners');
+      }
+      setSelectedFolder(null);
     } else if (viewMode === 'tolls') {
       setViewMode('partners');
       setSelectedPartnerData(null);
@@ -410,6 +460,7 @@ const ProjectTimelinePage = () => {
     const parts = ['Project Timeline'];
     if (selectedPartnerData) parts.push(selectedPartnerData.name);
     if (selectedTollData) parts.push(selectedTollData.toll_name || selectedTollData.poc_name || 'Subcompany');
+    if (selectedFolder) parts.push(selectedFolder);
     if (selectedProjectData) {
       const locationLabel = selectedProjectData.location?.trim();
       const projectLabel = locationLabel
@@ -588,6 +639,74 @@ const ProjectTimelinePage = () => {
           </motion.div>
         )}
 
+        {/* FOLDERS VIEW */}
+        {viewMode === 'folders' && (
+          <motion.div
+            key="folders"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+          >
+            {groupedProjects().length === 0 ? (
+              <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-8 text-center">
+                <p className="text-amber-800 font-semibold text-lg">No Projects found</p>
+                <p className="text-amber-700 mt-2">No projects available for the selected partner/subcompany</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {groupedProjects().map((folder, index) => (
+                  <motion.button
+                    key={folder.name}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    onClick={() => handleFolderClick(folder.name)}
+                    className="group relative text-left"
+                  >
+                    <div className="absolute inset-0 bg-linear-to-br from-blue-500/20 to-purple-600/20 rounded-2xl blur-2xl group-hover:blur-3xl transition-all opacity-0 group-hover:opacity-100"></div>
+                    
+                    <div className="relative bg-white border-2 border-gray-200 hover:border-blue-500 rounded-2xl p-6 transition-all duration-300 hover:shadow-2xl hover:shadow-blue-500/20 hover:-translate-y-2 overflow-hidden">
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 rounded-bl-3xl group-hover:bg-blue-500/10 transition-colors"></div>
+                      
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="p-3 bg-blue-100 rounded-xl group-hover:bg-blue-200 transition-colors">
+                          <FolderKanban className="w-6 h-6 text-blue-600" />
+                        </div>
+                        <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-all" />
+                      </div>
+                      
+                      <h3 className="text-lg font-bold text-gray-900 mb-3 line-clamp-2">
+                        {folder.name}
+                      </h3>
+                      
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-sm text-gray-600">
+                          <FolderKanban className="w-4 h-4" />
+                          <span>{folder.projects.length} {folder.projects.length === 1 ? 'Project' : 'Projects'}</span>
+                        </div>
+                        
+                        <div className="flex gap-2">
+                          {folder.activeCount > 0 && (
+                            <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-lg font-medium">
+                              {folder.activeCount} Active
+                            </span>
+                          )}
+                          {folder.completedCount > 0 && (
+                            <span className="px-2 py-1 bg-emerald-100 text-emerald-700 text-xs rounded-lg font-medium">
+                              {folder.completedCount} Completed
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </motion.button>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        )}
+
         {/* PROJECTS VIEW */}
         {viewMode === 'projects' && (
           <motion.div
@@ -597,19 +716,28 @@ const ProjectTimelinePage = () => {
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.3 }}
           >
-            {getProjectsForView().length === 0 ? (
-              <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-8 text-center">
-                <p className="text-amber-800 font-semibold text-lg">No Projects found</p>
-                <p className="text-amber-700 mt-2">No projects available for the selected partner/subcompany</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {getProjectsForView().map((project, index) => (
-                  <motion.button
-                    key={project.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.05 }}
+            {(() => {
+              const projectsToShow = selectedFolder 
+                ? getProjectsForView().filter(p => (p.name || 'Untitled Project').trim() === selectedFolder)
+                : getProjectsForView();
+              
+              if (projectsToShow.length === 0) {
+                return (
+                  <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-8 text-center">
+                    <p className="text-amber-800 font-semibold text-lg">No Projects found</p>
+                    <p className="text-amber-700 mt-2">No projects available for the selected folder</p>
+                  </div>
+                );
+              }
+              
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {projectsToShow.map((project, index) => (
+                    <motion.button
+                      key={project.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.05 }}
                     onClick={() => handleProjectClick(project)}
                     className="group relative text-left"
                   >
@@ -646,8 +774,9 @@ const ProjectTimelinePage = () => {
                     </div>
                   </motion.button>
                 ))}
-              </div>
-            )}
+                </div>
+              );
+            })()}
           </motion.div>
         )}
 
