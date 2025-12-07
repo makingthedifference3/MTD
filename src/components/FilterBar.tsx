@@ -97,6 +97,11 @@ const FilterBar = ({ workFilter = '', onWorkFilterChange, workOptions = [] }: Fi
     console.error('FilterBar Error:', error);
   }
 
+  const formatProjectLabel = (project: Project) => {
+    const location = project.location?.trim();
+    return location ? `${project.name} (${location})` : project.name;
+  };
+
   return (
     <div className="bg-white/70 backdrop-blur-xl border-b border-emerald-100 px-8 py-4">
       {filtersLocked && (
@@ -152,41 +157,6 @@ const FilterBar = ({ workFilter = '', onWorkFilterChange, workOptions = [] }: Fi
           </div>
         </div>
 
-        {/* Project Dropdown */}
-        <div className="flex-1 min-w-[250px]">
-          <label className="block text-xs font-semibold text-emerald-700 mb-2">
-            Project {filtersLocked && <span className="text-blue-600">(Locked)</span>}
-          </label>
-          <div className="relative">
-            <FolderKanban className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-600" />
-            <select
-              value={selectedProject || 'all'}
-              onChange={(e) => handleProjectChange(e.target.value)}
-              disabled={!selectedPartner || isLoading || filtersLocked}
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl border-2 border-emerald-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all bg-white text-gray-900 font-medium text-sm appearance-none cursor-pointer hover:border-emerald-300 disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-gray-50"
-            >
-              <option value="all">
-                {selectedPartner ? 'All Projects (Partner-wise)' : 'Select Partner First'}
-              </option>
-              {filteredProjects.map((project: Project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-              <svg
-                className="w-4 h-4 text-emerald-600"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </div>
-          </div>
-        </div>
-
         {/* Subcompany Dropdown */}
         {selectedPartner && (
           <div className="flex-1 min-w-[250px]">
@@ -222,6 +192,41 @@ const FilterBar = ({ workFilter = '', onWorkFilterChange, workOptions = [] }: Fi
             </div>
           </div>
         )}
+
+        {/* Project Dropdown */}
+        <div className="flex-1 min-w-[250px]">
+          <label className="block text-xs font-semibold text-emerald-700 mb-2">
+            Project {filtersLocked && <span className="text-blue-600">(Locked)</span>}
+          </label>
+          <div className="relative">
+            <FolderKanban className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-600" />
+            <select
+              value={selectedProject || 'all'}
+              onChange={(e) => handleProjectChange(e.target.value)}
+              disabled={!selectedPartner || isLoading || filtersLocked}
+              className="w-full pl-10 pr-4 py-2.5 rounded-xl border-2 border-emerald-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all bg-white text-gray-900 font-medium text-sm appearance-none cursor-pointer hover:border-emerald-300 disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-gray-50"
+            >
+              <option value="all">
+                {selectedPartner ? 'All Projects (Partner-wise)' : 'Select Partner First'}
+              </option>
+              {filteredProjects.map((project: Project) => (
+                <option key={project.id} value={project.id}>
+                  {formatProjectLabel(project)}
+                </option>
+              ))}
+            </select>
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+              <svg
+                className="w-4 h-4 text-emerald-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </div>
+        </div>
 
         {/* Work Filter */}
         {showWorkFilter && (

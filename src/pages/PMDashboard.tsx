@@ -273,6 +273,128 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
       });
   }, [partnerProjects]);
 
+  const impactTotals = useMemo(() => {
+    return analyticsProjects.reduce(
+      (totals, project) => {
+        const mealsFromColumn = (project as ProjectWithBeneficiaries).meals_served || 0;
+        const padsFromColumn = (project as ProjectWithBeneficiaries).pads_distributed || 0;
+        const studentsFromColumn = (project as ProjectWithBeneficiaries).students_enrolled || 0;
+        const treesFromColumn = (project as ProjectWithBeneficiaries).trees_planted || 0;
+        const schoolsFromColumn = (project as ProjectWithBeneficiaries).schools_renovated || 0;
+
+        totals.beneficiaries += project.direct_beneficiaries || 0;
+        totals.meals += Math.max(mealsFromColumn, getImpactMetricValue(project.impact_metrics, 'meals_served'));
+        totals.pads += Math.max(padsFromColumn, getImpactMetricValue(project.impact_metrics, 'pads_distributed'));
+        totals.students += Math.max(studentsFromColumn, getImpactMetricValue(project.impact_metrics, 'students_enrolled'));
+        totals.trees += Math.max(treesFromColumn, getImpactMetricValue(project.impact_metrics, 'trees_planted'));
+        totals.schools += Math.max(schoolsFromColumn, getImpactMetricValue(project.impact_metrics, 'schools_renovated'));
+        return totals;
+      },
+      {
+        beneficiaries: 0,
+        meals: 0,
+        pads: 0,
+        students: 0,
+        trees: 0,
+        schools: 0,
+      }
+    );
+  }, [analyticsProjects]);
+
+  const customImpactMetrics = useMemo(() => {
+    const metrics: Record<string, number> = {};
+    analyticsProjects.forEach((project) => {
+      const projectMetrics = project.impact_metrics || [];
+      projectMetrics.forEach((metric) => {
+        if (metric.key === 'custom' && metric.customLabel && metric.value > 0) {
+          const label = metric.customLabel;
+          metrics[label] = (metrics[label] || 0) + metric.value;
+        }
+      });
+    });
+    return metrics;
+  }, [analyticsProjects]);
+
+  const customImpactColorPalette = [
+    { bg: 'bg-cyan-50', border: 'border-cyan-200', iconBg: 'bg-cyan-200', text: 'text-cyan-700', value: 'text-cyan-900' },
+    { bg: 'bg-amber-50', border: 'border-amber-200', iconBg: 'bg-amber-200', text: 'text-amber-700', value: 'text-amber-900' },
+    { bg: 'bg-rose-50', border: 'border-rose-200', iconBg: 'bg-rose-200', text: 'text-rose-700', value: 'text-rose-900' },
+    { bg: 'bg-indigo-50', border: 'border-indigo-200', iconBg: 'bg-indigo-200', text: 'text-indigo-700', value: 'text-indigo-900' },
+    { bg: 'bg-teal-50', border: 'border-teal-200', iconBg: 'bg-teal-200', text: 'text-teal-700', value: 'text-teal-900' },
+  ];
+
+  const standardImpactCards = useMemo(() => [
+    {
+      key: 'beneficiaries',
+      label: 'Total Beneficiaries',
+      value: impactTotals.beneficiaries,
+      icon: Users,
+      bg: 'bg-emerald-50',
+      border: 'border-emerald-200',
+      iconBg: 'bg-emerald-200',
+      textColor: 'text-emerald-700',
+      valueColor: 'text-emerald-900',
+    },
+    {
+      key: 'meals',
+      label: 'Meals Served',
+      value: impactTotals.meals,
+      icon: Activity,
+      bg: 'bg-orange-50',
+      border: 'border-orange-200',
+      iconBg: 'bg-orange-200',
+      textColor: 'text-orange-700',
+      valueColor: 'text-orange-900',
+    },
+    {
+      key: 'pads',
+      label: 'Pads Distributed',
+      value: impactTotals.pads,
+      icon: Award,
+      bg: 'bg-pink-50',
+      border: 'border-pink-200',
+      iconBg: 'bg-pink-200',
+      textColor: 'text-pink-700',
+      valueColor: 'text-pink-900',
+    },
+    {
+      key: 'students',
+      label: 'Students Enrolled',
+      value: impactTotals.students,
+      icon: GraduationCap,
+      bg: 'bg-blue-50',
+      border: 'border-blue-200',
+      iconBg: 'bg-blue-200',
+      textColor: 'text-blue-700',
+      valueColor: 'text-blue-900',
+    },
+    {
+      key: 'trees',
+      label: 'Trees Planted',
+      value: impactTotals.trees,
+      icon: Leaf,
+      bg: 'bg-green-50',
+      border: 'border-green-200',
+      iconBg: 'bg-green-200',
+      textColor: 'text-green-700',
+      valueColor: 'text-green-900',
+    },
+    {
+      key: 'schools',
+      label: 'Schools Renovated',
+      value: impactTotals.schools,
+      icon: FolderKanban,
+      bg: 'bg-purple-50',
+      border: 'border-purple-200',
+      iconBg: 'bg-purple-200',
+      textColor: 'text-purple-700',
+      valueColor: 'text-purple-900',
+    },
+  ], [impactTotals]);
+
+  const visibleStandardImpactCards = standardImpactCards.filter((card) => card.value > 0);
+  const hasAnyImpactMetrics = visibleStandardImpactCards.length > 0 || Object.keys(customImpactMetrics).length > 0;
+
   console.log('PMDashboard - selectedPartner:', selectedPartner);
   console.log('PMDashboard - partnerProjects count:', partnerProjects.length);
   console.log('PMDashboard - partnerProjects:', partnerProjects);
@@ -598,137 +720,26 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
             className="bg-white border-2 border-gray-200 rounded-2xl p-8 shadow-lg"
           >
             <h3 className="text-xl font-bold text-gray-900 mb-6">Overall Impact Metrics</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* Total Beneficiaries */}
-              <div className="bg-emerald-50 border-2 border-emerald-200 rounded-xl p-6 hover:shadow-lg transition-all">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-3 bg-emerald-200 rounded-lg">
-                    <Users className="w-5 h-5 text-emerald-700" />
-                  </div>
-                  <span className="text-sm font-bold text-emerald-700 uppercase">Total Beneficiaries</span>
-                </div>
-                <p className="text-3xl font-black text-emerald-900">
-                  {formatMetricValue(analyticsProjects.reduce((sum: number, p: Project) => sum + (p.direct_beneficiaries || 0), 0))}
-                </p>
-              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {visibleStandardImpactCards.map((card) => {
+                  const Icon = card.icon;
+                  return (
+                    <div key={card.key} className={`${card.bg} border-2 ${card.border} rounded-xl p-6 hover:shadow-lg transition-all`}>
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className={`p-3 ${card.iconBg} rounded-lg`}>
+                          <Icon className={`w-5 h-5 ${card.textColor}`} />
+                        </div>
+                        <span className={`text-sm font-bold ${card.textColor} uppercase`}>{card.label}</span>
+                      </div>
+                      <p className={`text-3xl font-black ${card.valueColor}`}>
+                        {formatMetricValue(card.value)}
+                      </p>
+                    </div>
+                  );
+                })}
 
-              {/* Meals Served - from columns + impact_metrics JSON */}
-              <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-6 hover:shadow-lg transition-all">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-3 bg-orange-200 rounded-lg">
-                    <Activity className="w-5 h-5 text-orange-700" />
-                  </div>
-                  <span className="text-sm font-bold text-orange-700 uppercase">Meals Served</span>
-                </div>
-                <p className="text-3xl font-black text-orange-900">
-                  {formatMetricValue(
-                    analyticsProjects.reduce((sum: number, p: Project) => {
-                      const fromColumn = (p as ProjectWithBeneficiaries).meals_served || 0;
-                      const fromJson = getImpactMetricValue(p.impact_metrics, 'meals_served');
-                      return sum + Math.max(fromColumn, fromJson);
-                    }, 0)
-                  )}
-                </p>
-              </div>
-
-              {/* Pads Distributed */}
-              <div className="bg-pink-50 border-2 border-pink-200 rounded-xl p-6 hover:shadow-lg transition-all">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-3 bg-pink-200 rounded-lg">
-                    <Award className="w-5 h-5 text-pink-700" />
-                  </div>
-                  <span className="text-sm font-bold text-pink-700 uppercase">Pads Distributed</span>
-                </div>
-                <p className="text-3xl font-black text-pink-900">
-                  {formatMetricValue(
-                    analyticsProjects.reduce((sum: number, p: Project) => {
-                      const fromColumn = (p as ProjectWithBeneficiaries).pads_distributed || 0;
-                      const fromJson = getImpactMetricValue(p.impact_metrics, 'pads_distributed');
-                      return sum + Math.max(fromColumn, fromJson);
-                    }, 0)
-                  )}
-                </p>
-              </div>
-
-              {/* Students Enrolled */}
-              <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-6 hover:shadow-lg transition-all">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-3 bg-blue-200 rounded-lg">
-                    <GraduationCap className="w-5 h-5 text-blue-700" />
-                  </div>
-                  <span className="text-sm font-bold text-blue-700 uppercase">Students Enrolled</span>
-                </div>
-                <p className="text-3xl font-black text-blue-900">
-                  {formatMetricValue(
-                    analyticsProjects.reduce((sum: number, p: Project) => {
-                      const fromColumn = (p as ProjectWithBeneficiaries).students_enrolled || 0;
-                      const fromJson = getImpactMetricValue(p.impact_metrics, 'students_enrolled');
-                      return sum + Math.max(fromColumn, fromJson);
-                    }, 0)
-                  )}
-                </p>
-              </div>
-
-              {/* Trees Planted */}
-              <div className="bg-green-50 border-2 border-green-200 rounded-xl p-6 hover:shadow-lg transition-all">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-3 bg-green-200 rounded-lg">
-                    <Leaf className="w-5 h-5 text-green-700" />
-                  </div>
-                  <span className="text-sm font-bold text-green-700 uppercase">Trees Planted</span>
-                </div>
-                <p className="text-3xl font-black text-green-900">
-                  {formatMetricValue(
-                    analyticsProjects.reduce((sum: number, p: Project) => {
-                      const fromColumn = (p as ProjectWithBeneficiaries).trees_planted || 0;
-                      const fromJson = getImpactMetricValue(p.impact_metrics, 'trees_planted');
-                      return sum + Math.max(fromColumn, fromJson);
-                    }, 0)
-                  )}
-                </p>
-              </div>
-
-              {/* Schools Renovated */}
-              <div className="bg-purple-50 border-2 border-purple-200 rounded-xl p-6 hover:shadow-lg transition-all">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-3 bg-purple-200 rounded-lg">
-                    <FolderKanban className="w-5 h-5 text-purple-700" />
-                  </div>
-                  <span className="text-sm font-bold text-purple-700 uppercase">Schools Renovated</span>
-                </div>
-                <p className="text-3xl font-black text-purple-900">
-                  {analyticsProjects.reduce((sum: number, p: Project) => {
-                    const fromColumn = (p as ProjectWithBeneficiaries).schools_renovated || 0;
-                    const fromJson = getImpactMetricValue(p.impact_metrics, 'schools_renovated');
-                    return sum + Math.max(fromColumn, fromJson);
-                  }, 0)}
-                </p>
-              </div>
-
-              {/* Custom Metrics from impact_metrics JSON */}
-              {(() => {
-                // Aggregate all custom metrics from all projects
-                const customMetrics: Record<string, number> = {};
-                analyticsProjects.forEach((p: Project) => {
-                  const metrics = p.impact_metrics || [];
-                  metrics.forEach((metric) => {
-                    if (metric.key === 'custom' && metric.customLabel && metric.value > 0) {
-                      const label = metric.customLabel;
-                      customMetrics[label] = (customMetrics[label] || 0) + metric.value;
-                    }
-                  });
-                });
-
-                const customColors = [
-                  { bg: 'bg-cyan-50', border: 'border-cyan-200', iconBg: 'bg-cyan-200', text: 'text-cyan-700', value: 'text-cyan-900' },
-                  { bg: 'bg-amber-50', border: 'border-amber-200', iconBg: 'bg-amber-200', text: 'text-amber-700', value: 'text-amber-900' },
-                  { bg: 'bg-rose-50', border: 'border-rose-200', iconBg: 'bg-rose-200', text: 'text-rose-700', value: 'text-rose-900' },
-                  { bg: 'bg-indigo-50', border: 'border-indigo-200', iconBg: 'bg-indigo-200', text: 'text-indigo-700', value: 'text-indigo-900' },
-                  { bg: 'bg-teal-50', border: 'border-teal-200', iconBg: 'bg-teal-200', text: 'text-teal-700', value: 'text-teal-900' },
-                ];
-
-                return Object.entries(customMetrics).map(([label, value], index) => {
-                  const color = customColors[index % customColors.length];
+                {Object.entries(customImpactMetrics).map(([label, value], index) => {
+                  const color = customImpactColorPalette[index % customImpactColorPalette.length];
                   return (
                     <div key={label} className={`${color.bg} border-2 ${color.border} rounded-xl p-6 hover:shadow-lg transition-all`}>
                       <div className="flex items-center gap-3 mb-3">
@@ -742,9 +753,14 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                       </p>
                     </div>
                   );
-                });
-              })()}
-            </div>
+                })}
+
+                {!hasAnyImpactMetrics && (
+                  <div className="col-span-full rounded-xl border-2 border-dashed border-gray-200 bg-white/80 p-6 text-center text-sm text-gray-500">
+                    No impact metrics available with values greater than zero.
+                  </div>
+                )}
+              </div>
           </motion.div>
         </motion.div>
       ) : (

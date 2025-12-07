@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, Calendar, MapPin, Users, Briefcase, Loader, Crown } from 'lucide-react';
+import { LogOut, Calendar, Users, Briefcase, Loader, Crown } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import { useSelectedProject } from '../context/useSelectedProject';
 import { supabase } from '../services/supabaseClient';
@@ -18,24 +18,19 @@ interface ProjectWithRole {
   csr_partner_logo?: string;
   user_role: string;
   all_roles: string[];
+  location?: string;
+  description?: string;
   city?: string;
   state?: string;
+  toll_id?: string;
+  toll?: TollPayload | null;
   total_budget?: number;
 }
 
 interface TeamMemberData {
   role: string;
   project_id: string;
-  projects: {
-    id: string;
-    project_code: string;
-    name: string;
-    status: string;
-    start_date: string;
-    expected_end_date: string;
-    total_budget?: number;
-    csr_partner_id: string;
-  }[];
+  projects: SupabaseProjectPayload | SupabaseProjectPayload[] | null;
 }
 
 interface CSRPartner {
@@ -43,6 +38,45 @@ interface CSRPartner {
   company_name: string;
   logo_drive_link?: string;
 }
+
+interface TollPayload {
+  id: string;
+  toll_name?: string | null;
+  city?: string | null;
+  state?: string | null;
+}
+
+interface SupabaseProjectPayload {
+  id: string;
+  project_code: string;
+  name: string;
+  status: string;
+  start_date: string;
+  expected_end_date: string;
+  location?: string;
+  description?: string;
+  city?: string;
+  state?: string;
+  total_budget?: number;
+  csr_partner_id: string;
+  toll_id?: string;
+  toll?: TollPayload | TollPayload[] | null;
+}
+
+const resolveProjectPayload = (
+  projects: SupabaseProjectPayload | SupabaseProjectPayload[] | null | undefined
+): SupabaseProjectPayload | null => {
+  if (!projects) return null;
+  return Array.isArray(projects) ? projects[0] : projects;
+};
+
+const pickToll = (project: SupabaseProjectPayload): TollPayload | null => {
+  if (!project.toll) return null;
+  if (Array.isArray(project.toll)) {
+    return project.toll[0] || null;
+  }
+  return project.toll;
+};
 
 export default function ProjectsDashboardPage() {
   const navigate = useNavigate();
@@ -80,8 +114,14 @@ export default function ProjectsDashboardPage() {
               status,
               start_date,
               expected_end_date,
+              location,
+              description,
+              city,
+              state,
+              toll_id,
               total_budget,
-              csr_partner_id
+              csr_partner_id,
+              toll:csr_partner_tolls!projects_toll_id_fkey(id, toll_name, city, state)
             )
           `)
           .eq('user_id', currentUser.id);
@@ -96,7 +136,7 @@ export default function ProjectsDashboardPage() {
         // Step 2: Extract unique csr_partner_ids
         const uniqueCSRPartnerIds = new Set<string>();
         (teamMembersData || []).forEach((item: TeamMemberData) => {
-          const projectData = Array.isArray(item.projects) ? item.projects[0] : item.projects;
+          const projectData = resolveProjectPayload(item.projects);
           if (projectData?.csr_partner_id) {
             uniqueCSRPartnerIds.add(projectData.csr_partner_id);
           }
@@ -128,13 +168,13 @@ export default function ProjectsDashboardPage() {
         
         (teamMembersData || []).forEach((item: TeamMemberData) => {
           // Handle both array and object responses
-          const projectData = Array.isArray(item.projects) 
-            ? item.projects[0] 
-            : item.projects;
+          const projectData = resolveProjectPayload(item.projects);
           if (projectData && projectData.id) {
             const csrPartnerInfo = projectData.csr_partner_id 
               ? csrPartnerMap.get(projectData.csr_partner_id) 
               : null;
+
+            const tollInfo = pickToll(projectData);
 
             transformedProjects.push({
               id: projectData.id,
@@ -143,7 +183,11 @@ export default function ProjectsDashboardPage() {
               status: projectData.status,
               start_date: projectData.start_date,
               end_date: projectData.expected_end_date,
+              location: projectData.location || projectData.city || projectData.state,
+              description: projectData.description,
               total_budget: projectData.total_budget,
+              toll_id: projectData.toll_id,
+              toll: tollInfo,
               csr_partner_id: projectData.csr_partner_id,
               csr_partner_name: csrPartnerInfo?.name || 'N/A',
               csr_partner_logo: csrPartnerInfo?.logo,
@@ -322,19 +366,33 @@ export default function ProjectsDashboardPage() {
                 transition={{ delay: idx * 0.1 }}
                 whileHover={{ y: -8 }}
                 onClick={() => handleProjectSelect(project)}
-                className="group rounded-2xl overflow-hidden cursor-pointer shadow-lg hover:shadow-2xl transition-all bg-white/80 backdrop-blur-sm border border-emerald-100 hover:border-emerald-300"
+                className="group rounded-2xl overflow-hidden cursor-pointer shadow-lg hover:shadow-2xl transition-all bg-white/80 backdrop-blur-sm border border-emerald-100 hover:border-emerald-300 flex flex-col h-full"
               >
                 {/* Header */}
                 <div className="bg-linear-to-r from-emerald-500 to-emerald-600 p-6 text-white relative overflow-hidden">
                   <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-400/20 rounded-full -mr-12 -mt-12"></div>
-                  <div className="relative z-10">
-                    <p className="text-sm font-semibold text-emerald-100 mb-2">{project.project_code}</p>
-                    <h3 className="text-2xl font-bold leading-tight">{project.name}</h3>
+                  <div className="relative z-10 space-y-2">
+                    <div className="flex flex-wrap items-center gap-3 justify-between">
+                      <p className="text-sm font-semibold text-emerald-100 mb-0">{project.project_code}</p>
+                      {project.toll?.toll_name && (
+                        <span className="text-xs font-semibold uppercase tracking-wide bg-white/10 px-3 py-1 rounded-full backdrop-blur-sm">
+                          Subcompany: {project.toll.toll_name}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-baseline gap-3">
+                      <h3 className="text-2xl font-bold leading-tight">{project.name}</h3>
+                      {project.location && (
+                        <span className="text-sm font-semibold text-emerald-100/90">
+                          {project.location}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
                 {/* Body */}
-                <div className="p-6 space-y-4">
+                <div className="p-6 space-y-4 flex-1 flex flex-col">
                   {/* Role Badge - Single Role */}
                   <div>
                     <span 
@@ -343,6 +401,12 @@ export default function ProjectsDashboardPage() {
                       {project.user_role.replace('_', ' ').toUpperCase()}
                     </span>
                   </div>
+
+                  {project.description && (
+                    <div className="rounded-2xl bg-white/70 border border-emerald-100 px-4 py-3 text-sm text-gray-600 leading-relaxed shadow-sm">
+                      {project.description}
+                    </div>
+                  )}
 
                   {/* CSR Partner with Sidebar Logo styling */}
                   <div className="flex items-start gap-3 pt-2">
@@ -384,27 +448,16 @@ export default function ProjectsDashboardPage() {
                     </div>
                   </div>
 
-                  {/* Budget */}
-                  {project.total_budget && (
-                    <div className="flex items-start gap-3">
-                      <MapPin className="w-5 h-5 text-gray-600 shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Budget</p>
-                        <p className="text-emerald-600 font-bold text-lg">
-                          ₹{project.total_budget.toLocaleString('en-IN')}
-                        </p>
-                      </div>
-                    </div>
-                  )}
                 </div>
 
                 {/* Footer */}
                 <div className="px-6 py-4 bg-emerald-50 border-t border-emerald-100 group-hover:bg-emerald-100 transition">
                   <motion.div
                     whileHover={{ x: 4 }}
-                    className="text-emerald-600 font-bold flex items-center gap-2 group-hover:text-emerald-700"
+                    className="text-emerald-600 font-bold flex items-center justify-between gap-2 group-hover:text-emerald-700 w-full"
                   >
-                    Open Project <span className="text-lg">→</span>
+                    <span>Open Project</span>
+                    <span className="text-2xl leading-none">→</span>
                   </motion.div>
                 </div>
               </motion.div>

@@ -410,7 +410,13 @@ const ProjectTimelinePage = () => {
     const parts = ['Project Timeline'];
     if (selectedPartnerData) parts.push(selectedPartnerData.name);
     if (selectedTollData) parts.push(selectedTollData.toll_name || selectedTollData.poc_name || 'Subcompany');
-    if (selectedProjectData) parts.push(selectedProjectData.name);
+    if (selectedProjectData) {
+      const locationLabel = selectedProjectData.location?.trim();
+      const projectLabel = locationLabel
+        ? `${selectedProjectData.name} (${locationLabel})`
+        : selectedProjectData.name;
+      parts.push(projectLabel);
+    }
     return parts.join(' → ');
   };
 
