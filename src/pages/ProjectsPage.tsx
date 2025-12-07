@@ -87,6 +87,8 @@ interface ProjectFormData {
   enableBudgetCategories: boolean;
   budgetCategories: BudgetCategoryFormEntry[];
   uc_link: string;
+  fundingPartner: string;
+  isCustomFundingPartner: boolean;
 }
 const createInitialProjectFormState = (): ProjectFormData => ({
   name: '',
@@ -111,6 +113,8 @@ const createInitialProjectFormState = (): ProjectFormData => ({
   enableBudgetCategories: false,
   budgetCategories: [],
   uc_link: '',
+  fundingPartner: '',
+  isCustomFundingPartner: false,
 });
 
 const formatRoleLabel = (role?: string | null) => {
@@ -170,6 +174,8 @@ const mapProjectToFormData = (
     enableBudgetCategories: false, // Will be loaded separately
     budgetCategories: [], // Will be loaded separately
     uc_link: (project as any).uc_link ?? '',
+    fundingPartner: (project as any).funding_partner ?? '',
+    isCustomFundingPartner: false,
   };
 };
 
@@ -2229,6 +2235,7 @@ const ProjectsPage = () => {
           onClose={handleModalClose}
           onSubmit={handleSaveProject}
           isEditing={Boolean(editingProjectId)}
+          projects={projects}
         />
       )}
     </div>
@@ -2285,6 +2292,7 @@ const buildProjectPayload = (values: ProjectFormData, ucLink?: string) => {
       beneficiary_type: values.beneficiaryType.trim() || 'Direct Beneficiaries',
     },
     uc_link: ucLink || undefined,
+    funding_partner: values.fundingPartner.trim() || undefined,
     created_by: undefined,
     updated_by: undefined,
   };
@@ -2329,6 +2337,9 @@ const buildProjectUpdatePayload = (values: ProjectFormData, ucLink?: string): Pa
   }
   if (ucLink) {
     (payload as any).uc_link = ucLink;
+  }
+  if (values.fundingPartner.trim()) {
+    (payload as any).funding_partner = values.fundingPartner.trim();
   }
 
   return payload;
@@ -2600,6 +2611,7 @@ interface AddProjectModalProps {
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   isEditing: boolean;
+  projects: Project[];
 }
 
 // Add Project Modal component
@@ -2620,6 +2632,7 @@ const AddProjectModal = ({
   onClose,
   onSubmit,
   isEditing,
+  projects,
 }: AddProjectModalProps) => {
   const [metricNameInput, setMetricNameInput] = useState('');
   const [metricError, setMetricError] = useState('');
@@ -3045,6 +3058,67 @@ const AddProjectModal = ({
               <option value="completed">Completed</option>
             </select>
           </label>
+        </div>
+
+        {/* Funding Partner */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="text-sm font-medium text-gray-700">
+            Funding Partner
+            <select
+              value={formData.isCustomFundingPartner ? 'custom' : formData.fundingPartner}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value === 'custom') {
+                  setFormData((prev) => ({
+                    ...prev,
+                    fundingPartner: '',
+                    isCustomFundingPartner: true,
+                  }));
+                } else {
+                  setFormData((prev) => ({
+                    ...prev,
+                    fundingPartner: value,
+                    isCustomFundingPartner: false,
+                  }));
+                }
+              }}
+              className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            >
+              <option value="">Select Funding Partner</option>
+              {(() => {
+                const uniqueFundingPartners = Array.from(
+                  new Set(
+                    projects
+                      .map(p => (p as any).funding_partner)
+                      .filter(fp => fp && fp.trim())
+                  )
+                ).sort();
+                return uniqueFundingPartners.map((partner) => (
+                  <option key={partner} value={partner}>
+                    {partner}
+                  </option>
+                ));
+              })()}
+              <option value="custom">Other (Custom)...</option>
+            </select>
+          </div>
+          {formData.isCustomFundingPartner && (
+            <label className="text-sm font-medium text-gray-700">
+              Custom Funding Partner Name
+              <input
+                type="text"
+                value={formData.fundingPartner}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    fundingPartner: e.target.value,
+                  }))
+                }
+                className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                placeholder="Enter funding partner name..."
+              />
+            </label>
+          )}
         </div>
 
         {/* Team Members Assignment */}
