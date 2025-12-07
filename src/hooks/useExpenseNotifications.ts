@@ -13,24 +13,37 @@ export const useExpenseNotifications = () => {
     }
 
     try {
-      // Get seen receipt IDs from localStorage
-      const seenKey = `seen_receipts_${currentUser.id}`;
-      const seenReceiptsStr = localStorage.getItem(seenKey);
-      const seenReceipts: string[] = seenReceiptsStr ? JSON.parse(seenReceiptsStr) : [];
-
       // Fetch paid expenses submitted by current user that have receipts
-      const { data, error } = await supabase
+      const { data: expenses, error: expensesError } = await supabase
         .from('project_expenses')
         .select('id, receipt_drive_link')
         .eq('submitted_by', currentUser.id)
         .eq('status', 'paid')
         .not('receipt_drive_link', 'is', null);
 
-      if (error) throw error;
+      if (expensesError) throw expensesError;
 
-      // Filter out seen receipts
-      const unseenReceipts = (data || []).filter(
-        expense => !seenReceipts.includes(expense.id)
+      if (!expenses || expenses.length === 0) {
+        setUnseenReceiptsCount(0);
+        return;
+      }
+
+      // Fetch viewed receipts from database
+      const { data: viewedReceipts, error: viewsError } = await supabase
+        .from('receipt_views')
+        .select('expense_id')
+        .eq('user_id', currentUser.id);
+
+      if (viewsError) throw viewsError;
+
+      // Create a set of viewed expense IDs for quick lookup
+      const viewedExpenseIds = new Set(
+        (viewedReceipts || []).map(view => view.expense_id)
+      );
+
+      // Filter out viewed receipts
+      const unseenReceipts = expenses.filter(
+        expense => !viewedExpenseIds.has(expense.id)
       );
 
       setUnseenReceiptsCount(unseenReceipts.length);
@@ -40,17 +53,51 @@ export const useExpenseNotifications = () => {
     }
   };
 
-  const markReceiptAsSeen = (expenseId: string) => {
-    if (!currentUser) return;
+  const markReceiptAsSeen = async (expenseId: string) => {
+    if (!currentUser) {
+      console.warn('Cannot mark receipt as seen: No current user');
+      return;
+    }
 
-    const seenKey = `seen_receipts_${currentUser.id}`;
-    const seenReceiptsStr = localStorage.getItem(seenKey);
-    const seenReceipts: string[] = seenReceiptsStr ? JSON.parse(seenReceiptsStr) : [];
+    console.log('Marking receipt as seen:', { expenseId, userId: currentUser.id });
 
-    if (!seenReceipts.includes(expenseId)) {
-      seenReceipts.push(expenseId);
-      localStorage.setItem(seenKey, JSON.stringify(seenReceipts));
+    try {
+      // Insert receipt view into database (upsert to handle duplicates)
+      const { data, error } = await supabase
+        .from('receipt_views')
+        .upsert(
+          {
+            user_id: currentUser.id,
+            expense_id: expenseId,
+            viewed_at: new Date().toISOString(),
+          },
+          {
+            onConflict: 'user_id,expense_id',
+            ignoreDuplicates: false,
+          }
+        )
+        .select();
+
+      if (error) {
+        console.error('Error marking receipt as seen:', error);
+        console.error('Error details:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint
+        });
+        return;
+      }
+
+      console.log('Receipt marked as seen successfully:', data);
+
+      // Update local count immediately for better UX
       setUnseenReceiptsCount(prev => Math.max(0, prev - 1));
+      
+      // Recalculate to ensure accuracy
+      await calculateUnseenReceipts();
+    } catch (error) {
+      console.error('Exception marking receipt as seen:', error);
     }
   };
 

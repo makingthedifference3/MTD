@@ -36,7 +36,7 @@ const menuItems = [
   { id: 'bills', label: 'Bills', icon: Receipt, roles: ['admins'] },
   { id: 'csr-budget', label: 'CSR Budget', icon: CreditCard, roles: ['admin'] },
   // { id: 'utilization-certificate', label: 'Utilization Certificate', icon: FileCheck, roles: ['admin', 'accountant'] },
-  { id: 'tasks', label: 'My Tasks', icon: CheckSquare, roles: ['team_member'] },
+  { id: 'my-tasks', label: 'My Tasks', icon: CheckSquare, roles: ['accountant', 'project_manager', 'team_member', 'data_manager'] },
   // Admin Only
   { id: 'user-management', label: 'User Management', icon: Users, roles: ['admin'] },
 ];
@@ -44,7 +44,7 @@ const menuItems = [
 const Sidebar = ({ children, currentPage, onNavigate }: SidebarProps) => {
   const [isOpen, setIsOpen] = useState(true);
   const { currentRole, currentUser, logout } = useAuth();
-  const { notificationCounts, totalNotifications } = useNotifications();
+  const { notificationCounts, expenseNotifications, taskNotifications } = useNotifications();
   const navigate = useNavigate();
   const location = useLocation();
   
@@ -80,6 +80,19 @@ const Sidebar = ({ children, currentPage, onNavigate }: SidebarProps) => {
   console.log('Sidebar effectiveRole:', effectiveRole, 'currentRole from auth:', currentRole);
   const filteredMenuItems = menuItems.filter((item) => item.roles.includes(effectiveRole));
 
+  // Calculate role-based notification count for header badge
+  const getHeaderNotificationCount = () => {
+    if (effectiveRole === 'admin') {
+      return 0; // Admin doesn't see task notifications
+    } else if (effectiveRole === 'accountant') {
+      return expenseNotifications + taskNotifications; // Accountant sees both
+    } else {
+      return taskNotifications; // Others see only tasks
+    }
+  };
+
+  const headerNotificationCount = getHeaderNotificationCount();
+
   // Map menu IDs to routes
   const routeMap: Record<string, string> = {
     'dashboard': effectiveRole === 'admin' ? '/admin-dashboard' : 
@@ -104,7 +117,7 @@ const Sidebar = ({ children, currentPage, onNavigate }: SidebarProps) => {
     'acc-upcoming-expenses': '/acc-upcoming-expenses',
     'bills': '/bills',
     'result-analysis': '/result-analysis',
-    'tasks': '/tasks',
+    'my-tasks': '/my-tasks',
     'user-management': '/admin/users',
   };
 
@@ -238,7 +251,7 @@ const Sidebar = ({ children, currentPage, onNavigate }: SidebarProps) => {
               {filteredMenuItems.find((item) => item.id === currentPage)?.label || 'Dashboard'}
             </h2>
           </div>
-          {totalNotifications > 0 && (
+          {headerNotificationCount > 0 && (
             <div className="relative">
               <button className="p-2 hover:bg-emerald-100 rounded-lg relative">
                 <Bell className="w-6 h-6 text-emerald-700" />
@@ -247,7 +260,7 @@ const Sidebar = ({ children, currentPage, onNavigate }: SidebarProps) => {
                   animate={{ scale: 1 }}
                   className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center"
                 >
-                  {totalNotifications}
+                  {headerNotificationCount}
                 </motion.span>
               </button>
             </div>

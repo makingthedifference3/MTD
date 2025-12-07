@@ -6,6 +6,7 @@ import type { ProjectExpense, ExpenseStats, ExpenseCategory } from '../services/
 import { supabase } from '../services/supabaseClient';
 import { useAuth } from '../context/useAuth';
 import { useNotifications } from '../context/NotificationContext';
+import toast, { Toaster } from 'react-hot-toast';
 
 interface UserMap {
   [key: string]: string;
@@ -20,6 +21,7 @@ const ProjectExpenses: React.FC = () => {
   const [showBillModal, setShowBillModal] = useState(false);
   const [billUrl, setBillUrl] = useState<string>('');
   const [selectedStatus, setSelectedStatus] = useState<'pending' | 'approved' | 'rejected' | 'paid' | null>(null);
+  const [viewedReceiptIds, setViewedReceiptIds] = useState<Set<string>>(new Set());
   const [_selectedExpense] = useState<ProjectExpense | null>(null);
   const [_userMap, setUserMap] = useState<UserMap>({});
   const [_showModal] = useState(false);
@@ -78,9 +80,28 @@ const ProjectExpenses: React.FC = () => {
   useEffect(() => {
     if (currentUser) {
       loadData();
+      loadViewedReceipts();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser]);
+
+  const loadViewedReceipts = async () => {
+    if (!currentUser) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('receipt_views')
+        .select('expense_id')
+        .eq('user_id', currentUser.id);
+
+      if (error) throw error;
+
+      const viewedIds = new Set(data?.map(view => view.expense_id) || []);
+      setViewedReceiptIds(viewedIds);
+    } catch (error) {
+      console.error('Error loading viewed receipts:', error);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -256,13 +277,13 @@ const ProjectExpenses: React.FC = () => {
     e.preventDefault();
     
     if (!currentUser) {
-      alert('You must be logged in to create an expense');
+      toast.error('You must be logged in to create an expense');
       return;
     }
 
     // Enforce Bill required: either a selected file or a bill_drive_link must be present
     if (!selectedFile && (!newExpense.bill_drive_link || newExpense.bill_drive_link.trim() === '')) {
-      alert('Please upload a bill (image or PDF) or provide a bill link. Bill is required.');
+      toast.error('Please upload a bill (image or PDF) or provide a bill link. Bill is required.');
       return;
     }
 
@@ -300,11 +321,11 @@ const ProjectExpenses: React.FC = () => {
           validCategoryId = newCategory.id;
         } catch (error) {
           console.error('Error creating category:', error);
-          alert('Failed to create expense category. Please try again.');
+          toast.error('Failed to create expense category. Please try again.');
           return;
         }
       } else {
-        alert('Please select or enter a category');
+        toast.error('Please select or enter a category');
         return;
       }
     }
@@ -313,7 +334,7 @@ const ProjectExpenses: React.FC = () => {
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(validCategoryId)) {
       console.error('Invalid category_id format:', validCategoryId);
-      alert('Invalid category ID format. Please try again.');
+      toast.error('Invalid category ID format. Please try again.');
       return;
     }
 
@@ -323,13 +344,12 @@ const ProjectExpenses: React.FC = () => {
       
       if (selectedFile) {
         setUploadingFile(true);
+        const uploadToast = toast.loading('Uploading bill...');
         try {
           const fileExt = selectedFile.name.split('.').pop();
-          const userName = currentUser.full_name.replace(/\s+/g, '_');
-          const now = new Date();
-          const dateStr = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
-          const timestamp = now.getTime(); // Add timestamp to make filename unique
-          const fileName = `${userName}_${dateStr}_${timestamp}.${fileExt}`;
+          const originalName = selectedFile.name.replace(`.${fileExt}`, '').replace(/\s+/g, '_');
+          const timestamp = new Date().getTime();
+          const fileName = `receipt_${originalName}_${timestamp}.${fileExt}`;
           const filePath = `bills/${fileName}`;
 
           const { data: uploadData, error: uploadError } = await supabase.storage
@@ -352,9 +372,10 @@ const ProjectExpenses: React.FC = () => {
             .getPublicUrl(filePath);
 
           billUrl = urlData.publicUrl;
+          toast.success('Bill uploaded successfully!', { id: uploadToast });
         } catch (error) {
           console.error('Error uploading file:', error);
-          alert('Failed to upload bill. Please try again.');
+          toast.error('Failed to upload bill. Please try again.', { id: uploadToast });
           setUploadingFile(false);
           return;
         } finally {
@@ -413,11 +434,11 @@ const ProjectExpenses: React.FC = () => {
       
       // Validate only the critical UUID fields (category_id and project_id)
       if (!uuidRegex.test(expenseData.category_id)) {
-        alert(`Invalid category_id format: ${expenseData.category_id}`);
+        toast.error(`Invalid category_id format: ${expenseData.category_id}`);
         return;
       }
       if (expenseData.project_id && !uuidRegex.test(expenseData.project_id)) {
-        alert(`Invalid project_id format: ${expenseData.project_id}`);
+        toast.error(`Invalid project_id format: ${expenseData.project_id}`);
         return;
       }
       // Note: submitted_by might not be UUID format in your system, so we don't validate it
@@ -425,6 +446,7 @@ const ProjectExpenses: React.FC = () => {
       const created = await projectExpensesService.createExpense(expenseData);
 
       if (created) {
+        toast.success('Expense created successfully!');
         setShowCreateModal(false);
         setNewExpense({
           merchant_name: '',
@@ -448,12 +470,37 @@ const ProjectExpenses: React.FC = () => {
       }
     } catch (error) {
       console.error('Error creating expense:', error);
-      alert('Failed to create expense. Please try again.');
+      toast.error('Failed to create expense. Please try again.');
     }
   };
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 3000,
+          style: {
+            background: '#fff',
+            color: '#363636',
+            padding: '16px',
+            borderRadius: '8px',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+          },
+          success: {
+            iconTheme: {
+              primary: '#10b981',
+              secondary: '#fff',
+            },
+          },
+          error: {
+            iconTheme: {
+              primary: '#ef4444',
+              secondary: '#fff',
+            },
+          },
+        }}
+      />
       {/* Header */}
       <div className="mb-8">
         <div className="flex items-center justify-between">
@@ -619,13 +666,17 @@ const ProjectExpenses: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {getStatusFilteredExpenses().map((expense, index) => (
+                      {getStatusFilteredExpenses().map((expense, index) => {
+                        const hasReceipt = selectedStatus === 'paid' && (expense as any).receipt_drive_link;
+                        const isUnseen = hasReceipt && !viewedReceiptIds.has(expense.id);
+                        
+                        return (
                         <motion.tr
                           key={expense.id}
                           initial={{ opacity: 0, y: 10 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: index * 0.05 }}
-                          className="hover:bg-gray-50"
+                          className={isUnseen ? 'bg-blue-50 hover:bg-blue-100' : 'hover:bg-gray-50'}
                         >
                           <td className="px-4 py-3 text-sm font-medium text-gray-900">{expense.expense_code}</td>
                           <td className="px-4 py-3 text-sm text-gray-900">{expense.merchant_name}</td>
@@ -645,6 +696,8 @@ const ProjectExpenses: React.FC = () => {
                                   setBillUrl((expense as any).receipt_drive_link || '');
                                   setShowBillModal(true);
                                   markReceiptAsSeen(expense.id); // Mark as seen when viewing receipt
+                                  // Update local state immediately for better UX
+                                  setViewedReceiptIds(prev => new Set(prev).add(expense.id));
                                 }}
                                 className="text-blue-600 hover:text-blue-700 font-medium hover:underline"
                               >
@@ -663,7 +716,8 @@ const ProjectExpenses: React.FC = () => {
                             )}
                           </td>
                         </motion.tr>
-                      ))}
+                      );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -1041,7 +1095,7 @@ const ProjectExpenses: React.FC = () => {
                       if (file) {
                         // Check file size (max 5MB)
                         if (file.size > 5 * 1024 * 1024) {
-                          alert('File size must be less than 5MB');
+                          toast.error('File size must be less than 5MB');
                           e.target.value = '';
                           return;
                         }
@@ -1122,17 +1176,22 @@ const ProjectExpenses: React.FC = () => {
               </button>
             </div>
             <div className="p-6 overflow-y-auto max-h-[calc(90vh-100px)]">
-              {billUrl.endsWith('.pdf') ? (
+              {billUrl.toLowerCase().endsWith('.pdf') ? (
                 <iframe
-                  src={billUrl}
+                  src={`${billUrl}#toolbar=0&navpanes=0&scrollbar=1`}
                   className="w-full h-[600px] border border-gray-300 rounded-lg"
                   title="Bill Document"
+                  style={{ minHeight: '600px' }}
                 />
               ) : (
                 <img
                   src={billUrl}
                   alt="Bill Document"
                   className="w-full h-auto rounded-lg"
+                  onError={(e) => {
+                    console.error('Error loading image:', billUrl);
+                    e.currentTarget.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="300"%3E%3Crect width="400" height="300" fill="%23f3f4f6"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" fill="%23374151" font-size="16"%3EFailed to load image%3C/text%3E%3C/svg%3E';
+                  }}
                 />
               )}
             </div>

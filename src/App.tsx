@@ -37,6 +37,7 @@ import TollManagementPage from './pages/TollManagementPage';
 import ResultAnalysisPage from './pages/ResultAnalysisPage';
 import ProjectTimelinePage from './pages/ProjectTimelinePage';
 import DataManagerDashboard from './pages/DataManagerDashboard';
+import MyTasks from './pages/MyTasks';
 
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -114,6 +115,7 @@ function AppRoutes() {
         }
       />
       <Route path="/tasks" element={<ProtectedRoute><Sidebar currentPage="tasks" onNavigate={() => {}}><UserAssignmentPage /></Sidebar></ProtectedRoute>} />
+      <Route path="/my-tasks" element={<ProtectedRoute><Sidebar currentPage="my-tasks" onNavigate={() => {}}><MyTasks /></Sidebar></ProtectedRoute>} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/" element={<Navigate to="/admin-dashboard" replace />} />
     </Routes>
