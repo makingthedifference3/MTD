@@ -1418,7 +1418,7 @@ const AccountantExpensesPage: React.FC = () => {
                     
                     {/* Payment Method */}
                     <td className="px-4 py-3 text-sm text-gray-600">
-                      <div className="max-w-[80px] truncate" title={expense.payment_method}>
+                      <div className="max-w-20 truncate" title={expense.payment_method}>
                         {expense.payment_method || '-'}
                       </div>
                     </td>
