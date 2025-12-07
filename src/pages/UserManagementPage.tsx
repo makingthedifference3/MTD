@@ -20,6 +20,7 @@ export default function UserManagementPage() {
     username: '',
     email: '',
     full_name: '',
+    mobile_number: '',
     password: '',
     confirmPassword: '',
     role: 'team_member' as RoleType,
@@ -42,6 +43,7 @@ export default function UserManagementPage() {
       username: '',
       email: '',
       full_name: '',
+      mobile_number: '',
       password: '',
       confirmPassword: '',
       role: 'team_member',
@@ -64,6 +66,7 @@ export default function UserManagementPage() {
       username: user.username,
       email: user.email,
       full_name: user.full_name,
+      mobile_number: user.mobile_number || '',
       password: '',
       confirmPassword: '',
       role: userRole,
@@ -124,6 +127,7 @@ export default function UserManagementPage() {
           username: formData.username,
           email: formData.email,
           full_name: formData.full_name,
+          mobile_number: formData.mobile_number || undefined,
           password: trimmedPassword,
           role: formData.role,
           is_active: formData.is_active,
@@ -144,6 +148,7 @@ export default function UserManagementPage() {
           username?: string;
           email?: string;
           full_name?: string;
+          mobile_number?: string;
           role?: string;
           is_active?: boolean;
           password?: string;
@@ -151,6 +156,7 @@ export default function UserManagementPage() {
           username: formData.username,
           email: formData.email,
           full_name: formData.full_name,
+          mobile_number: formData.mobile_number || undefined,
           role: formData.role,
           is_active: formData.is_active,
         };
@@ -310,6 +316,19 @@ export default function UserManagementPage() {
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Mobile Number
+                </label>
+                <input
+                  type="tel"
+                  value={formData.mobile_number}
+                  onChange={(e) => setFormData({ ...formData, mobile_number: e.target.value })}
+                  className="w-full px-4 py-2 rounded-lg border-2 border-emerald-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all"
+                  placeholder="+91 98765 43210"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Role
                 </label>
                 <select
@@ -324,6 +343,7 @@ export default function UserManagementPage() {
                 >
                   <option value="team_member">Team Member</option>
                   <option value="data_manager">Data Manager</option>
+                  <option value="accountant">Accountant</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>

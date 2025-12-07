@@ -14,6 +14,7 @@ export interface AuthUser {
   is_active: boolean;
   csr_partner_id?: string;
   password?: string;
+  mobile_number?: string | null;
 }
 
 /**
@@ -28,7 +29,7 @@ export const authenticateUser = async (
   try {
     const { data, error } = await supabase
       .from('users')
-      .select('id, username, email, full_name, role, is_active, password, csr_partner_id')
+      .select('id, username, email, full_name, role, is_active, password, csr_partner_id, mobile_number')
       .eq('username', username)
       .eq('is_active', true)
       .single();
@@ -67,7 +68,7 @@ export const getUserById = async (userId: string): Promise<AuthUser | null> => {
   try {
     const { data, error } = await supabase
       .from('users')
-      .select('id, username, email, full_name, role, is_active')
+      .select('id, username, email, full_name, role, is_active, mobile_number')
       .eq('id', userId)
       .single();
 
@@ -90,7 +91,7 @@ export const getAllUsers = async (): Promise<AuthUser[]> => {
   try {
     const { data, error } = await supabase
       .from('users')
-      .select('id, username, email, full_name, role, is_active, password')
+      .select('id, username, email, full_name, role, is_active, password, mobile_number')
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -116,6 +117,7 @@ export const createUser = async (userData: {
   full_name: string;
   role: string;
   is_active?: boolean;
+  mobile_number?: string;
 }): Promise<AuthUser | null> => {
   try {
     // Store password as plain text
@@ -129,9 +131,10 @@ export const createUser = async (userData: {
           full_name: userData.full_name,
           role: userData.role,
           is_active: userData.is_active ?? true,
+          mobile_number: userData.mobile_number || null,
         },
       ])
-      .select('id, username, email, full_name, role, is_active')
+      .select('id, username, email, full_name, role, is_active, mobile_number')
       .single();
 
     if (error) {
@@ -158,6 +161,7 @@ export const updateUser = async (
     role?: string;
     is_active?: boolean;
     password?: string;
+    mobile_number?: string;
   }>
 ): Promise<AuthUser | null> => {
   try {
@@ -170,7 +174,7 @@ export const updateUser = async (
       .from('users')
       .update(updateData)
       .eq('id', userId)
-      .select('id, username, email, full_name, role, is_active')
+      .select('id, username, email, full_name, role, is_active, mobile_number')
       .single();
 
     if (error) {
