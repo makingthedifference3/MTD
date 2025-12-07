@@ -1109,6 +1109,13 @@ const ProjectsPage = () => {
       projectList = projectList.filter((p) => p.work === workFilter);
     }
 
+    // Sort by project_code in ascending order
+    projectList = projectList.sort((a, b) => {
+      const codeA = a.project_code || '';
+      const codeB = b.project_code || '';
+      return codeA.localeCompare(codeB);
+    });
+
     return projectList;
   }, [selectedProject, selectedPartner, selectedToll, filteredProjects, projects, workFilter]);
 
@@ -1431,11 +1438,11 @@ const ProjectsPage = () => {
                 <div className="grid grid-cols-3 gap-4 bg-linear-to-r from-emerald-50 to-blue-50 rounded-2xl p-4 border border-emerald-100">
                   <div>
                     <p className="text-xs font-semibold text-emerald-700 uppercase mb-1">Total Budget</p>
-                    <p className="text-2xl font-bold text-emerald-900">₹{((selectedProjectDetails.total_budget || 0) / 10000000).toFixed(1)}Cr</p>
+                    <p className="text-2xl font-bold text-emerald-900">₹{((selectedProjectDetails.total_budget || 0) / 100000).toFixed(1)}L</p>
                   </div>
                   <div>
                     <p className="text-xs font-semibold text-blue-700 uppercase mb-1">Utilized</p>
-                    <p className="text-2xl font-bold text-blue-900">₹{((selectedProjectDetails.utilized_budget || 0) / 10000000).toFixed(1)}Cr</p>
+                    <p className="text-2xl font-bold text-blue-900">₹{((selectedProjectDetails.utilized_budget || 0) / 100000).toFixed(1)}L</p>
                   </div>
                   <div>
                     <p className="text-xs font-semibold text-purple-700 uppercase mb-1">{selectedProjectBeneficiaryLabel}</p>
