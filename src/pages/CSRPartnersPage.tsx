@@ -1151,9 +1151,9 @@ const PartnerDetailsModal = ({ partner, isLoading, error, budgetTotal, directBud
     <motion.div
       initial={{ opacity: 0, y: 40 }}
       animate={{ opacity: 1, y: 0 }}
-      className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-emerald-100"
+      className="w-full max-w-4xl bg-white rounded-3xl shadow-2xl border border-emerald-100 max-h-[90vh] flex flex-col"
     >
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
         <div>
           <p className="text-sm font-medium text-emerald-600">Partner Profile</p>
           <h3 className="text-2xl font-bold text-gray-900">Details</h3>
@@ -1162,7 +1162,7 @@ const PartnerDetailsModal = ({ partner, isLoading, error, budgetTotal, directBud
           <X className="w-5 h-5 text-gray-500" />
         </button>
       </div>
-      <div className="p-6 space-y-4">
+      <div className="p-6 space-y-4 overflow-y-auto">
         {isLoading && (
           <div className="flex items-center justify-center py-8">
             <Loader className="w-8 h-8 animate-spin text-emerald-500" />
@@ -1235,7 +1235,7 @@ const PartnerDetailsModal = ({ partner, isLoading, error, budgetTotal, directBud
 const DetailRow = ({ icon, label, value }: { icon: ReactNode; label: string; value: string }) => (
   <div className="flex items-center gap-3 rounded-xl border border-gray-100 px-4 py-3">
     <div className="p-2 rounded-xl bg-emerald-50 text-emerald-700">{icon}</div>
-    <div>
+    <div className="flex-1 min-w-0">
       <p className="text-xs uppercase tracking-wide text-gray-500">{label}</p>
       <p className="text-sm font-semibold text-gray-900">{value || '—'}</p>
     </div>

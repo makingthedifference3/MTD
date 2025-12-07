@@ -118,6 +118,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   const [startDateFilter, setStartDateFilter] = useState<string>(defaultStartDate);
   const [endDateFilter, setEndDateFilter] = useState<string>(defaultEndDate);
+  const [statusFilter, setStatusFilter] = useState<string>('');
 
   const DateFilters = () => (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
@@ -191,9 +192,13 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
       if (!projectDate) return true;
       if (start && projectDate < start) return false;
       if (end && projectDate > end) return false;
+      
+      // Apply status filter
+      if (statusFilter && project.status !== statusFilter) return false;
+      
       return true;
     });
-    }, [filteredProjects, startDateFilter, endDateFilter]);
+    }, [filteredProjects, startDateFilter, endDateFilter, statusFilter]);
 
     const partnerProjects = selectedPartner
       ? analyticsProjects.filter((p) => p.csr_partner_id === selectedPartner)
@@ -531,7 +536,10 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
         >
           {/* Filter Bar for Analytics */}
           <div className="mb-4">
-            <FilterBar />
+            <FilterBar 
+              statusFilter={statusFilter}
+              onStatusFilterChange={setStatusFilter}
+            />
           </div>
 
           {/* Date Filters */}
@@ -587,7 +595,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                 <span className="text-xs font-bold text-purple-700 bg-purple-200 px-3 py-1 rounded-full">BUDGET</span>
               </div>
               <p className="text-3xl font-black text-purple-900 mb-1">
-                ₹{(analyticsProjects.reduce((sum: number, p: Project) => sum + (p.total_budget || 0), 0) / 10000000).toFixed(1)}Cr
+                ₹{(analyticsProjects.reduce((sum: number, p: Project) => sum + (p.total_budget || 0), 0) / 100000).toFixed(1)}L
               </p>
               <p className="text-sm text-purple-700 font-semibold">Total Budget</p>
             </motion.div>
@@ -606,7 +614,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                 <span className="text-xs font-bold text-teal-700 bg-teal-200 px-3 py-1 rounded-full">SPENT</span>
               </div>
               <p className="text-3xl font-black text-teal-900 mb-1">
-                ₹{(analyticsProjects.reduce((sum: number, p: Project) => sum + (p.utilized_budget || 0), 0) / 10000000).toFixed(1)}Cr
+                ₹{(analyticsProjects.reduce((sum: number, p: Project) => sum + (p.utilized_budget || 0), 0) / 100000).toFixed(1)}L
               </p>
               <p className="text-sm text-teal-700 font-semibold">Total Utilized</p>
             </motion.div>
@@ -625,7 +633,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                 <span className="text-xs font-bold text-amber-700 bg-amber-200 px-3 py-1 rounded-full">REMAINING</span>
               </div>
               <p className="text-3xl font-black text-amber-900 mb-1">
-                ₹{((analyticsProjects.reduce((sum: number, p: Project) => sum + (p.total_budget || 0), 0) - analyticsProjects.reduce((sum: number, p: Project) => sum + (p.utilized_budget || 0), 0)) / 10000000).toFixed(1)}Cr
+                ₹{((analyticsProjects.reduce((sum: number, p: Project) => sum + (p.total_budget || 0), 0) - analyticsProjects.reduce((sum: number, p: Project) => sum + (p.utilized_budget || 0), 0)) / 100000).toFixed(1)}L
               </p>
               <p className="text-sm text-amber-700 font-semibold">Budget Remaining</p>
             </motion.div>
@@ -664,12 +672,12 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
                         <Label
-                          value={`₹${(totalUtilized / 10000000).toFixed(1)}Cr`}
+                          value={`₹${(totalUtilized / 100000).toFixed(1)}L`}
                           position="center"
                           className="text-xl font-black text-gray-900"
                         />
                       </Pie>
-                      <Tooltip formatter={(value) => [`₹${(Number(value) / 10000000).toFixed(2)}Cr`, '']} />
+                      <Tooltip formatter={(value) => [`₹${(Number(value) / 100000).toFixed(2)}L`, '']} />
                       <Legend formatter={(value: string | number) => <span className="text-sm text-gray-700 font-semibold">{value}</span>} />
                     </PieChart>
                   </ResponsiveContainer>
@@ -767,7 +775,10 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
         // HIERARCHY VIEW - All existing code
         <>
           <div className="mb-4">
-            {isProjectSelected ? <LockedFilterBar /> : <FilterBar />}
+            {isProjectSelected ? <LockedFilterBar /> : <FilterBar 
+              statusFilter={statusFilter}
+              onStatusFilterChange={setStatusFilter}
+            />}
           </div>
           <DateFilters />
 
@@ -880,7 +891,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                 {groupedProjects.map((group, index) => {
                   const projectLabel = group.projects.length === 1 ? 'Project' : 'Projects';
                   const formattedBudget = group.totalBudget > 0
-                    ? `₹${(group.totalBudget / 10000000).toFixed(2)}Cr`
+                    ? `₹${(group.totalBudget / 100000).toFixed(2)}L`
                     : '';
 
                   const impactItems = [
@@ -1059,7 +1070,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                   </div>
                   <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 text-center">
                     <p className="text-2xl font-bold text-orange-700">
-                      {folderData.totalBudget > 0 ? `₹${(folderData.totalBudget / 10000000).toFixed(2)}Cr` : '—'}
+                      {folderData.totalBudget > 0 ? `₹${(folderData.totalBudget / 100000).toFixed(2)}L` : '—'}
                     </p>
                     <p className="text-xs font-semibold text-orange-600 uppercase">Total Budget</p>
                   </div>

@@ -2627,7 +2627,6 @@ const AddProjectModal = ({
   const partnerHasTolls = Boolean(selectedPartner?.has_toll);
   const TEAM_ROLE_OPTIONS: Array<{ value: ProjectTeamRole; label: string }> = [
     { value: 'project_manager', label: 'Project Manager' },
-    { value: 'accountant', label: 'Accountant' },
     { value: 'team_member', label: 'Team Member' },
   ];
   const projectNameSelectValue = formData.projectNameIsCustom ? 'custom' : formData.name || '';
@@ -3050,19 +3049,9 @@ const AddProjectModal = ({
 
         {/* Team Members Assignment */}
         <div className="rounded-2xl border border-gray-100 p-4 bg-white shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <p className="text-sm font-semibold text-gray-900">Project Team</p>
-              <p className="text-xs text-gray-500">Assign accountants, project managers, and team members</p>
-            </div>
-            <button
-              type="button"
-              onClick={handleAddTeamMemberRow}
-              disabled={teamUsersLoading || teamUsers.length === 0}
-              className="px-3 py-1.5 rounded-lg border border-emerald-200 text-emerald-700 text-sm font-medium hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              + Add Member
-            </button>
+          <div className="mb-4">
+            <p className="text-sm font-semibold text-gray-900">Project Team</p>
+            <p className="text-xs text-gray-500">Assign accountants, project managers, and team members</p>
           </div>
 
           {teamUsersLoading ? (
@@ -3131,6 +3120,15 @@ const AddProjectModal = ({
               ))}
             </div>
           )}
+
+          <button
+            type="button"
+            onClick={handleAddTeamMemberRow}
+            disabled={teamUsersLoading || teamUsers.length === 0}
+            className="mt-3 w-full px-3 py-2 rounded-lg border border-emerald-200 text-emerald-700 text-sm font-medium hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            + Add Member
+          </button>
 
           <p className="mt-3 text-xs text-gray-500">
             Allowed roles: Project Manager, Accountant, Team Member. Add as many members as needed for this project.

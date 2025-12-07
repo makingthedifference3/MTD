@@ -40,11 +40,15 @@ import DataManagerDashboard from './pages/DataManagerDashboard';
 import MyTasks from './pages/MyTasks';
 
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
+function ProtectedRoute({ children, excludedRoles }: { children: React.ReactNode; excludedRoles?: string[] }) {
   const { currentUser } = useAuth();
   
   if (!currentUser) {
     return <Navigate to="/login" replace />;
+  }
+  
+  if (excludedRoles && currentUser.role && excludedRoles.includes(currentUser.role)) {
+    return <Navigate to="/accountant-dashboard" replace />;
   }
   
   return children;
@@ -81,7 +85,7 @@ function AppRoutes() {
       <Route path="/accountant-dashboard" element={<ProtectedRoute><Sidebar currentPage="dashboard" onNavigate={() => {}}><AccountantDashboard /></Sidebar></ProtectedRoute>} />
       <Route path="/pm-dashboard" element={<ProtectedRoute><Sidebar currentPage="dashboard" onNavigate={() => {}}><PMDashboard /></Sidebar></ProtectedRoute>} />
       <Route path="/team-member-dashboard" element={<ProtectedRoute><Sidebar currentPage="dashboard" onNavigate={() => {}}><TeamMemberDashboard /></Sidebar></ProtectedRoute>} />
-      <Route path="/projects-dashboard" element={<ProtectedRoute><ProjectsDashboardPage /></ProtectedRoute>} />
+      <Route path="/projects-dashboard" element={<ProtectedRoute excludedRoles={['accountant']}><ProjectsDashboardPage /></ProtectedRoute>} />
       <Route path="/csr-partners" element={<ProtectedRoute><Sidebar currentPage="csr-partners" onNavigate={() => {}}><CSRPartnersPage /></Sidebar></ProtectedRoute>} />
       <Route path="/csr-partners/:partnerId/tolls" element={<ProtectedRoute><Sidebar currentPage="csr-partners" onNavigate={() => {}}><TollManagementPage /></Sidebar></ProtectedRoute>} />
       <Route path="/utilization-certificate" element={<ProtectedRoute><Sidebar currentPage="utilization-certificate" onNavigate={() => {}}><UtilizationCertificatePage /></Sidebar></ProtectedRoute>} />

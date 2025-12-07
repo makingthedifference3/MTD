@@ -9,6 +9,16 @@ import { useFilter } from '../context/useFilter';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const AccountantDashboard = () => {
+  // Clear project context for accountants on mount - they should see all data
+  useEffect(() => {
+    localStorage.removeItem('selectedProjectId');
+    localStorage.removeItem('selectedProjectName');
+    localStorage.removeItem('selectedCSRPartnerId');
+    localStorage.removeItem('selectedCSRPartnerName');
+    localStorage.removeItem('selectedProjectRole');
+    localStorage.removeItem('projectContext');
+  }, []);
+
   const { 
     filteredProjects, 
     csrPartners, 

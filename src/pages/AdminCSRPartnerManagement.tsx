@@ -291,6 +291,20 @@ const AdminCSRPartnerManagement = () => {
                     <Building2 className="w-6 h-6 text-emerald-600" />
                   </div>
                   <div className="flex items-center gap-2">
+                    {selectedPartner?.id === partner.id && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedPartner(null);
+                        }}
+                        className="p-2 hover:bg-gray-100 rounded-lg text-gray-700"
+                        title="Close details"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    )}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -323,9 +337,9 @@ const AdminCSRPartnerManagement = () => {
 
                 {selectedPartner?.id === partner.id && (
                   <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    className="mt-6 pt-6 border-t border-emerald-200"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="mt-6 pt-6 border-t border-emerald-200 max-h-[400px] overflow-y-auto"
                   >
                     <div className="flex items-center justify-between mb-4">
                       <h4 className="font-semibold text-gray-900 flex items-center space-x-2">

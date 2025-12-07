@@ -51,7 +51,7 @@ const Sidebar = ({ children, currentPage, onNavigate }: SidebarProps) => {
   // Get role from project context for non-admin users
   const getEffectiveRole = () => {
     // Admin and data_manager roles always come from users table
-    if (currentRole === 'admin' || currentRole === 'data_manager') {
+    if (currentRole === 'admin' || currentRole === 'data_manager' || currentRole === 'accountant') {
       return currentRole;
     }
     

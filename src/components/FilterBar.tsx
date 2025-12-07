@@ -8,9 +8,11 @@ interface FilterBarProps {
   workFilter?: string;
   onWorkFilterChange?: (value: string) => void;
   workOptions?: string[];
+  statusFilter?: string;
+  onStatusFilterChange?: (value: string) => void;
 }
 
-const FilterBar = ({ workFilter = '', onWorkFilterChange, workOptions = [] }: FilterBarProps = {}) => {
+const FilterBar = ({ workFilter = '', onWorkFilterChange, workOptions = [], statusFilter = '', onStatusFilterChange }: FilterBarProps = {}) => {
   const {
     selectedPartner,
     selectedProject,
@@ -77,19 +79,29 @@ const FilterBar = ({ workFilter = '', onWorkFilterChange, workOptions = [] }: Fi
     onWorkFilterChange(value === 'all' ? '' : value);
   };
 
+  const handleStatusChange = (value: string) => {
+    if (!onStatusFilterChange) return;
+    onStatusFilterChange(value === 'all' ? '' : value);
+  };
+
   const showWorkFilter = Boolean(onWorkFilterChange && workOptions.length > 0);
+  const showStatusFilter = Boolean(onStatusFilterChange);
 
   const hasActiveFilters = Boolean(
     selectedPartner ||
     selectedProject ||
     selectedToll ||
-    (showWorkFilter && workFilter)
+    (showWorkFilter && workFilter) ||
+    (showStatusFilter && statusFilter)
   );
 
   const handleResetFilters = () => {
     resetFilters();
     if (onWorkFilterChange) {
       onWorkFilterChange('');
+    }
+    if (onStatusFilterChange) {
+      onStatusFilterChange('');
     }
   };
 
@@ -252,6 +264,44 @@ const FilterBar = ({ workFilter = '', onWorkFilterChange, workOptions = [] }: Fi
                     {work}
                   </option>
                 ))}
+              </select>
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                <svg
+                  className="w-4 h-4 text-emerald-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Status Filter */}
+        {showStatusFilter && (
+          <div className="flex-1 min-w-[250px]">
+            <label className="block text-xs font-semibold text-emerald-700 mb-2">Project Status</label>
+            <div className="relative">
+              <svg
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <select
+                value={statusFilter || 'all'}
+                onChange={(e) => handleStatusChange(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl border-2 border-emerald-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all bg-white text-gray-900 font-medium text-sm appearance-none cursor-pointer hover:border-emerald-300"
+              >
+                <option value="all">All Statuses</option>
+                <option value="active">Active</option>
+                <option value="planning">Planning</option>
+                <option value="on_hold">On Hold</option>
+                <option value="completed">Completed</option>
               </select>
               <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
                 <svg
