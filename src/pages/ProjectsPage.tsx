@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { FormEvent, Dispatch, SetStateAction } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, FolderKanban, DollarSign, X, MapPin, Calendar, Loader, LayoutDashboard, Trash2 } from 'lucide-react';
+import { Plus, FolderKanban, DollarSign, X, MapPin, Calendar, Loader, LayoutDashboard, Trash2, Copy } from 'lucide-react';
 import { useFilter } from '../context/useFilter';
 import { useAuth } from '../context/useAuth';
 import { useNavigate } from 'react-router-dom';
@@ -35,6 +35,13 @@ import {
   type ImpactMetricEntry,
   type ImpactMetricKey,
 } from '../utils/impactMetrics';
+import {
+  getAllTeamTemplates,
+  createTeamTemplate,
+  deleteTeamTemplate,
+  type TeamTemplate,
+  type CreateTeamTemplateInput,
+} from '../services/teamTemplatesService';
 import { BENEFICIARY_TYPES } from '../constants/beneficiaryTypes';
 import { INDIAN_STATES } from '../constants/indianStates';
 import { WORK_TYPE_OPTIONS } from '../constants/projectOptions';
@@ -246,6 +253,12 @@ const ProjectsPage = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [ucFile, setUcFile] = useState<File | null>(null);
   const [uploadingUcFile, setUploadingUcFile] = useState(false);
+  const [teamTemplates, setTeamTemplates] = useState<TeamTemplate[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false);
+  const [newTemplateName, setNewTemplateName] = useState('');
+  const [newTemplateDescription, setNewTemplateDescription] = useState('');
+  const [showManageTemplatesModal, setShowManageTemplatesModal] = useState(false);
   const [formData, setFormData] = useState<ProjectFormData>(createInitialProjectFormState);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -361,6 +374,18 @@ const ProjectsPage = () => {
     }
   }, []);
 
+  const loadTeamTemplates = useCallback(async () => {
+    setTemplatesLoading(true);
+    try {
+      const templates = await getAllTeamTemplates();
+      setTeamTemplates(templates);
+    } catch (error) {
+      console.error('Error loading team templates:', error);
+    } finally {
+      setTemplatesLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (isAddModalOpen && csrPartners.length === 0) {
       fetchPartners();
@@ -369,6 +394,11 @@ const ProjectsPage = () => {
       fetchTeamUsers();
     }
   }, [isAddModalOpen, csrPartners.length, teamUsers.length, fetchPartners, fetchTeamUsers]);
+
+  // Load team templates on mount
+  useEffect(() => {
+    loadTeamTemplates();
+  }, [loadTeamTemplates]);
 
   // Fetch tolls when partner changes and auto-fill location from partner
   useEffect(() => {
@@ -953,6 +983,107 @@ const ProjectsPage = () => {
   };
 
   // Handle viewing project dashboard
+  // Handle duplicating a project
+  const handleDuplicateProject = async (project: Project) => {
+    if (!currentUser) return;
+
+    try {
+      // Fetch team members for the project to duplicate
+      const teamMembers = await fetchProjectTeamMembers(project.id);
+
+      // Map project data to form, but modify key fields for duplication
+      const duplicatedFormData = mapProjectToFormData(project, teamMembers);
+      
+      // Modify for duplicate:
+      // - Clear project code (will auto-generate new one)
+      // - Add "(Copy)" to project name
+      // - Reset some fields
+      duplicatedFormData.projectCode = ''; // Will auto-generate
+      duplicatedFormData.name = `${project.name} (Copy)`;
+      duplicatedFormData.startDate = ''; // User should set new dates
+      duplicatedFormData.expectedEndDate = '';
+      duplicatedFormData.createBeneficiaryProjects = false; // Don't auto-create for duplicate
+      
+      setFormData(duplicatedFormData);
+      setEditingProjectId(null); // Not editing, creating new
+      setIsAddModalOpen(true);
+    } catch (error) {
+      console.error('Error preparing project duplication:', error);
+      alert('Failed to prepare project duplication. Please try again.');
+    }
+  };
+
+  // Handle loading a team template
+  const handleLoadTemplate = (templateId: string) => {
+    const template = teamTemplates.find((t) => t.id === templateId);
+    if (!template) return;
+
+    const templateMembers = template.members.map((member) => ({
+      userId: member.user_id,
+      role: member.role,
+    }));
+
+    setFormData((prev) => ({
+      ...prev,
+      teamMembers: templateMembers,
+    }));
+  };
+
+  // Handle saving current team members as a template
+  const handleSaveTemplate = async () => {
+    if (!newTemplateName.trim()) {
+      alert('Please enter a template name');
+      return;
+    }
+
+    if (formData.teamMembers.length === 0) {
+      alert('Please add at least one team member before saving template');
+      return;
+    }
+
+    // Filter out empty team member rows
+    const validMembers = formData.teamMembers.filter((m) => m.userId);
+    if (validMembers.length === 0) {
+      alert('Please select users for team members before saving template');
+      return;
+    }
+
+    try {
+      const input: CreateTeamTemplateInput = {
+        name: newTemplateName.trim(),
+        description: newTemplateDescription.trim() || undefined,
+        members: validMembers.map((m) => ({
+          user_id: m.userId,
+          role: m.role,
+        })),
+        created_by: currentUser?.id,
+      };
+
+      await createTeamTemplate(input);
+      await loadTeamTemplates();
+      setShowSaveTemplateModal(false);
+      setNewTemplateName('');
+      setNewTemplateDescription('');
+      alert('Template saved successfully!');
+    } catch (error) {
+      console.error('Error saving template:', error);
+      alert('Failed to save template. Please try again.');
+    }
+  };
+
+  // Handle deleting a template
+  const handleDeleteTemplate = async (templateId: string) => {
+    if (!confirm('Are you sure you want to delete this template?')) return;
+
+    try {
+      await deleteTeamTemplate(templateId);
+      await loadTeamTemplates();
+    } catch (error) {
+      console.error('Error deleting template:', error);
+      alert('Failed to delete template. Please try again.');
+    }
+  };
+
   const handleViewProjectDashboard = async (project: Project) => {
     if (!currentUser) return;
 
@@ -1279,6 +1410,14 @@ const ProjectsPage = () => {
                   className="flex-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-medium py-2 rounded-lg transition-colors"
                 >
                   View Details
+                </button>
+                <button
+                  onClick={() => handleDuplicateProject(project)}
+                  className="flex-1 bg-purple-50 hover:bg-purple-100 text-purple-700 font-medium py-2 rounded-lg transition-colors flex items-center justify-center gap-2"
+                  title="Duplicate this project"
+                >
+                  <Copy className="w-4 h-4" />
+                  Duplicate
                 </button>
                 <button
                   onClick={() => handleViewProjectDashboard(project)}
@@ -2236,7 +2375,184 @@ const ProjectsPage = () => {
           onSubmit={handleSaveProject}
           isEditing={Boolean(editingProjectId)}
           projects={projects}
+          teamTemplates={teamTemplates}
+          templatesLoading={templatesLoading}
+          onLoadTemplate={handleLoadTemplate}
+          onSaveTemplate={() => setShowSaveTemplateModal(true)}
+          onManageTemplates={() => setShowManageTemplatesModal(true)}
         />
+      )}
+
+      {/* Save Template Modal */}
+      {showSaveTemplateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-emerald-100 p-6"
+          >
+            <div className="mb-4">
+              <h3 className="text-xl font-bold text-gray-900">Save Team Template</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                Save the current team member configuration as a reusable template
+              </p>
+            </div>
+            
+            <div className="space-y-4">
+              <label className="block text-sm font-medium text-gray-700">
+                Template Name *
+                <input
+                  type="text"
+                  value={newTemplateName}
+                  onChange={(e) => setNewTemplateName(e.target.value)}
+                  placeholder="e.g., Standard Project Team"
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  autoFocus
+                />
+              </label>
+
+              <label className="block text-sm font-medium text-gray-700">
+                Description (Optional)
+                <textarea
+                  value={newTemplateDescription}
+                  onChange={(e) => setNewTemplateDescription(e.target.value)}
+                  placeholder="Describe when to use this template..."
+                  rows={3}
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none"
+                />
+              </label>
+
+              <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
+                <p className="text-xs text-blue-700">
+                  <strong>Team members to save:</strong> {formData.teamMembers.filter((m) => m.userId).length} member(s)
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 mt-6">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSaveTemplateModal(false);
+                  setNewTemplateName('');
+                  setNewTemplateDescription('');
+                }}
+                className="flex-1 px-4 py-2.5 rounded-lg border border-gray-200 font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveTemplate}
+                disabled={!newTemplateName.trim()}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Save Template
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Manage Templates Modal */}
+      {showManageTemplatesModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-emerald-100 p-6 max-h-[80vh] overflow-y-auto"
+          >
+            <div className="mb-6 flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">Manage Team Templates</h3>
+                <p className="text-sm text-gray-600 mt-1">View and delete saved team templates</p>
+              </div>
+              <button
+                onClick={() => setShowManageTemplatesModal(false)}
+                className="p-2 rounded-full hover:bg-gray-100 transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            {templatesLoading ? (
+              <div className="flex items-center justify-center gap-2 py-8 text-gray-500">
+                <Loader className="w-5 h-5 animate-spin" />
+                Loading templates...
+              </div>
+            ) : teamTemplates.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-gray-500 mb-2">No templates saved yet</p>
+                <p className="text-sm text-gray-400">
+                  Add team members to a project and click "Save Current Team as Template" to create your first template
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {teamTemplates.map((template) => (
+                  <div
+                    key={template.id}
+                    className="border border-gray-200 rounded-xl p-4 hover:border-emerald-300 transition-colors"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-gray-900">{template.name}</h4>
+                        {template.description && (
+                          <p className="text-sm text-gray-600 mt-1">{template.description}</p>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => handleDeleteTemplate(template.id)}
+                        className="ml-3 p-2 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
+                        title="Delete template"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
+                        Team Members ({template.members.length})
+                      </p>
+                      {template.members.map((member, idx) => (
+                        <div
+                          key={`${template.id}-member-${idx}`}
+                          className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg"
+                        >
+                          <span className="text-sm text-gray-700">
+                            {member.user?.full_name || member.user_id}
+                          </span>
+                          <span className="text-xs font-medium text-gray-500 uppercase">
+                            {member.role.replace('_', ' ')}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        handleLoadTemplate(template.id);
+                        setShowManageTemplatesModal(false);
+                      }}
+                      className="mt-3 w-full px-4 py-2 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-medium text-sm transition-colors"
+                    >
+                      Load This Template
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="mt-6 pt-4 border-t border-gray-200">
+              <button
+                onClick={() => setShowManageTemplatesModal(false)}
+                className="w-full px-4 py-2.5 rounded-lg border border-gray-200 font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </motion.div>
+        </div>
       )}
     </div>
   );
@@ -2612,6 +2928,11 @@ interface AddProjectModalProps {
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   isEditing: boolean;
   projects: Project[];
+  teamTemplates: TeamTemplate[];
+  templatesLoading: boolean;
+  onLoadTemplate: (templateId: string) => void;
+  onSaveTemplate: () => void;
+  onManageTemplates: () => void;
 }
 
 // Add Project Modal component
@@ -2633,6 +2954,11 @@ const AddProjectModal = ({
   onSubmit,
   isEditing,
   projects,
+  teamTemplates,
+  templatesLoading,
+  onLoadTemplate,
+  onSaveTemplate,
+  onManageTemplates,
 }: AddProjectModalProps) => {
   const [metricNameInput, setMetricNameInput] = useState('');
   const [metricError, setMetricError] = useState('');
@@ -3123,10 +3449,67 @@ const AddProjectModal = ({
 
         {/* Team Members Assignment */}
         <div className="rounded-2xl border border-gray-100 p-4 bg-white shadow-sm">
-          <div className="mb-4">
-            <p className="text-sm font-semibold text-gray-900">Project Team</p>
-            <p className="text-xs text-gray-500">Assign accountants, project managers, and team members</p>
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Project Team</p>
+              <p className="text-xs text-gray-500">Assign accountants, project managers, and team members</p>
+            </div>
+            <button
+              type="button"
+              onClick={onManageTemplates}
+              className="text-xs text-blue-600 hover:text-blue-700 font-medium underline"
+            >
+              Manage Templates
+            </button>
           </div>
+
+          {/* Team Templates Section */}
+          {!teamUsersLoading && teamUsers.length > 0 && (
+            <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-gray-700 block mb-1">
+                  Load Team Template
+                </label>
+                {templatesLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-gray-500 px-3 py-2">
+                    <Loader className="w-4 h-4 animate-spin" />
+                    Loading templates...
+                  </div>
+                ) : teamTemplates.length > 0 ? (
+                  <select
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        onLoadTemplate(e.target.value);
+                        e.target.value = ''; // Reset selection
+                      }
+                    }}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">Select a template...</option>
+                    {teamTemplates.map((template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.name} ({template.members.length} members)
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <p className="text-xs text-gray-500 italic px-3 py-2 bg-gray-50 rounded-lg border border-gray-200">
+                    No templates saved yet
+                  </p>
+                )}
+              </div>
+              <div className="flex items-end">
+                <button
+                  type="button"
+                  onClick={onSaveTemplate}
+                  disabled={formData.teamMembers.filter((m) => m.userId).length === 0}
+                  className="w-full px-3 py-2 rounded-lg border border-blue-200 text-blue-700 text-sm font-medium hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  💾 Save Current Team as Template
+                </button>
+              </div>
+            </div>
+          )}
 
           {teamUsersLoading ? (
             <div className="flex items-center gap-2 text-sm text-gray-500">
