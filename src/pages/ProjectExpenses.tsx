@@ -55,7 +55,7 @@ const ProjectExpenses: React.FC = () => {
     total_amount: '',
     description: '',
     bill_drive_link: '',
-    payment_method: 'Cash',
+    payment_method: 'NEFT',
     budget_category_id: '',
   });
   
@@ -290,7 +290,8 @@ const ProjectExpenses: React.FC = () => {
     // Validate that we have a valid category_id
     let validCategoryId = newExpense.category_id;
     
-    if (!validCategoryId || validCategoryId.trim() === '') {
+    // If category_id is 'others' or empty, create a new category
+    if (!validCategoryId || validCategoryId.trim() === '' || validCategoryId === 'others') {
       // If no category selected but category name provided, create it
       if (newExpense.category && newExpense.category.trim()) {
         try {
@@ -418,7 +419,7 @@ const ProjectExpenses: React.FC = () => {
         total_amount: parseFloat(newExpense.total_amount),
         base_amount: parseFloat(newExpense.total_amount),
         status: 'pending',
-        payment_method: newExpense.payment_method as 'Cash' | 'Cheque' | 'Online' | 'Card',
+        payment_method: newExpense.payment_method as 'Cash' | 'Cheque' | 'Online' | 'Card' | 'NEFT' | 'RTGS',
         submitted_by: currentUser.id,
         csr_partner_id: selectedCsrPartner === 'others' ? undefined : selectedCsrPartner,
         toll_id: hasToll && selectedToll ? selectedToll : undefined,
@@ -457,7 +458,7 @@ const ProjectExpenses: React.FC = () => {
           total_amount: '',
           description: '',
           bill_drive_link: '',
-          payment_method: 'Cash',
+          payment_method: 'NEFT',
           budget_category_id: '',
         });
         setSelectedFile(null);
@@ -1031,7 +1032,7 @@ const ProjectExpenses: React.FC = () => {
                           onChange={(e) => setNewExpense({ 
                             ...newExpense, 
                             category: e.target.value,
-                            category_id: '' // keep category_id blank so creation logic will create it
+                            category_id: 'others' // keep category_id as 'others' while typing
                           })}
                           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 mt-2"
                           placeholder="Enter custom category name"
@@ -1065,10 +1066,12 @@ const ProjectExpenses: React.FC = () => {
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     required
                   >
-                    <option value="Cash">Cash</option>
+                    <option value="NEFT">NEFT</option>
+                    <option value="RTGS">RTGS</option>
                     <option value="Cheque">Cheque</option>
-                    <option value="Online">GPay/Online</option>
                     <option value="Card">Card</option>
+                    <option value="Cash">Cash</option>
+                    <option value="Online">GPay/Online</option>
                   </select>
                 </div>
 
@@ -1127,7 +1130,7 @@ const ProjectExpenses: React.FC = () => {
                       total_amount: '',
                       description: '',
                       bill_drive_link: '',
-                      payment_method: 'Cash',
+                      payment_method: 'NEFT',
                       budget_category_id: '',
                     });
                     setSelectedFile(null);

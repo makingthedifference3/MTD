@@ -1027,7 +1027,7 @@ const AccountantExpensesPage: React.FC = () => {
             <div className="flex items-center gap-3">
               <button
                 onClick={exportTable}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center gap-2"
+                className="px-4 py-2 bg-green-400 text-white rounded-lg hover:bg-green-600 transition-colors font-medium flex items-center gap-2"
                 title="Export visible expenses to Excel (Actions column excluded)"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -1275,27 +1275,22 @@ const AccountantExpensesPage: React.FC = () => {
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Expense Code</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Date</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Merchant</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Description</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Category</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Budget Category</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Sub Category</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Project</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
-
-                {/* Mode of Payment column */}
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Mode of Payment</th>
-
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Amount Debited</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Date</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Amount</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Merchant</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Description</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Category</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Budget Cat.</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Project</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Payment</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {getFilteredExpenses().length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={10} className="px-6 py-12 text-center text-gray-500">
                     {expenses.length === 0 ? "No expenses found." : "No expenses match the selected filters."}
                   </td>
                 </tr>
@@ -1310,25 +1305,103 @@ const AccountantExpensesPage: React.FC = () => {
                     transition={{ delay: index * 0.05 }}
                     className={`hover:bg-emerald-50/50 transition-colors ${budgetExceeded ? 'bg-amber-50/30 border-l-4 border-l-amber-500' : ''}`}
                   >
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      <div className="flex items-center gap-2">
+                    {/* Date */}
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                      {new Date(expense.date).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                    </td>
+                    
+                    {/* Amount with budget warning */}
+                    <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
+                      <button
+                        onClick={() => handleViewDetails(expense)}
+                        className="flex items-center gap-1 hover:text-emerald-600 transition-colors cursor-pointer"
+                      >
                         {budgetExceeded && (
-                          <div title="Budget may be exceeded">
+                          <span title="Budget may be exceeded">
                             <AlertTriangle className="w-4 h-4 text-amber-600" />
-                          </div>
+                          </span>
                         )}
-                        {expense.expense_code}
+                        ₹{expense.total_amount.toLocaleString()}
+                      </button>
+                    </td>
+                    
+                    {/* Merchant */}
+                    <td className="px-4 py-3 text-sm text-gray-900">
+                      <div className="max-w-[120px] truncate" title={expense.merchant_name}>
+                        {expense.merchant_name}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{new Date(expense.date).toLocaleDateString()}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{expense.merchant_name}</td>
-                    <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate" title={expense.description}>{expense.description || '-'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{expense.category}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{getBudgetCategoryHierarchy((expense as any).budget_category_id).category || '-'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{getBudgetCategoryHierarchy((expense as any).budget_category_id).subcategory || '-'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{projects.find(p => p.id === expense.project_id)?.name || '-'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                    
+                    {/* Description - expandable */}
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      <div className="max-w-[150px]">
+                        {expense.description && expense.description.length > 30 ? (
+                          <div className="group relative">
+                            <span className="truncate block">{expense.description.substring(0, 30)}...</span>
+                            <span className="cursor-pointer text-emerald-600 text-xs hover:underline">more</span>
+                            <div className="hidden group-hover:block absolute z-10 bg-gray-900 text-white text-xs rounded p-2 shadow-lg max-w-xs left-0 top-full mt-1">
+                              {expense.description}
+                            </div>
+                          </div>
+                        ) : (
+                          <span>{expense.description || '-'}</span>
+                        )}
+                      </div>
+                    </td>
+                    
+                    {/* Category */}
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      <div className="max-w-[100px] truncate" title={expense.category}>
+                        {expense.category}
+                      </div>
+                    </td>
+                    
+                    {/* Budget Category - combined with subcategory */}
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      <div className="max-w-[120px]">
+                        {(() => {
+                          const hierarchy = getBudgetCategoryHierarchy((expense as any).budget_category_id);
+                          const combined = [hierarchy.category, hierarchy.subcategory].filter(Boolean).join(' > ');
+                          if (combined.length > 25) {
+                            return (
+                              <div className="group relative">
+                                <span className="truncate block">{combined.substring(0, 25)}...</span>
+                                <span className="cursor-pointer text-emerald-600 text-xs hover:underline">more</span>
+                                <div className="hidden group-hover:block absolute z-10 bg-gray-900 text-white text-xs rounded p-2 shadow-lg max-w-xs left-0 top-full mt-1 whitespace-normal">
+                                  {combined}
+                                </div>
+                              </div>
+                            );
+                          }
+                          return <span>{combined || '-'}</span>;
+                        })()}
+                      </div>
+                    </td>
+                    
+                    {/* Project - expandable */}
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      <div className="max-w-[120px]">
+                        {(() => {
+                          const projectName = projects.find(p => p.id === expense.project_id)?.name || '-';
+                          if (projectName.length > 20) {
+                            return (
+                              <div className="group relative">
+                                <span className="truncate block">{projectName.substring(0, 20)}...</span>
+                                <span className="cursor-pointer text-emerald-600 text-xs hover:underline">more</span>
+                                <div className="hidden group-hover:block absolute z-10 bg-gray-900 text-white text-xs rounded p-2 shadow-lg max-w-xs left-0 top-full mt-1 whitespace-normal">
+                                  {projectName}
+                                </div>
+                              </div>
+                            );
+                          }
+                          return <span>{projectName}</span>;
+                        })()}
+                      </div>
+                    </td>
+                    
+                    {/* Status */}
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                         expense.status === 'approved' 
                           ? 'bg-emerald-100 text-emerald-700' 
                           : expense.status === 'accepted'
@@ -1342,17 +1415,21 @@ const AccountantExpensesPage: React.FC = () => {
                         {expense.status.charAt(0).toUpperCase() + expense.status.slice(1)}
                       </span>
                     </td>
-
-                    {/* Mode of Payment */}
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{expense.payment_method || '-'}</td>
-
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">₹{expense.total_amount.toLocaleString()}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    
+                    {/* Payment Method */}
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      <div className="max-w-[80px] truncate" title={expense.payment_method}>
+                        {expense.payment_method || '-'}
+                      </div>
+                    </td>
+                    
+                    {/* Actions */}
+                    <td className="px-4 py-3 whitespace-nowrap text-sm">
                       <button
                         onClick={() => handleViewDetails(expense)}
                         className="text-emerald-600 hover:text-emerald-700 font-medium hover:underline"
                       >
-                        View Details
+                        View
                       </button>
                     </td>
                   </motion.tr>

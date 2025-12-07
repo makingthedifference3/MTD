@@ -17,7 +17,7 @@ export interface ProjectExpense {
   base_amount: number;
   tax_amount?: number;
   status: 'draft' | 'submitted' | 'pending' | 'accepted' | 'approved' | 'rejected' | 'reimbursed' | 'paid';
-  payment_method: 'Cash' | 'Cheque' | 'Online' | 'Card';
+  payment_method: 'Cash' | 'Cheque' | 'Online' | 'Card' | 'NEFT' | 'RTGS';
   submitted_by?: string;
   approved_by?: string;
   rejection_reason?: string;
