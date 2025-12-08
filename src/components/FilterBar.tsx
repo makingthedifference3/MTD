@@ -3,6 +3,7 @@ import type { CSRPartner, Project } from '../services/filterService';
 import type { Toll } from '../services/tollsService';
 import { Building2, FolderKanban, X, Loader, MapPin } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getProjectLogoPath } from '../constants/projectOptions';
 
 interface FilterBarProps {
   workFilter?: string;
@@ -45,6 +46,7 @@ const FilterBar = ({ workFilter = '', onWorkFilterChange, workOptions = [], stat
 
   const selectedTollInfo = selectedToll ? tolls.find((toll: Toll) => toll.id === selectedToll) : null;
   const selectedTollName = selectedTollInfo?.toll_name || selectedTollInfo?.poc_name || null;
+  const projectLogoUrl = getProjectLogoPath(selectedProjectName || undefined);
 
   const handlePartnerChange = (partnerId: string) => {
     setSelectedToll(null); // clear toll when switching partners so stale toll filters disappear
@@ -220,12 +222,23 @@ const FilterBar = ({ workFilter = '', onWorkFilterChange, workOptions = [], stat
             Project {filtersLocked && <span className="text-blue-600">(Locked)</span>}
           </label>
           <div className="relative">
-            <FolderKanban className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-600" />
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 overflow-hidden rounded-full bg-gray-100 flex items-center justify-center border border-emerald-100">
+              {projectLogoUrl ? (
+                <img
+                  src={projectLogoUrl}
+                  alt={`${selectedProjectName || 'Project'} logo`}
+                  className="w-5 h-5 object-cover"
+                  loading="lazy"
+                />
+              ) : (
+                <FolderKanban className="w-4 h-4 text-emerald-600" />
+              )}
+            </div>
             <select
               value={selectedProject || 'all'}
               onChange={(e) => handleProjectChange(e.target.value)}
               disabled={!selectedPartner || isLoading || filtersLocked}
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl border-2 border-emerald-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all bg-white text-gray-900 font-medium text-sm appearance-none cursor-pointer hover:border-emerald-300 disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-gray-50"
+              className="w-full pl-14 pr-4 py-2.5 rounded-xl border-2 border-emerald-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all bg-white text-gray-900 font-medium text-sm appearance-none cursor-pointer hover:border-emerald-300 disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-gray-50"
             >
               <option value="all">
                 {selectedPartner ? 'All Projects (Partner-wise)' : 'Select Partner First'}

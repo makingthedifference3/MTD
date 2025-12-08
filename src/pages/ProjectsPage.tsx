@@ -44,19 +44,11 @@ import {
 } from '../services/teamTemplatesService';
 import { BENEFICIARY_TYPES } from '../constants/beneficiaryTypes';
 import { INDIAN_STATES } from '../constants/indianStates';
-import { WORK_TYPE_OPTIONS } from '../constants/projectOptions';
-
-const PROJECT_NAME_OPTIONS = [
-  'Shoonya',
-  'Lajja',
-  'Lajja - Naari Shakti Niketan',
-  'Lake Restoration',
-  'Gyandaan',
-  'Construction',
-  'Road Safety',
-  'Roshni',
-  'Traffic Park',
-] as const;
+import {
+  PROJECT_NAME_OPTIONS,
+  getProjectLogoPath,
+  WORK_TYPE_OPTIONS,
+} from '../constants/projectOptions';
 
 interface TeamMemberFormEntry {
   userId: string;
@@ -1318,6 +1310,7 @@ const ProjectsPage = () => {
       <div className="grid grid-cols-1 gap-6 mt-6">
         {displayProjects.map((project, index) => {
           const isCurrentDeleting = isDeletingProject && projectToDelete?.id === project.id;
+          const projectLogoUrl = getProjectLogoPath(project.name);
 
           return (
             <motion.div
@@ -1329,8 +1322,17 @@ const ProjectsPage = () => {
             >
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center space-x-3">
-                  <div className="p-3 bg-emerald-50 rounded-xl">
-                    <FolderKanban className="w-6 h-6 text-emerald-600" />
+                  <div className="p-3 bg-emerald-50 rounded-xl flex items-center justify-center">
+                    {projectLogoUrl ? (
+                      <img
+                        src={projectLogoUrl}
+                        alt={`${project.name} logo`}
+                        className="w-6 h-6 object-cover rounded-full"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <FolderKanban className="w-6 h-6 text-emerald-600" />
+                    )}
                   </div>
                   <div>
                     <h3 className="font-bold text-gray-900 text-lg">{project.name}</h3>

@@ -5,6 +5,7 @@ import {
   ChevronRight, Target, BarChart3, FolderKanban, Check, Circle,
   ArrowLeft, Building2, MapPin
 } from 'lucide-react';
+import { getProjectLogoPath } from '../constants/projectOptions';
 import { useFilter } from '../context/useFilter';
 import type { Project } from '../services/filterService';
 import type { Toll } from '../services/tollsService';
@@ -655,53 +656,65 @@ const ProjectTimelinePage = () => {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {groupedProjects().map((folder, index) => (
-                  <motion.button
-                    key={folder.name}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    onClick={() => handleFolderClick(folder.name)}
-                    className="group relative text-left"
-                  >
-                    <div className="absolute inset-0 bg-linear-to-br from-blue-500/20 to-purple-600/20 rounded-2xl blur-2xl group-hover:blur-3xl transition-all opacity-0 group-hover:opacity-100"></div>
-                    
-                    <div className="relative bg-white border-2 border-gray-200 hover:border-blue-500 rounded-2xl p-6 transition-all duration-300 hover:shadow-2xl hover:shadow-blue-500/20 hover:-translate-y-2 overflow-hidden">
-                      <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 rounded-bl-3xl group-hover:bg-blue-500/10 transition-colors"></div>
+                {groupedProjects().map((folder, index) => {
+                  const folderLogoUrl = getProjectLogoPath(folder.name);
+                  return (
+                    <motion.button
+                      key={folder.name}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.05 }}
+                      onClick={() => handleFolderClick(folder.name)}
+                      className="group relative text-left"
+                    >
+                      <div className="absolute inset-0 bg-linear-to-br from-blue-500/20 to-purple-600/20 rounded-2xl blur-2xl group-hover:blur-3xl transition-all opacity-0 group-hover:opacity-100"></div>
                       
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="p-3 bg-blue-100 rounded-xl group-hover:bg-blue-200 transition-colors">
-                          <FolderKanban className="w-6 h-6 text-blue-600" />
-                        </div>
-                        <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-all" />
-                      </div>
-                      
-                      <h3 className="text-lg font-bold text-gray-900 mb-3 line-clamp-2">
-                        {folder.name}
-                      </h3>
-                      
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2 text-sm text-gray-600">
-                          <FolderKanban className="w-4 h-4" />
-                          <span>{folder.projects.length} {folder.projects.length === 1 ? 'Project' : 'Projects'}</span>
+                      <div className="relative bg-white border-2 border-gray-200 hover:border-blue-500 rounded-2xl p-6 transition-all duration-300 hover:shadow-2xl hover:shadow-blue-500/20 hover:-translate-y-2 overflow-hidden">
+                        <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 rounded-bl-3xl group-hover:bg-blue-500/10 transition-colors"></div>
+                        
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="p-3 bg-blue-100 rounded-xl group-hover:bg-blue-200 transition-colors flex items-center justify-center">
+                            {folderLogoUrl ? (
+                              <img
+                                src={folderLogoUrl}
+                                alt={`${folder.name} logo`}
+                                className="w-6 h-6 object-cover rounded-full"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <FolderKanban className="w-6 h-6 text-blue-600" />
+                            )}
+                          </div>
+                          <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-all" />
                         </div>
                         
-                        <div className="flex gap-2">
-                          {folder.activeCount > 0 && (
-                            <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-lg font-medium">
-                              {folder.activeCount} Active
-                            </span>
-                          )}
-                          {folder.completedCount > 0 && (
-                            <span className="px-2 py-1 bg-emerald-100 text-emerald-700 text-xs rounded-lg font-medium">
-                              {folder.completedCount} Completed
-                            </span>
-                          )}
+                        <h3 className="text-lg font-bold text-gray-900 mb-3 line-clamp-2">
+                          {folder.name}
+                        </h3>
+                        
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 text-sm text-gray-600">
+                            <FolderKanban className="w-4 h-4" />
+                            <span>{folder.projects.length} {folder.projects.length === 1 ? 'Project' : 'Projects'}</span>
+                          </div>
+                          
+                          <div className="flex gap-2">
+                            {folder.activeCount > 0 && (
+                              <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-lg font-medium">
+                                {folder.activeCount} Active
+                              </span>
+                            )}
+                            {folder.completedCount > 0 && (
+                              <span className="px-2 py-1 bg-emerald-100 text-emerald-700 text-xs rounded-lg font-medium">
+                                {folder.completedCount} Completed
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </motion.button>
-                ))}
+                    </motion.button>
+                  );
+                })}
               </div>
             )}
           </motion.div>
@@ -731,73 +744,80 @@ const ProjectTimelinePage = () => {
               }
               
               return (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {projectsToShow.map((project, index) => (
-                    <motion.button
-                      key={project.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.05 }}
-                    onClick={() => handleProjectClick(project)}
-                    className="group relative text-left"
-                  >
-                    <div className="absolute inset-0 bg-linear-to-br from-emerald-500/20 to-emerald-600/20 rounded-2xl blur-2xl group-hover:blur-3xl transition-all opacity-0 group-hover:opacity-100"></div>
-                    
-                    <div className="relative bg-white border-2 border-gray-200 hover:border-emerald-500 rounded-2xl p-6 transition-all duration-300 hover:shadow-2xl hover:shadow-emerald-500/20 hover:-translate-y-2 overflow-hidden">
-                      <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-bl-3xl group-hover:bg-emerald-500/10 transition-colors"></div>
-                      
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="p-3 bg-emerald-100 rounded-xl group-hover:bg-emerald-200 transition-colors">
-                          <FolderKanban className="w-6 h-6 text-emerald-600" />
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                  {projectsToShow.map((project, projectIndex) => {
+                    const projectLogoUrl = getProjectLogoPath(project.name);
+                    const totalBudget = project.total_budget ?? 0;
+                    const utilizedBudget = project.utilized_budget ?? 0;
+                    const remainingBudget = totalBudget - utilizedBudget;
+                    const remainingLabel = remainingBudget >= 0 ? 'Remaining' : 'Overrun';
+
+                    return (
+                      <motion.button
+                        key={project.id}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: projectIndex * 0.05 }}
+                        onClick={() => handleProjectClick(project)}
+                        className="group relative text-left"
+                      >
+                        <div className="absolute inset-0 bg-linear-to-br from-blue-500/15 to-purple-500/15 rounded-2xl blur-2xl group-hover:blur-3xl transition-all opacity-0 group-hover:opacity-100"></div>
+
+                        <div className="relative bg-white border-2 border-gray-200 rounded-2xl p-6 transition-all duration-300 hover:shadow-2xl hover:shadow-blue-500/20 hover:-translate-y-2 overflow-hidden">
+                          <div className="absolute top-0 right-0 w-28 h-28 bg-blue-500/5 rounded-bl-3xl group-hover:bg-blue-500/10 transition-colors"></div>
+
+                          <div className="flex items-start justify-between mb-4">
+                            <div className="flex items-center gap-3">
+                              <div className="p-3 bg-blue-100 rounded-xl group-hover:bg-blue-200 transition-colors flex items-center justify-center">
+                                {projectLogoUrl ? (
+                                  <img
+                                    src={projectLogoUrl}
+                                    alt={`${project.name || 'Project'} logo`}
+                                    className="w-8 h-8 object-cover rounded-full"
+                                    loading="lazy"
+                                  />
+                                ) : (
+                                  <FolderKanban className="w-6 h-6 text-blue-600" />
+                                )}
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500">
+                                  {project.status ? project.status.replace(/_/g, ' ') : 'Active'}
+                                </p>
+                                <h3 className="text-lg font-bold text-gray-900 leading-tight">
+                                  {project.name || 'Untitled Project'}
+                                </h3>
+                              </div>
+                            </div>
+                            <ChevronRight className="w-5 h-5 text-gray-400 transition-transform group-hover:translate-x-1" />
+                          </div>
+
+                          {project.description && (
+                            <p className="text-sm text-gray-600 mb-4 line-clamp-2">{project.description}</p>
+                          )}
+
+                          <div className="grid grid-cols-2 gap-3 text-xs text-gray-600">
+                            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3">
+                              <p className="text-base font-bold text-gray-900">
+                                {totalBudget > 0 ? `₹${(totalBudget / 100000).toFixed(2)}L` : '—'}
+                              </p>
+                              <p className="uppercase tracking-[0.2em] text-[10px] text-gray-400">Allocated</p>
+                            </div>
+                            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3">
+                              <p className="text-base font-bold text-gray-900">
+                                {remainingBudget !== 0
+                                  ? `₹${Math.abs(remainingBudget / 100000).toFixed(1)}L`
+                                  : '₹0.0L'}
+                              </p>
+                              <p className="uppercase tracking-[0.2em] text-[10px] text-gray-400">
+                                {remainingLabel}
+                              </p>
+                            </div>
+                          </div>
                         </div>
-                        <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-emerald-600 group-hover:translate-x-1 transition-all" />
-                      </div>
-                      
-                      <h3 className="text-lg font-bold text-gray-900 mb-2 line-clamp-2">
-                        {project.name}{project.project_code ? ` : ${project.project_code}` : ''}
-                      </h3>
-                      
-                      <div className="flex items-center gap-2 mb-3">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          project.status === 'active' ? 'bg-emerald-100 text-emerald-700' :
-                          project.status === 'completed' ? 'bg-blue-100 text-blue-700' :
-                          'bg-gray-100 text-gray-700'
-                        }`}>
-                          {project.status?.toUpperCase() || 'ACTIVE'}
-                        </span>
-                      </div>
-                      
-                      {project.location && (
-                        <div className="flex items-center gap-1 text-sm text-gray-600 mb-3">
-                          <MapPin className="w-4 h-4" />
-                          <span className="line-clamp-1">{project.location}</span>
-                        </div>
-                      )}
-                      
-                      {/* Budget Information */}
-                      <div className="grid grid-cols-3 gap-2 mt-auto pt-3 border-t border-gray-100">
-                        <div>
-                          <p className="text-xs text-gray-500">Budget</p>
-                          <p className="text-sm font-bold text-blue-600">
-                            ₹{((project.total_budget || 0) / 100000).toFixed(1)}L
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500">Utilized</p>
-                          <p className="text-sm font-bold text-orange-600">
-                            ₹{((project.utilized_budget || 0) / 100000).toFixed(1)}L
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500">Remaining</p>
-                          <p className="text-sm font-bold text-purple-600">
-                            ₹{(((project.total_budget || 0) - (project.utilized_budget || 0)) / 100000).toFixed(1)}L
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </motion.button>
-                ))}
+                      </motion.button>
+                    );
+                  })}
                 </div>
               );
             })()}
