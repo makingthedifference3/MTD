@@ -6,6 +6,7 @@ import {
   CheckCircle2, Users, Activity, Award, type LucideIcon, BarChart3, Grid3x3,
   Target, Zap
 } from 'lucide-react';
+import { getProjectLogoPath } from '../constants/projectOptions';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Label, Legend } from 'recharts';
 import { useFilter } from '../context/useFilter';
 import { useProjectContext } from '../context/useProjectContext';
@@ -894,6 +895,8 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                     ? `₹${(group.totalBudget / 100000).toFixed(2)}L`
                     : '';
 
+                  const folderLogoUrl = getProjectLogoPath(group.name);
+
                   const impactItems = [
                     { label: 'Schools Renovated', value: group.schoolsRenovated, color: 'purple' },
                     { label: 'Students Enrolled', value: group.studentsEnrolled, color: 'blue' },
@@ -926,8 +929,17 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                         
                         <div className="relative z-10">
                           <div className="flex items-start justify-between mb-4">
-                            <div className="p-3 bg-emerald-100 group-hover:bg-emerald-200 rounded-xl transition-all">
-                              <FolderKanban className="w-6 h-6 text-emerald-600" />
+                            <div className="p-3 bg-emerald-100 group-hover:bg-emerald-200 rounded-xl transition-all flex items-center justify-center">
+                              {folderLogoUrl ? (
+                                <img
+                                  src={folderLogoUrl}
+                                  alt={`${group.name} logo`}
+                                  className="w-6 h-6 object-cover rounded-full"
+                                  loading="lazy"
+                                />
+                              ) : (
+                                <FolderKanban className="w-6 h-6 text-emerald-600" />
+                              )}
                             </div>
                             <span className="text-sm font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">
                               {group.projects.length} {projectLabel}
@@ -997,6 +1009,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
         {viewMode === 'folderDetails' && selectedFolder && (() => {
           const folderData = groupedProjects.find(g => g.name === selectedFolder);
           if (!folderData) return null;
+          const folderLogoUrl = getProjectLogoPath(folderData.name);
 
           const impactItems = [
             { label: 'Schools Renovated', value: folderData.schoolsRenovated, color: 'purple', icon: '🏫' },
@@ -1032,7 +1045,16 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                   </div>
                   <ChevronRight className="w-4 h-4 text-gray-400" />
                   <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-full font-semibold">
-                    <FolderKanban className="w-4 h-4" />
+                      {folderLogoUrl ? (
+                        <img
+                          src={folderLogoUrl}
+                          alt={`${folderData.name} logo`}
+                          className="w-4 h-4 object-cover rounded-full"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <FolderKanban className="w-4 h-4" />
+                      )}
                     {selectedFolder}
                   </div>
                 </div>
@@ -1045,8 +1067,17 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                 className="bg-white border-2 border-gray-200 rounded-3xl p-6 mb-6 shadow-lg"
               >
                 <div className="flex items-center gap-4 mb-6">
-                  <div className="p-4 bg-emerald-100 rounded-2xl">
-                    <FolderKanban className="w-8 h-8 text-emerald-600" />
+                  <div className="p-4 bg-emerald-100 rounded-2xl flex items-center justify-center">
+                    {folderLogoUrl ? (
+                      <img
+                        src={folderLogoUrl}
+                        alt={`${folderData.name} logo`}
+                        className="w-8 h-8 object-cover rounded-full"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <FolderKanban className="w-8 h-8 text-emerald-600" />
+                    )}
                   </div>
                   <div>
                     <h2 className="text-2xl font-bold text-gray-900">{selectedFolder}</h2>
@@ -1110,6 +1141,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                 {folderData.projects.map((project, projectIndex) => {
                   const Icon = getIconComponent(project.display_icon);
                   const colorClass = project.display_color || 'emerald';
+                  const projectLogoUrl = getProjectLogoPath(project.name);
 
                   return (
                     <motion.button
@@ -1127,8 +1159,17 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
 
                         <div className="relative z-10">
                           <div className="flex items-start justify-between mb-4">
-                            <div className={`p-3 bg-${colorClass}-100 group-hover:bg-${colorClass}-200 rounded-xl transition-all`}>
-                              <Icon className={`w-6 h-6 text-${colorClass}-600`} />
+                            <div className={`p-3 bg-${colorClass}-100 group-hover:bg-${colorClass}-200 rounded-xl transition-all flex items-center justify-center`}>
+                              {projectLogoUrl ? (
+                                <img
+                                  src={projectLogoUrl}
+                                  alt={`${project.name || 'Project'} logo`}
+                                  className="w-6 h-6 object-cover rounded-full"
+                                  loading="lazy"
+                                />
+                              ) : (
+                                <Icon className={`w-6 h-6 text-${colorClass}-600`} />
+                              )}
                             </div>
                             <div className={`text-sm font-bold text-${colorClass}-600 bg-${colorClass}-50 px-3 py-1 rounded-full`}>
                               {project.status || 'Active'}
