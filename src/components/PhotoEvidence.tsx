@@ -23,10 +23,10 @@ const PhotoEvidence: React.FC<PhotoEvidenceProps> = ({ photos, isFullPageGrid = 
     : "grid-cols-2";            // Page 1: Side-by-side row
 
   return (
-    <div className={`grid ${gridClass} gap-5 flex-grow min-h-0`}>
+    <div className={`grid ${gridClass} gap-5 grow min-h-0`}>
       {photos.map((photo) => (
         <div key={photo.id} className="border-2 border-black p-1 bg-white relative flex flex-col h-full min-h-0">
-          <div className="w-full flex-grow relative overflow-hidden bg-gray-100 h-full">
+          <div className="w-full grow relative overflow-hidden bg-gray-100 h-full">
               <img 
                   src={photo.url} 
                   alt={`Evidence ${photo.id}`} 

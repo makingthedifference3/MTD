@@ -3,8 +3,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Calendar, CheckCircle2, Clock, Loader, Trash2, Edit2, X, Save,
   ChevronRight, Target, BarChart3, FolderKanban, Check, Circle,
-  ArrowLeft, Building2, MapPin
+  ArrowLeft, Building2, MapPin, UserPlus, Bell
 } from 'lucide-react';
+import { createTask } from '../services/tasksService';
+import { useAuth } from '../context/useAuth';
 import { getProjectLogoPath } from '../constants/projectOptions';
 import { useFilter } from '../context/useFilter';
 import type { Project } from '../services/filterService';
@@ -28,6 +30,7 @@ import {
 } from '../services/projectActivitiesService';
 
 const ProjectTimelinePage = () => {
+  const { currentUser } = useAuth();
   const { 
     csrPartners, 
     filteredProjects, 
@@ -77,6 +80,8 @@ const ProjectTimelinePage = () => {
     start_date: '',
     end_date: '',
     responsible_person: '',
+    assigned_to: '',
+    task_due_date: '',
   });
   
   // Team members state
@@ -295,6 +300,8 @@ const ProjectTimelinePage = () => {
       start_date: '',
       end_date: '',
       responsible_person: '',
+      assigned_to: '',
+      task_due_date: '',
     });
     setDescriptionItems([]);
     setNewItemText('');
@@ -311,6 +318,8 @@ const ProjectTimelinePage = () => {
       start_date: activity.start_date || '',
       end_date: activity.end_date || '',
       responsible_person: activity.responsible_person || '',
+      assigned_to: activity.assigned_to || '',
+      task_due_date: '',
     });
     
     const items = await getActivityItems(activity.id);
@@ -421,6 +430,44 @@ const ProjectTimelinePage = () => {
             item_order: i + 1,
             is_completed: descriptionItems[i].isCompleted,
           });
+        }
+      }
+
+      // Create task if activity is assigned to a team member
+      if (savedActivity && formData.assigned_to && formData.task_due_date) {
+        try {
+          // Generate task code
+          const taskCode = `TASK-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+          
+          // Build task description from activity description and items
+          let taskDescription = formData.description || '';
+          if (descriptionItems.length > 0) {
+            taskDescription += '\n\nTask Items:\n' + descriptionItems.map((item, i) => 
+              `${i + 1}. ${item.text}`
+            ).join('\n');
+          }
+
+          await createTask({
+            task_code: taskCode,
+            project_id: selectedProjectData.id,
+            title: formData.title,
+            description: taskDescription,
+            task_type: 'Development',
+            assigned_to: formData.assigned_to,
+            assigned_by: currentUser?.id,
+            due_date: formData.task_due_date,
+            start_date: formData.start_date || undefined,
+            status: 'not_started',
+            priority: formData.priority,
+            completion_percentage: 0,
+            is_active: true,
+            is_visible_to_client: false,
+            is_from_client_timeline: false,
+          });
+        } catch (taskError) {
+          console.error('Error creating task:', taskError);
+          // Don't fail the whole operation if task creation fails
+          alert('Activity saved but task creation failed. Please create the task manually.');
         }
       }
 
@@ -1326,7 +1373,7 @@ const ProjectTimelinePage = () => {
                 {/* Responsible Person */}
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Responsible Person
+                    Responsible Person (Display Only)
                   </label>
                   <select
                     value={formData.responsible_person}
@@ -1348,6 +1395,72 @@ const ProjectTimelinePage = () => {
                     <p className="text-sm text-amber-600 mt-2">No team members assigned to this project yet.</p>
                   )}
                 </div>
+
+                {/* Divider */}
+                <div className="border-t-2 border-gray-200 pt-4">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="p-2 bg-emerald-100 rounded-lg">
+                      <Bell className="w-5 h-5 text-emerald-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-gray-900">Create Task Assignment</h3>
+                      <p className="text-sm text-gray-600">Assign this activity to a team member and it will appear in their task list</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Assign to Team Member */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    <div className="flex items-center gap-2">
+                      <UserPlus className="w-4 h-4 text-emerald-600" />
+                      <span>Assign Task To (Optional)</span>
+                    </div>
+                  </label>
+                  <select
+                    value={formData.assigned_to}
+                    onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
+                    className="w-full px-4 py-3 border-2 border-emerald-200 rounded-xl focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all bg-white text-gray-900 font-medium"
+                  >
+                    <option value="" className="text-gray-500">Don't create a task</option>
+                    {teamMembers.map((member) => (
+                      <option 
+                        key={member.user_id} 
+                        value={member.user_id}
+                        className="text-gray-900 py-2"
+                      >
+                        {member.full_name} : {member.role}
+                      </option>
+                    ))}
+                  </select>
+                  {formData.assigned_to && (
+                    <p className="text-sm text-emerald-600 mt-2 flex items-center gap-1">
+                      <CheckCircle2 className="w-4 h-4" />
+                      A task will be created and assigned to this team member
+                    </p>
+                  )}
+                </div>
+
+                {/* Task Due Date */}
+                {formData.assigned_to && (
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-emerald-600" />
+                        <span>Task Due Date *</span>
+                      </div>
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.task_due_date}
+                      onChange={(e) => setFormData({ ...formData, task_due_date: e.target.value })}
+                      className="w-full px-4 py-3 border-2 border-emerald-200 rounded-xl focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all"
+                      required={!!formData.assigned_to}
+                      min={new Date().toISOString().split('T')[0]}
+                    />
+                    <p className="text-sm text-gray-600 mt-2">The assigned team member will receive a notification about this task</p>
+                  </div>
+                )}
               </form>
 
               {/* Modal Footer */}

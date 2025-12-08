@@ -4,6 +4,7 @@ import { User2, Mail, CalendarDays } from 'lucide-react';
 import { getAllUsers } from '../services/authService';
 import type { AuthUser } from '../services/authService';
 import { PMDashboardInner } from './PMDashboard';
+import { useFilter } from '../context/useFilter';
 
 const formatRoleLabel = (role?: string) => {
   if (!role) return 'User';
@@ -16,6 +17,7 @@ const formatRoleLabel = (role?: string) => {
 };
 
 const AdminDashboard = () => {
+  const { resetFilters } = useFilter();
   const [dbUsers, setDbUsers] = useState<AuthUser[]>([]);
 
   useEffect(() => {
@@ -29,6 +31,14 @@ const AdminDashboard = () => {
     };
 
     loadUsers();
+  }, []);
+
+  // Reset filters when leaving the page (only on unmount)
+  useEffect(() => {
+    return () => {
+      resetFilters();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const recentUsers = useMemo(
