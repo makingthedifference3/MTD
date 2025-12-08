@@ -111,7 +111,16 @@ const FilterBar = ({ workFilter = '', onWorkFilterChange, workOptions = [], stat
 
   const formatProjectLabel = (project: Project) => {
     const location = project.location?.trim();
-    return location ? `${project.name} (${location})` : project.name;
+    const projectCode = project.project_code?.trim();
+    
+    if (location && projectCode) {
+      return `${project.name} (${location}) : ${projectCode}`;
+    } else if (location) {
+      return `${project.name} (${location})`;
+    } else if (projectCode) {
+      return `${project.name} : ${projectCode}`;
+    }
+    return project.name;
   };
 
   return (

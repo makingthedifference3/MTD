@@ -38,7 +38,7 @@ const menuItems = [
   // { id: 'utilization-certificate', label: 'Utilization Certificate', icon: FileCheck, roles: ['admin', 'accountant'] },
   { id: 'my-tasks', label: 'My Tasks', icon: CheckSquare, roles: ['accountant', 'project_manager', 'team_member', 'data_manager'] },
   // Admin Only
-  { id: 'user-management', label: 'User Management', icon: Users, roles: ['admin','team_member'] },
+  { id: 'user-management', label: 'User Management', icon: Users, roles: ['admin'] },
 ];
 
 const Sidebar = ({ children, currentPage, onNavigate }: SidebarProps) => {

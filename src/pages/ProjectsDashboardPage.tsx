@@ -240,6 +240,7 @@ export default function ProjectsDashboardPage() {
     setSelectedProject(
       project.id,
       project.name,
+      project.project_code || '',
       project.csr_partner_id,
       project.csr_partner_name,
       project.user_role

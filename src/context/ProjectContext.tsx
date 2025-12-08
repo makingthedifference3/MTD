@@ -3,12 +3,14 @@ import { createContext, useState, type ReactNode } from 'react';
 export interface SelectedProjectContext {
   projectId: string | null;
   projectName: string | null;
+  projectCode: string | null;
   csrPartnerId: string | null;
   csrPartnerName: string | null;
   projectRole: string | null;
   setSelectedProject: (
     projectId: string,
     projectName: string,
+    projectCode: string,
     csrPartnerId: string,
     csrPartnerName: string,
     projectRole: string
@@ -26,6 +28,11 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
 
   const [projectName, setProjectName] = useState<string | null>(() => {
     const saved = localStorage.getItem('selectedProjectName');
+    return saved || null;
+  });
+
+  const [projectCode, setProjectCode] = useState<string | null>(() => {
+    const saved = localStorage.getItem('selectedProjectCode');
     return saved || null;
   });
 
@@ -47,12 +54,14 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
   const handleSetSelectedProject = (
     projectId: string,
     projectName: string,
+    projectCode: string,
     csrPartnerId: string,
     csrPartnerName: string,
     projectRole: string
   ) => {
     setProjectId(projectId);
     setProjectName(projectName);
+    setProjectCode(projectCode);
     setCSRPartnerId(csrPartnerId);
     setCSRPartnerName(csrPartnerName);
     setProjectRole(projectRole);
@@ -60,6 +69,7 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
     // Persist to localStorage
     localStorage.setItem('selectedProjectId', projectId);
     localStorage.setItem('selectedProjectName', projectName);
+    localStorage.setItem('selectedProjectCode', projectCode);
     localStorage.setItem('selectedCSRPartnerId', csrPartnerId);
     localStorage.setItem('selectedCSRPartnerName', csrPartnerName);
     localStorage.setItem('selectedProjectRole', projectRole);
@@ -68,6 +78,7 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
   const handleClearSelectedProject = () => {
     setProjectId(null);
     setProjectName(null);
+    setProjectCode(null);
     setCSRPartnerId(null);
     setCSRPartnerName(null);
     setProjectRole(null);
@@ -75,6 +86,7 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
     // Clear from localStorage
     localStorage.removeItem('selectedProjectId');
     localStorage.removeItem('selectedProjectName');
+    localStorage.removeItem('selectedProjectCode');
     localStorage.removeItem('selectedCSRPartnerId');
     localStorage.removeItem('selectedCSRPartnerName');
     localStorage.removeItem('selectedProjectRole');
@@ -83,6 +95,7 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
   const value: SelectedProjectContext = {
     projectId,
     projectName,
+    projectCode,
     csrPartnerId,
     csrPartnerName,
     projectRole,

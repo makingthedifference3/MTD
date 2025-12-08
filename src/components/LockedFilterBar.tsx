@@ -15,11 +15,13 @@ import { Building2, FolderKanban, Lock } from 'lucide-react';
  */
 
 const LockedFilterBar = () => {
-  const { projectName, csrPartnerName, isProjectSelected } = useProjectContext();
+  const { projectName, projectCode, csrPartnerName, isProjectSelected } = useProjectContext();
 
   if (!isProjectSelected) {
     return null; // Don't show if no project is selected
   }
+
+  const displayProjectName = projectCode ? `${projectName} : ${projectCode}` : projectName;
 
   return (
     <div className="bg-linear-to-r from-emerald-50 to-emerald-100 border-b-2 border-emerald-300 px-8 py-4">
@@ -45,7 +47,7 @@ const LockedFilterBar = () => {
           <FolderKanban className="w-5 h-5 text-emerald-600" />
           <div>
             <p className="text-xs text-emerald-600 font-semibold uppercase tracking-wide">Project</p>
-            <p className="text-sm font-bold text-emerald-900">{projectName}</p>
+            <p className="text-sm font-bold text-emerald-900">{displayProjectName}</p>
           </div>
           <Lock className="w-4 h-4 text-emerald-400 ml-2" />
         </div>

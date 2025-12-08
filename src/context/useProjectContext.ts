@@ -11,6 +11,7 @@ import { useSelectedProject } from './useSelectedProject';
 export interface ProjectContextFilters {
   projectId: string | null;
   projectName: string | null;
+  projectCode: string | null;
   csrPartnerId: string | null;
   csrPartnerName: string | null;
   projectRole: string | null;
@@ -18,11 +19,12 @@ export interface ProjectContextFilters {
 }
 
 export const useProjectContext = (): ProjectContextFilters => {
-  const { projectId, projectName, csrPartnerId, csrPartnerName, projectRole } = useSelectedProject();
+  const { projectId, projectName, projectCode, csrPartnerId, csrPartnerName, projectRole } = useSelectedProject();
 
   return {
     projectId,
     projectName,
+    projectCode,
     csrPartnerId,
     csrPartnerName,
     projectRole,

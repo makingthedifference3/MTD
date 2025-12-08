@@ -160,10 +160,13 @@ export async function getAllProjectsWithPartners(): Promise<Project[]> {
         name,
         description,
         csr_partner_id,
+        toll_id,
+        location,
         status,
         display_color,
         display_icon,
         is_active,
+        logo_url,
         csr_partners (
           id,
           name,

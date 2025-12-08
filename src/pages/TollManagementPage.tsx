@@ -461,7 +461,7 @@ const TollManagementPage = () => {
           <div className="col-span-full text-center py-12 bg-white rounded-2xl border border-gray-100">
             <Building2 className="w-12 h-12 text-gray-300 mx-auto mb-4" />
             <p className="text-gray-500 font-medium">No tolls added yet</p>
-            <p className="text-gray-400 text-sm">Click "Add Toll" to create your first toll/subcompany</p>
+            <p className="text-gray-400 text-sm">Click "Add Toll" to create your first subcompany</p>
           </div>
         )}
       </div>
