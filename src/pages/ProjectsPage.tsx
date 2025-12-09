@@ -659,14 +659,28 @@ const ProjectsPage = () => {
 
       // Handle budget categories
       if (formData.enableBudgetCategories && projectId && formData.budgetCategories.length > 0) {
-        // Note: When editing, we don't delete existing categories to preserve those with expenses
-        // Budget categories are managed separately in the Budget Categories page
-        if (!editingProjectId) {
-          // Only create new categories when creating a new project
+        if (editingProjectId) {
+          // When editing, update/create budget categories without deleting existing ones
+          const { getBudgetCategoriesByProject } = await import('../services/budgetCategoriesService');
+          const existingCategories = await getBudgetCategoriesByProject(projectId);
+          
+          // Create a map of existing categories by name for quick lookup
+          const existingCategoryMap = new Map(
+            existingCategories.map((cat: any) => [cat.name.toLowerCase().trim(), cat])
+          );
+          
+          // Only save new categories that don't exist yet
+          const newCategories = formData.budgetCategories.filter(
+            (cat) => !existingCategoryMap.has(cat.name.toLowerCase().trim())
+          );
+          
+          if (newCategories.length > 0) {
+            await saveBudgetCategories(projectId, newCategories, currentUser?.id);
+          }
+        } else {
+          // When creating new project, save all categories
           await saveBudgetCategories(projectId, formData.budgetCategories, currentUser?.id);
         }
-        // When editing, budget categories should be managed through the Budget Categories page
-        // to avoid conflicts with existing expenses
       }
 
       // Create beneficiary sub-projects if checkbox was checked
