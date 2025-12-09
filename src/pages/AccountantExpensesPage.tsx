@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { XCircle, Clock, CheckCircle2, Ban, DollarSign, AlertTriangle, Loader } from 'lucide-react';
+import { XCircle, Clock, CheckCircle2, Ban, IndianRupee, AlertTriangle, Loader } from 'lucide-react';
 import { projectExpensesService } from '../services/projectExpensesService';
 import type { ProjectExpense } from '../services/projectExpensesService';
 import { supabase } from '../services/supabaseClient';
@@ -1115,7 +1115,7 @@ const AccountantExpensesPage: React.FC = () => {
           className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
         >
           <div className="flex items-center justify-between mb-2">
-            <DollarSign className="w-8 h-8 text-green-500" />
+            <IndianRupee className="w-8 h-8 text-green-500" />
             <span className="text-2xl font-bold text-gray-900">{stats.paid}</span>
           </div>
           <h3 className="text-sm font-medium text-gray-600">Paid</h3>
@@ -1175,7 +1175,7 @@ const AccountantExpensesPage: React.FC = () => {
                     disabled={bulkActionLoading}
                     className="px-4 py-2 bg-green-500 hover:bg-green-600 disabled:bg-gray-300 text-white rounded-lg font-medium text-sm transition-colors flex items-center gap-2"
                   >
-                    {bulkActionLoading ? <Loader className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4" />}
+                    {bulkActionLoading ? <Loader className="w-4 h-4 animate-spin" /> : <IndianRupee className="w-4 h-4" />}
                     Mark as Paid
                   </button>
                 </div>

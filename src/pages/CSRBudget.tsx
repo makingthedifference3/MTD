@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { DollarSign } from 'lucide-react';
+import { IndianRupee } from 'lucide-react';
 import { getBudgetHeads, getBudgetStats, type BudgetHead, type BudgetStats } from '@/services/budgetAllocationService';
 
 const CSRBudget = () => {
@@ -67,7 +67,7 @@ const CSRBudget = () => {
               animate={{ opacity: 1, y: 0 }}
               className="bg-linear-to-r from-emerald-500 to-emerald-600 rounded-2xl p-6 text-white shadow-sm"
             >
-              <DollarSign className="w-8 h-8 mb-2 opacity-80" />
+              <IndianRupee className="w-8 h-8 mb-2 opacity-80" />
               <p className="text-emerald-100 text-sm font-medium mb-1">Total Allocated</p>
               <h3 className="text-3xl font-bold">₹{(stats.totalAllocated / 1000000).toFixed(1)}M</h3>
             </motion.div>

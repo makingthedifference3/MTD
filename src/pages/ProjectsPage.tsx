@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { FormEvent, Dispatch, SetStateAction } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, FolderKanban, DollarSign, X, MapPin, Calendar, Loader, LayoutDashboard, Trash2, Copy, Receipt } from 'lucide-react';
+import { Plus, FolderKanban, IndianRupee, X, MapPin, Calendar, Loader, LayoutDashboard, Trash2, Copy, Receipt } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
 import { useFilter } from '../context/useFilter';
 import { useAuth } from '../context/useAuth';
@@ -1701,14 +1701,14 @@ const ProjectsPage = () => {
 
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
                 <div className="flex items-center space-x-2">
-                  <DollarSign className="w-4 h-4 text-emerald-600" />
+                  <IndianRupee className="w-4 h-4 text-emerald-600" />
                   <div>
                     <p className="text-xs text-gray-600">Budget</p>
                     <p className="text-sm font-semibold text-gray-900">{formatIndianRupee(project.total_budget ?? 0)}</p>
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <DollarSign className="w-4 h-4 text-emerald-600" />
+                  <IndianRupee className="w-4 h-4 text-emerald-600" />
                   <div>
                     <p className="text-xs text-gray-600">Utilized</p>
                     <p className="text-sm font-semibold text-gray-900">{formatIndianRupee(project.utilized_budget ?? 0)}</p>
@@ -4389,7 +4389,7 @@ const AddProjectModal = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <label className="text-sm font-medium text-gray-700">
             <span className="flex items-center gap-1">
-              <DollarSign className="w-4 h-4" /> Total Budget (₹)
+              <IndianRupee className="w-4 h-4" /> Total Budget (₹)
             </span>
             <input
               type="number"

@@ -3,7 +3,7 @@ import type { FormEvent, Dispatch, SetStateAction } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ArrowLeft, Plus, Building2, MapPin, Phone, Mail, Loader, X, 
-  User2, DollarSign, Edit, Trash2, CheckCircle, Eye, EyeOff 
+  User2, IndianRupee, Edit, Trash2, CheckCircle, Eye, EyeOff 
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getCSRPartnerById, type CSRPartner } from '@/services/csrPartnersService';
@@ -339,7 +339,7 @@ const TollManagementPage = () => {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <DollarSign className="w-5 h-5 text-emerald-600" />
+            <IndianRupee className="w-5 h-5 text-emerald-600" />
             <div>
               <p className="text-xs text-gray-500">Budget Allocated</p>
               <p className="font-medium text-gray-900">{formatIndianRupee(partnerBudgetTotal)}</p>
@@ -426,7 +426,7 @@ const TollManagementPage = () => {
                   </div>
                 )}
                 <div className="flex items-center text-sm text-gray-600">
-                  <DollarSign className="w-4 h-4 mr-2 text-blue-600" />
+                  <IndianRupee className="w-4 h-4 mr-2 text-blue-600" />
                   Budget: {formatIndianRupee(tollBudgetMap.get(toll.id) ?? 0)}
                 </div>
               </div>

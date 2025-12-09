@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { XCircle, CheckCircle2, Ban, DollarSign } from 'lucide-react';
+import { XCircle, CheckCircle2, Ban, IndianRupee } from 'lucide-react';
 import { projectExpensesService } from '../services/projectExpensesService';
 import type { ProjectExpense } from '../services/projectExpensesService';
 import { supabase } from '../services/supabaseClient';
@@ -337,7 +337,7 @@ const AdminExpensesPage: React.FC = () => {
           className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
         >
           <div className="flex items-center justify-between mb-2">
-            <DollarSign className="w-8 h-8 text-blue-500" />
+            <IndianRupee className="w-8 h-8 text-blue-500" />
             <span className="text-2xl font-bold text-gray-900">{stats.accepted}</span>
           </div>
           <h3 className="text-sm font-medium text-gray-600">Accepted (Pending Review)</h3>

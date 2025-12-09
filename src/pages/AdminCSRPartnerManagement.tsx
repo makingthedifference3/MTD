@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Edit2, Trash2, Building2, MapPin, DollarSign, Users } from 'lucide-react';
+import { Plus, Edit2, Trash2, Building2, MapPin, IndianRupee, Users } from 'lucide-react';
 import { useFilter } from '../context/useFilter';
 import { useDelayedUndoAction } from '../hooks/useDelayedUndoAction';
 import { csrPartnerService, type CSRPartner, type CSRPartnerToll } from '../services/csrPartnerService';
@@ -477,7 +477,7 @@ const AdminCSRPartnerManagement = () => {
                               </div>
                               {toll.budget_allocation > 0 && (
                                 <div className="mt-2 flex items-center space-x-1 text-xs text-emerald-600">
-                                  <DollarSign className="w-3 h-3" />
+                                  <IndianRupee className="w-3 h-3" />
                                   <span>Budget: {formatIndianRupee(toll.budget_allocation)}</span>
                                 </div>
                               )}

@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Menu, X, LogOut, LayoutDashboard, Briefcase, CheckSquare, Image, FileText, Users, Calendar,
-  DollarSign, Receipt, CreditCard, RefreshCw, ClipboardList, GraduationCap, TrendingUp, CalendarClock, Bell
+  IndianRupee, Receipt, CreditCard, RefreshCw, ClipboardList, GraduationCap, TrendingUp, CalendarClock, Bell
 } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -26,7 +26,7 @@ const menuItems = [
   { id: 'media', label: 'Media', icon: Image, roles: ['admin', 'project_manager'] },
   { id: 'article', label: 'Article', icon: FileText, roles: ['admin', 'project_manager'] },
   { id: 'calendar', label: 'Calendar', icon: Calendar, roles: ['admin', 'accountant', 'project_manager'] },
-  { id: 'project-expenses', label: 'Project Expenses', icon: DollarSign, roles: ['admin', 'accountant', 'project_manager'] },
+  { id: 'project-expenses', label: 'Project Expenses', icon: IndianRupee, roles: ['admin', 'accountant', 'project_manager'] },
   { id: 'admin-expenses', label: 'Admin Expenses', icon: Receipt, roles: ['admin'] },
   { id: 'acc-expense', label: 'Accountant Expenses', icon: FileText, roles: ['accountant'] },
   { id: 'daily-report', label: 'Daily Report', icon: ClipboardList, roles: ['admin', 'accountant', 'project_manager'] },
