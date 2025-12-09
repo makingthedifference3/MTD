@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Calendar, CheckCircle2, Clock, Loader, Trash2, Edit2, X, Save,
@@ -33,6 +33,7 @@ const ProjectTimelinePage = () => {
   const { currentUser } = useAuth();
   const { 
     csrPartners, 
+    projects,
     filteredProjects, 
     tolls,
     selectedPartner,
@@ -41,6 +42,7 @@ const ProjectTimelinePage = () => {
     setSelectedPartner,
     setSelectedToll,
     setSelectedProject,
+    resetFilters,
     isLoading: filtersLoading,
   } = useFilter();
   
@@ -65,6 +67,18 @@ const ProjectTimelinePage = () => {
     overallCompletion: 0,
   });
   const [loading, setLoading] = useState(false);
+  const resetFiltersRef = useRef(resetFilters);
+
+  useEffect(() => {
+    resetFiltersRef.current = resetFilters;
+  }, [resetFilters]);
+
+  useEffect(() => {
+    return () => {
+      resetFiltersRef.current();
+    };
+  }, []);
+
   const [expandedActivities, setExpandedActivities] = useState<Set<string>>(new Set());
   
   // Modal state
@@ -211,14 +225,11 @@ const ProjectTimelinePage = () => {
   const handlePartnerClick = (partner: { id: string; name: string }) => {
     setSelectedPartnerData(partner);
     setSelectedPartner(partner.id);
-    
-    // Check if partner has tolls
-    const partnerHasTolls = tolls.some(t => t.csr_partner_id === partner.id);
-    if (partnerHasTolls) {
-      setViewMode('tolls');
-    } else {
-      setViewMode('folders');
-    }
+    setSelectedTollData(null);
+    setSelectedToll(null);
+    setSelectedFolder(null);
+    setSelectedProjectData(null);
+    setViewMode('tolls');
   };
 
   // Handle toll click
@@ -227,6 +238,19 @@ const ProjectTimelinePage = () => {
     setSelectedToll(toll.id);
     setViewMode('folders');
   };
+
+  // When tolls finish loading for the selected partner, choose the correct view
+  useEffect(() => {
+    if (!selectedPartner) return;
+    const partnerHasTolls = partnerTolls.length > 0;
+    if (viewMode === 'tolls' && !partnerHasTolls) {
+      setViewMode('folders');
+    }
+    if (viewMode === 'folders' && partnerHasTolls && !selectedTollData) {
+      // If tolls exist but none selected yet, stay on tolls view for selection
+      setViewMode('tolls');
+    }
+  }, [selectedPartner, partnerTolls.length, viewMode, selectedTollData]);
 
   // Handle folder click
   const handleFolderClick = (folderName: string) => {
@@ -259,19 +283,21 @@ const ProjectTimelinePage = () => {
       } else {
         setViewMode('partners');
         setSelectedPartnerData(null);
-        setSelectedPartner(null);
+        setSelectedToll(null);
       }
     } else if (viewMode === 'folders') {
       if (selectedTollData) {
         setViewMode('tolls');
+        setSelectedToll(null);
       } else {
         setViewMode('partners');
+        setSelectedPartnerData(null);
+        setSelectedToll(null);
       }
       setSelectedFolder(null);
     } else if (viewMode === 'tolls') {
       setViewMode('partners');
       setSelectedPartnerData(null);
-      setSelectedPartner(null);
       setSelectedTollData(null);
       setSelectedToll(null);
     }
@@ -528,30 +554,27 @@ const ProjectTimelinePage = () => {
         className="mb-8 relative"
       >
         <div className="absolute inset-0 bg-linear-to-r from-emerald-500/10 via-emerald-400/5 to-transparent rounded-3xl blur-3xl"></div>
-        <div className="relative bg-white/60 backdrop-blur-xl border border-white/20 shadow-xl shadow-emerald-500/5 rounded-3xl p-6 md:p-8">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-linear-to-br from-emerald-500 to-emerald-600 rounded-2xl shadow-lg shadow-emerald-500/30">
-                <Calendar className="w-8 h-8 text-white" />
-              </div>
-              <div>
-                <h1 className="text-3xl md:text-4xl font-bold bg-linear-to-r from-gray-900 via-emerald-800 to-gray-900 bg-clip-text text-transparent">
-                  Project Timeline
-                </h1>
-                <p className="text-gray-600 mt-1 font-medium">{getBreadcrumb()}</p>
-              </div>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-linear-to-br from-emerald-500 to-emerald-600 rounded-2xl shadow-lg shadow-emerald-500/30">
+              <Calendar className="w-8 h-8 text-white" />
             </div>
-            
-            {viewMode === 'activities' && (
-              <button
-                onClick={handleAddActivity}
-                className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-xl font-medium flex items-center space-x-2 transition-colors shadow-lg shadow-emerald-500/30"
-              >
-                <Plus className="w-5 h-5" />
-                <span>Add Activity</span>
-              </button>
-            )}
+            <div>
+              <h1 className="text-3xl md:text-4xl font-bold bg-linear-to-r from-gray-900 via-emerald-800 to-gray-900 bg-clip-text text-transparent">
+                Project Timeline
+              </h1>
+              <p className="text-gray-600 mt-1 font-medium">{getBreadcrumb()}</p>
+            </div>
           </div>
+          {viewMode === 'activities' && (
+            <button
+              onClick={handleAddActivity}
+              className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-xl font-medium flex items-center space-x-2 transition-colors shadow-lg shadow-emerald-500/30"
+            >
+              <Plus className="w-5 h-5" />
+              <span>Add Activity</span>
+            </button>
+          )}
         </div>
       </motion.div>
 
@@ -590,8 +613,8 @@ const ProjectTimelinePage = () => {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {csrPartners.map((partner, index) => {
-                  const partnerProjectCount = filteredProjects.filter(p => p.csr_partner_id === partner.id).length;
-                  const partnerHasTolls = tolls.some(t => t.csr_partner_id === partner.id);
+                  const partnerProjectCount = projects.filter(p => p.csr_partner_id === partner.id).length;
+                  const partnerHasTolls = projects.some(p => p.csr_partner_id === partner.id && Boolean(p.toll_id));
                   
                   return (
                     <motion.button
@@ -648,7 +671,7 @@ const ProjectTimelinePage = () => {
           >
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {partnerTolls.map((toll, index) => {
-                const tollProjectCount = filteredProjects.filter(p => p.toll_id === toll.id).length;
+                const tollProjectCount = projects.filter(p => p.toll_id === toll.id).length;
                 
                 return (
                   <motion.button

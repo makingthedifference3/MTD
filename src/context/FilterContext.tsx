@@ -211,13 +211,13 @@ export const FilterProvider = ({ children }: { children: ReactNode }) => {
     setFilteredProjects(filtered);
   }, [selectedPartner, selectedProject, selectedToll, projects, currentRole]);
 
-  const resetFilters = () => {
+  const resetFilters = useCallback(() => {
     if (!filtersLocked) {
       setSelectedPartner(null);
       setSelectedProject(null);
       setSelectedToll(null);
     }
-  };
+  }, [filtersLocked]);
 
   const lockFilters = () => {
     setFiltersLocked(true);
