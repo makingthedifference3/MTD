@@ -1544,6 +1544,29 @@ const ProjectsPage = () => {
     }
   };
 
+  const handleDeleteExpense = async (expenseId: string) => {
+    if (!confirm('Are you sure you want to delete this expense?')) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('project_expenses')
+        .delete()
+        .eq('id', expenseId);
+
+      if (error) throw error;
+
+      toast.success('Expense deleted successfully!');
+      if (editingProjectId) {
+        fetchProjectExpenses(editingProjectId);
+      }
+    } catch (error) {
+      console.error('Error deleting expense:', error);
+      toast.error('Failed to delete expense. Please try again.');
+    }
+  };
+
   const { isLoading } = useFilter();
 
   if (isLoading) {
@@ -1884,7 +1907,7 @@ const ProjectsPage = () => {
                         {projectExpenses.map((expense) => (
                           <div
                             key={expense.id}
-                            className="flex items-center justify-between gap-3 p-3 rounded-2xl border border-gray-100 bg-gray-50"
+                            className="flex items-center justify-between gap-3 p-3 rounded-2xl border border-gray-100 bg-gray-50 group hover:bg-gray-100 transition-colors"
                           >
                             <div className="flex-1">
                               <p className="text-sm font-semibold text-gray-900">
@@ -1894,16 +1917,25 @@ const ProjectsPage = () => {
                                 {expense.category} • {new Date(expense.date).toLocaleDateString()}
                               </p>
                             </div>
-                            <div className="text-right">
-                              <p className="text-sm font-bold text-emerald-700">₹{expense.total_amount.toLocaleString()}</p>
-                              <span className={`text-xs px-2 py-1 rounded-full ${
-                                expense.status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
-                                expense.status === 'pending' ? 'bg-amber-100 text-amber-700' :
-                                expense.status === 'rejected' ? 'bg-red-100 text-red-700' :
-                                'bg-blue-100 text-blue-700'
-                              }`}>
-                                {expense.status}
-                              </span>
+                            <div className="flex items-center gap-2">
+                              <div className="text-right">
+                                <p className="text-sm font-bold text-emerald-700">₹{expense.total_amount.toLocaleString()}</p>
+                                <span className={`text-xs px-2 py-1 rounded-full ${
+                                  expense.status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
+                                  expense.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                                  expense.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                                  'bg-blue-100 text-blue-700'
+                                }`}>
+                                  {expense.status}
+                                </span>
+                              </div>
+                              <button
+                                onClick={() => handleDeleteExpense(expense.id)}
+                                className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 hover:bg-red-100 rounded text-red-600 hover:text-red-700"
+                                title="Delete expense"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
                             </div>
                           </div>
                         ))}
@@ -2715,6 +2747,7 @@ const ProjectsPage = () => {
           onManageTemplates={() => setShowManageTemplatesModal(true)}
           editingProjectId={editingProjectId}
           onOpenAddExpenseModal={handleOpenAddExpenseModal}
+          onDeleteExpense={handleDeleteExpense}
           projectExpenses={projectExpenses}
           projectExpensesLoading={projectExpensesLoading}
         />
@@ -3615,6 +3648,7 @@ interface AddProjectModalProps {
   onManageTemplates: () => void;
   editingProjectId: string | null;
   onOpenAddExpenseModal: () => void;
+  onDeleteExpense: (expenseId: string) => void;
   projectExpenses: any[];
   projectExpensesLoading: boolean;
 }
@@ -3645,6 +3679,7 @@ const AddProjectModal = ({
   onManageTemplates,
   editingProjectId,
   onOpenAddExpenseModal,
+  onDeleteExpense,
   projectExpenses,
   projectExpensesLoading,
 }: AddProjectModalProps) => {
@@ -4608,7 +4643,7 @@ const AddProjectModal = ({
                   {projectExpenses.map((expense) => (
                     <div
                       key={expense.id}
-                      className="flex items-center justify-between p-2 rounded-lg bg-gray-50 border border-gray-100"
+                      className="flex items-center justify-between p-2 rounded-lg bg-gray-50 border border-gray-100 group hover:bg-gray-100 transition-colors"
                     >
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-semibold text-gray-900 truncate">
@@ -4618,16 +4653,25 @@ const AddProjectModal = ({
                           {expense.category} • {new Date(expense.date).toLocaleDateString()}
                         </p>
                       </div>
-                      <div className="text-right ml-2">
-                        <p className="text-xs font-bold text-emerald-700">₹{expense.total_amount.toLocaleString()}</p>
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${
-                          expense.status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
-                          expense.status === 'pending' ? 'bg-amber-100 text-amber-700' :
-                          expense.status === 'rejected' ? 'bg-red-100 text-red-700' :
-                          'bg-blue-100 text-blue-700'
-                        }`}>
-                          {expense.status}
-                        </span>
+                      <div className="flex items-center gap-2 ml-2">
+                        <div className="text-right">
+                          <p className="text-xs font-bold text-emerald-700">₹{expense.total_amount.toLocaleString()}</p>
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${
+                            expense.status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
+                            expense.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                            expense.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                            'bg-blue-100 text-blue-700'
+                          }`}>
+                            {expense.status}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => onDeleteExpense(expense.id)}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-red-100 rounded text-red-600 hover:text-red-700"
+                          title="Delete expense"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
                   ))}

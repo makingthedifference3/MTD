@@ -127,7 +127,7 @@ const ToDoList = () => {
     try {
       const { data, error } = await supabase
         .from('projects')
-        .select('id, name')
+        .select('id, name, location, project_code')
         .eq('csr_partner_id', partnerId)
         .eq('is_active', true);
       if (error) throw error;
@@ -579,9 +579,12 @@ const ToDoList = () => {
                     required
                   >
                     <option value="">Select Project</option>
-                    {filteredProjects.map(project => (
-                      <option key={project.id} value={project.id}>{project.name}</option>
-                    ))}
+                    {filteredProjects.map(project => {
+                      const projectDisplay = `${project.name}${(project as any).location ? ` (${(project as any).location})` : ''} : ${(project as any).project_code || ''}`;
+                      return (
+                        <option key={project.id} value={project.id}>{projectDisplay}</option>
+                      );
+                    })}
                   </select>
                 </div>
 
