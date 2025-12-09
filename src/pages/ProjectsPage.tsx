@@ -1949,7 +1949,7 @@ const ProjectsPage = () => {
                             </div>
                             <div className="flex items-center gap-2">
                               <div className="text-right">
-                                <p className="text-sm font-bold text-emerald-700">₹{expense.total_amount.toLocaleString()}</p>
+                                <p className="text-sm font-bold text-emerald-700">{formatIndianRupee(expense.total_amount)}</p>
                                 <span className={`text-xs px-2 py-1 rounded-full ${
                                   expense.status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
                                   expense.status === 'pending' ? 'bg-amber-100 text-amber-700' :
@@ -1978,11 +1978,11 @@ const ProjectsPage = () => {
                 <div className="grid grid-cols-3 gap-4 bg-linear-to-r from-emerald-50 to-blue-50 rounded-2xl p-4 border border-emerald-100">
                   <div>
                     <p className="text-xs font-semibold text-emerald-700 uppercase mb-1">Total Budget</p>
-                    <p className="text-2xl font-bold text-emerald-900">₹{((selectedProjectDetails.total_budget || 0) / 100000).toFixed(1)}L</p>
+                    <p className="text-2xl font-bold text-emerald-900">{formatIndianRupee(selectedProjectDetails.total_budget || 0)}</p>
                   </div>
                   <div>
                     <p className="text-xs font-semibold text-blue-700 uppercase mb-1">Utilized</p>
-                    <p className="text-2xl font-bold text-blue-900">₹{((selectedProjectDetails.utilized_budget || 0) / 100000).toFixed(1)}L</p>
+                    <p className="text-2xl font-bold text-blue-900">{formatIndianRupee(selectedProjectDetails.utilized_budget || 0)}</p>
                   </div>
                   <div>
                     <p className="text-xs font-semibold text-purple-700 uppercase mb-1">{selectedProjectBeneficiaryLabel}</p>
@@ -2051,15 +2051,15 @@ const ProjectsPage = () => {
                                     <div className="flex items-center gap-4 mt-2 text-sm">
                                       <div>
                                         <span className="text-gray-500">Allocated: </span>
-                                        <span className="font-semibold text-emerald-700">₹{category.allocated_amount.toLocaleString()}</span>
+                                        <span className="font-semibold text-emerald-700">{formatIndianRupee(category.allocated_amount)}</span>
                                       </div>
                                       <div>
                                         <span className="text-gray-500">Utilized: </span>
-                                        <span className="font-semibold text-blue-700">₹{category.utilized_amount.toLocaleString()}</span>
+                                        <span className="font-semibold text-blue-700">{formatIndianRupee(category.utilized_amount)}</span>
                                       </div>
                                       <div>
                                         <span className="text-gray-500">Available: </span>
-                                        <span className="font-semibold text-purple-700">₹{category.available_amount.toLocaleString()}</span>
+                                        <span className="font-semibold text-purple-700">{formatIndianRupee(category.available_amount)}</span>
                                       </div>
                                     </div>
                                   </div>
@@ -2091,11 +2091,11 @@ const ProjectsPage = () => {
                                             <div className="flex-1">
                                               <p className="font-medium text-gray-800 text-sm">{subCat.name}</p>
                                               <div className="flex items-center gap-3 mt-1 text-xs">
-                                                <span className="text-gray-600">₹{subCat.allocated_amount.toLocaleString()}</span>
+                                                <span className="text-gray-600">{formatIndianRupee(subCat.allocated_amount)}</span>
                                                 <span className="text-gray-400">•</span>
-                                                <span className="text-blue-600">Used: ₹{subCat.utilized_amount.toLocaleString()}</span>
+                                                <span className="text-blue-600">Used: {formatIndianRupee(subCat.utilized_amount)}</span>
                                                 <span className="text-gray-400">•</span>
-                                                <span className="text-purple-600">Left: ₹{subCat.available_amount.toLocaleString()}</span>
+                                                <span className="text-purple-600">Left: {formatIndianRupee(subCat.available_amount)}</span>
                                               </div>
                                             </div>
                                             <span className="text-xs font-semibold text-gray-700">{subUtilizationPercent.toFixed(1)}%</span>
@@ -3506,7 +3506,7 @@ const BudgetCategoriesManager = ({
     
     if (rootTotal > totalBudget) {
       setValidationError(
-        `Total allocated (₹${rootTotal.toLocaleString()}) exceeds project budget (₹${totalBudget.toLocaleString()})`
+        `Total allocated (${formatIndianRupee(rootTotal)}) exceeds project budget (${formatIndianRupee(totalBudget)})`
       );
       return false;
     }
@@ -3522,7 +3522,7 @@ const BudgetCategoriesManager = ({
 
         if (childrenTotal > parentAmount) {
           setValidationError(
-            `Sub-categories of "${parent.name}" (₹${childrenTotal.toLocaleString()}) exceed parent allocation (₹${parentAmount.toLocaleString()})`
+            `Sub-categories of "${parent.name}" (${formatIndianRupee(childrenTotal)}) exceed parent allocation (${formatIndianRupee(parentAmount)})`
           );
           return false;
         }
@@ -3594,7 +3594,7 @@ const BudgetCategoriesManager = ({
 
           {category.children.length > 0 && (
             <div className="mt-2 text-xs text-gray-500">
-              Remaining: ₹{remaining.toLocaleString()}
+              Remaining: {formatIndianRupee(remaining)}
             </div>
           )}
         </div>
@@ -3614,11 +3614,7 @@ const BudgetCategoriesManager = ({
         <div>
           <p className="text-sm font-semibold text-emerald-700">Budget Categories</p>
           <p className="text-xs text-gray-600 mt-1">
-            Total Budget: ₹{totalBudget.toLocaleString()} | Allocated: ₹
-            {categories
-              .reduce((sum, cat) => sum + (Number(cat.allocated_amount) || 0), 0)
-              .toLocaleString()}{' '}
-            | Remaining: ₹{calculateRemaining().toLocaleString()}
+            Total Budget: {formatIndianRupee(totalBudget)} | Allocated: {formatIndianRupee(categories.reduce((sum, cat) => sum + (Number(cat.allocated_amount) || 0), 0))} | Remaining: {formatIndianRupee(calculateRemaining())}
           </p>
         </div>
         <button
@@ -4685,7 +4681,7 @@ const AddProjectModal = ({
                       </div>
                       <div className="flex items-center gap-2 ml-2">
                         <div className="text-right">
-                          <p className="text-xs font-bold text-emerald-700">₹{expense.total_amount.toLocaleString()}</p>
+                          <p className="text-xs font-bold text-emerald-700">{formatIndianRupee(expense.total_amount)}</p>
                           <span className={`text-xs px-2 py-0.5 rounded-full ${
                             expense.status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
                             expense.status === 'pending' ? 'bg-amber-100 text-amber-700' :

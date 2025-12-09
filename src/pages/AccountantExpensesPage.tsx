@@ -5,6 +5,7 @@ import { projectExpensesService } from '../services/projectExpensesService';
 import type { ProjectExpense } from '../services/projectExpensesService';
 import { supabase } from '../services/supabaseClient';
 import { useAuth } from '../context/useAuth';
+import { formatIndianRupee } from '../utils/currency';
 
 interface UserMap {
   [key: string]: string;
@@ -1062,7 +1063,7 @@ const AccountantExpensesPage: React.FC = () => {
             <span className="text-2xl font-bold text-gray-900">{stats.pending}</span>
           </div>
           <h3 className="text-sm font-medium text-gray-600">Pending</h3>
-          <p className="text-lg font-semibold text-amber-600">₹{stats.pendingAmount.toLocaleString()}</p>
+          <p className="text-lg font-semibold text-amber-600">{formatIndianRupee(stats.pendingAmount)}</p>
         </motion.div>
 
         <motion.div
@@ -1076,7 +1077,7 @@ const AccountantExpensesPage: React.FC = () => {
             <span className="text-2xl font-bold text-gray-900">{stats.accepted}</span>
           </div>
           <h3 className="text-sm font-medium text-gray-600">Accepted</h3>
-          <p className="text-lg font-semibold text-blue-600">₹{stats.acceptedAmount.toLocaleString()}</p>
+          <p className="text-lg font-semibold text-blue-600">{formatIndianRupee(stats.acceptedAmount)}</p>
         </motion.div>
 
         <motion.div
@@ -1090,7 +1091,7 @@ const AccountantExpensesPage: React.FC = () => {
             <span className="text-2xl font-bold text-gray-900">{stats.approved}</span>
           </div>
           <h3 className="text-sm font-medium text-gray-600">Approved</h3>
-          <p className="text-lg font-semibold text-emerald-600">₹{stats.approvedAmount.toLocaleString()}</p>
+          <p className="text-lg font-semibold text-emerald-600">{formatIndianRupee(stats.approvedAmount)}</p>
         </motion.div>
 
         <motion.div
@@ -1104,7 +1105,7 @@ const AccountantExpensesPage: React.FC = () => {
             <span className="text-2xl font-bold text-gray-900">{stats.rejected}</span>
           </div>
           <h3 className="text-sm font-medium text-gray-600">Rejected</h3>
-          <p className="text-lg font-semibold text-red-600">₹{stats.rejectedAmount.toLocaleString()}</p>
+          <p className="text-lg font-semibold text-red-600">{formatIndianRupee(stats.rejectedAmount)}</p>
         </motion.div>
 
         <motion.div
@@ -1118,7 +1119,7 @@ const AccountantExpensesPage: React.FC = () => {
             <span className="text-2xl font-bold text-gray-900">{stats.paid}</span>
           </div>
           <h3 className="text-sm font-medium text-gray-600">Paid</h3>
-          <p className="text-lg font-semibold text-green-600">₹{stats.paidAmount.toLocaleString()}</p>
+          <p className="text-lg font-semibold text-green-600">{formatIndianRupee(stats.paidAmount)}</p>
         </motion.div>
       </div>
 
@@ -1494,7 +1495,7 @@ const AccountantExpensesPage: React.FC = () => {
                             <AlertTriangle className="w-4 h-4 text-amber-600" />
                           </span>
                         )}
-                        ₹{expense.total_amount.toLocaleString()}
+                        {formatIndianRupee(expense.total_amount)}
                       </button>
                     </td>
                     
@@ -1656,7 +1657,7 @@ const AccountantExpensesPage: React.FC = () => {
                           <div className="flex justify-between items-center bg-amber-100/50 rounded px-2 py-1">
                             <span className="font-medium">Sub-Category Budget:</span>
                             <span className={budgetWarning.stats.subcategoryRemaining < 0 ? 'text-red-700 font-bold' : 'font-semibold'}>
-                              ₹{budgetWarning.stats.subcategoryRemaining.toLocaleString()} / ₹{budgetWarning.stats.subcategoryTotal?.toLocaleString()}
+                              {formatIndianRupee(budgetWarning.stats.subcategoryRemaining)} / {formatIndianRupee(budgetWarning.stats.subcategoryTotal || 0)}
                             </span>
                           </div>
                         )}
@@ -1664,7 +1665,7 @@ const AccountantExpensesPage: React.FC = () => {
                           <div className="flex justify-between items-center bg-amber-100/50 rounded px-2 py-1">
                             <span className="font-medium">Category Budget:</span>
                             <span className={budgetWarning.stats.categoryRemaining < 0 ? 'text-red-700 font-bold' : 'font-semibold'}>
-                              ₹{budgetWarning.stats.categoryRemaining.toLocaleString()} / ₹{budgetWarning.stats.categoryTotal?.toLocaleString()}
+                              {formatIndianRupee(budgetWarning.stats.categoryRemaining)} / {formatIndianRupee(budgetWarning.stats.categoryTotal || 0)}
                             </span>
                           </div>
                         )}
@@ -1672,13 +1673,13 @@ const AccountantExpensesPage: React.FC = () => {
                           <div className="flex justify-between items-center bg-amber-100/50 rounded px-2 py-1">
                             <span className="font-medium">Project Budget:</span>
                             <span className={budgetWarning.stats.projectRemaining < 0 ? 'text-red-700 font-bold' : 'font-semibold'}>
-                              ₹{budgetWarning.stats.projectRemaining.toLocaleString()} / ₹{budgetWarning.stats.projectTotal?.toLocaleString()}
+                              {formatIndianRupee(budgetWarning.stats.projectRemaining)} / {formatIndianRupee(budgetWarning.stats.projectTotal || 0)}
                             </span>
                           </div>
                         )}
                         <div className="mt-2 pt-2 border-t border-amber-300">
                           <span className="font-medium">Expense Amount: </span>
-                          <span className="font-bold text-amber-900">₹{selectedExpense.total_amount.toLocaleString()}</span>
+                          <span className="font-bold text-amber-900">{formatIndianRupee(selectedExpense.total_amount)}</span>
                         </div>
                       </div>
                     </div>
@@ -1960,7 +1961,7 @@ const AccountantExpensesPage: React.FC = () => {
                 
                 <div>
                   <label className="text-sm font-medium text-gray-600">Amount</label>
-                  <p className="text-gray-900 font-semibold mt-1 text-2xl">₹{selectedExpense.total_amount.toLocaleString()}</p>
+                  <p className="text-gray-900 font-semibold mt-1 text-2xl">{formatIndianRupee(selectedExpense.total_amount)}</p>
                 </div>
               </div>
               

@@ -21,6 +21,7 @@ import {
   IMPACT_METRIC_ORDER,
   renderImpactMetricCard,
 } from '../utils/impactMetricDisplay';
+import { formatIndianRupee } from '../utils/currency';
 
 // Helper function to map icon names to actual Lucide icons
 const getIconComponent = (iconName?: string): LucideIcon => {
@@ -596,7 +597,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                 <span className="text-xs font-bold text-purple-700 bg-purple-200 px-3 py-1 rounded-full">BUDGET</span>
               </div>
               <p className="text-3xl font-black text-purple-900 mb-1">
-                ₹{(analyticsProjects.reduce((sum: number, p: Project) => sum + (p.total_budget || 0), 0) / 100000).toFixed(1)}L
+                {formatIndianRupee(analyticsProjects.reduce((sum: number, p: Project) => sum + (p.total_budget || 0), 0))}
               </p>
               <p className="text-sm text-purple-700 font-semibold">Total Budget</p>
             </motion.div>
@@ -615,7 +616,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                 <span className="text-xs font-bold text-teal-700 bg-teal-200 px-3 py-1 rounded-full">SPENT</span>
               </div>
               <p className="text-3xl font-black text-teal-900 mb-1">
-                ₹{(analyticsProjects.reduce((sum: number, p: Project) => sum + (p.utilized_budget || 0), 0) / 100000).toFixed(1)}L
+                {formatIndianRupee(analyticsProjects.reduce((sum: number, p: Project) => sum + (p.utilized_budget || 0), 0))}
               </p>
               <p className="text-sm text-teal-700 font-semibold">Total Utilized</p>
             </motion.div>
@@ -634,7 +635,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                 <span className="text-xs font-bold text-amber-700 bg-amber-200 px-3 py-1 rounded-full">REMAINING</span>
               </div>
               <p className="text-3xl font-black text-amber-900 mb-1">
-                ₹{((analyticsProjects.reduce((sum: number, p: Project) => sum + (p.total_budget || 0), 0) - analyticsProjects.reduce((sum: number, p: Project) => sum + (p.utilized_budget || 0), 0)) / 100000).toFixed(1)}L
+                {formatIndianRupee(analyticsProjects.reduce((sum: number, p: Project) => sum + (p.total_budget || 0), 0) - analyticsProjects.reduce((sum: number, p: Project) => sum + (p.utilized_budget || 0), 0))}
               </p>
               <p className="text-sm text-amber-700 font-semibold">Budget Remaining</p>
             </motion.div>
@@ -673,7 +674,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
                         <Label
-                          value={`₹${(totalUtilized / 100000).toFixed(1)}L`}
+                          value={formatIndianRupee(totalUtilized)}
                           position="center"
                           className="text-xl font-black text-gray-900"
                         />
@@ -892,7 +893,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                 {groupedProjects.map((group, index) => {
                   const projectLabel = group.projects.length === 1 ? 'Project' : 'Projects';
                   const formattedBudget = group.totalBudget > 0
-                    ? `₹${(group.totalBudget / 100000).toFixed(2)}L`
+                    ? formatIndianRupee(group.totalBudget)
                     : '';
 
                   const folderLogoUrl = getProjectLogoPath(group.name);
@@ -1101,7 +1102,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                   </div>
                   <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 text-center">
                     <p className="text-2xl font-bold text-orange-700">
-                      {folderData.totalBudget > 0 ? `₹${(folderData.totalBudget / 100000).toFixed(2)}L` : '—'}
+                      {folderData.totalBudget > 0 ? formatIndianRupee(folderData.totalBudget) : '—'}
                     </p>
                     <p className="text-xs font-semibold text-orange-600 uppercase">Total Budget</p>
                   </div>
@@ -1118,7 +1119,7 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                             <span className="text-lg">💰</span>
                             <span className="text-xs font-bold text-emerald-700 uppercase">Utilized</span>
                           </div>
-                          <p className="text-xl font-bold text-emerald-800">₹{formatMetricValue(folderData.totalUtilized)}</p>
+                          <p className="text-xl font-bold text-emerald-800">{formatIndianRupee(folderData.totalUtilized)}</p>
                         </div>
                       )}
                       {allImpactItems.map((item) => (
@@ -1298,16 +1299,16 @@ const PMDashboardInner = ({ shouldLockContext = true }: PMDashboardInnerProps = 
                   </div>
                   <div>
                     <p className="text-sm text-gray-600 font-semibold mb-2">TOTAL BUDGET</p>
-                    <p className="text-gray-900 font-bold text-lg">₹{(selectedProjectData.total_budget || 0).toLocaleString()}</p>
+                    <p className="text-gray-900 font-bold text-lg">{formatIndianRupee(selectedProjectData.total_budget || 0)}</p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-600 font-semibold mb-2">UTILIZED BUDGET</p>
-                    <p className="text-gray-900 font-bold text-lg">₹{(selectedProjectData.utilized_budget || 0).toLocaleString()}</p>
+                    <p className="text-gray-900 font-bold text-lg">{formatIndianRupee(selectedProjectData.utilized_budget || 0)}</p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-600 font-semibold mb-2">BUDGET REMAINING</p>
                     <p className="text-emerald-600 font-bold text-lg">
-                      ₹{((selectedProjectData.total_budget || 0) - (selectedProjectData.utilized_budget || 0)).toLocaleString()}
+                      {formatIndianRupee((selectedProjectData.total_budget || 0) - (selectedProjectData.utilized_budget || 0))}
                     </p>
                   </div>
                   <div>

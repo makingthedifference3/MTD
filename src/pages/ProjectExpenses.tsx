@@ -7,6 +7,7 @@ import { supabase } from '../services/supabaseClient';
 import { useAuth } from '../context/useAuth';
 import { useNotifications } from '../context/NotificationContext';
 import toast, { Toaster } from 'react-hot-toast';
+import { formatIndianRupee } from '../utils/currency';
 
 interface UserMap {
   [key: string]: string;
@@ -613,7 +614,7 @@ const ProjectExpenses: React.FC = () => {
                 <span className="font-semibold text-gray-900">PENDING {stats.pending}</span>
               </div>
               <div className="bg-white rounded-full px-4 py-2">
-                <span className="font-bold text-gray-900">{stats.pendingAmount.toLocaleString()}</span>
+                <span className="font-bold text-gray-900">{formatIndianRupee(stats.pendingAmount)}</span>
               </div>
             </button>
 
@@ -629,7 +630,7 @@ const ProjectExpenses: React.FC = () => {
                 <span className="font-semibold text-gray-900">APPROVED {stats.approved}</span>
               </div>
               <div className="bg-white rounded-full px-4 py-2">
-                <span className="font-bold text-gray-900">{stats.approvedAmount.toLocaleString()}</span>
+                <span className="font-bold text-gray-900">{formatIndianRupee(stats.approvedAmount)}</span>
               </div>
             </button>
 
@@ -645,7 +646,7 @@ const ProjectExpenses: React.FC = () => {
                 <span className="font-semibold text-gray-900">REJECTED {stats.rejected}</span>
               </div>
               <div className="bg-white rounded-full px-4 py-2">
-                <span className="font-bold text-gray-900">{stats.rejectedAmount.toLocaleString()}</span>
+                <span className="font-bold text-gray-900">{formatIndianRupee(stats.rejectedAmount)}</span>
               </div>
             </button>
 
@@ -661,7 +662,7 @@ const ProjectExpenses: React.FC = () => {
                 <span className="font-semibold text-gray-900">PAID {stats.paid}</span>
               </div>
               <div className="bg-white rounded-full px-4 py-2">
-                <span className="font-bold text-gray-900">{stats.paidAmount.toLocaleString()}</span>
+                <span className="font-bold text-gray-900">{formatIndianRupee(stats.paidAmount)}</span>
               </div>
             </button>
 
@@ -758,7 +759,7 @@ const ProjectExpenses: React.FC = () => {
                           <td className="px-4 py-3 text-sm font-medium text-gray-900">{expense.expense_code}</td>
                           <td className="px-4 py-3 text-sm text-gray-900">{expense.merchant_name}</td>
                           <td className="px-4 py-3 text-sm text-gray-600">{expense.category}</td>
-                          <td className="px-4 py-3 text-sm font-semibold text-gray-900">₹{expense.total_amount.toLocaleString()}</td>
+                          <td className="px-4 py-3 text-sm font-semibold text-gray-900">{formatIndianRupee(expense.total_amount)}</td>
                           <td className="px-4 py-3 text-sm text-gray-600">{new Date(expense.date).toLocaleDateString()}</td>
                           <td className="px-4 py-3 text-sm text-gray-600">{expense.payment_method}</td>
                           {selectedStatus === 'rejected' && (

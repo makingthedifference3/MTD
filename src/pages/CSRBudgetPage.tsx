@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { useFilter } from '../context/useFilter';
+import { formatIndianRupee } from '../utils/currency';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const CSRBudgetPage = () => {
@@ -351,7 +352,7 @@ const CSRBudgetPage = () => {
                 </div>
                 <div className="space-y-2">
                   <p className="text-emerald-100 text-sm font-medium uppercase tracking-wide">Total Donation</p>
-                  <h3 className="text-5xl font-bold">₹{(overallStats.totalAllocated / 10000000).toFixed(2)}Cr</h3>
+                  <h3 className="text-5xl font-bold">{formatIndianRupee(overallStats.totalAllocated)}</h3>
                   <p className="text-emerald-200 text-sm mt-2">{filteredProjects.length} Projects Active</p>
                 </div>
               </div>
@@ -374,7 +375,7 @@ const CSRBudgetPage = () => {
                 </div>
                 <div className="space-y-2">
                   <p className="text-orange-100 text-sm font-medium uppercase tracking-wide">Total Expense</p>
-                  <h3 className="text-5xl font-bold">₹{(overallStats.totalUtilized / 10000000).toFixed(2)}Cr</h3>
+                  <h3 className="text-5xl font-bold">{formatIndianRupee(overallStats.totalUtilized)}</h3>
                   <div className="flex items-center gap-2 mt-2">
                     <span className="px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full text-xs font-semibold">
                       {overallStats.utilizationRate}% utilized
@@ -403,7 +404,7 @@ const CSRBudgetPage = () => {
                 </div>
                 <div className="space-y-2">
                   <p className="text-blue-100 text-sm font-medium uppercase tracking-wide">Total Balance</p>
-                  <h3 className="text-5xl font-bold">₹{(Math.abs(overallStats.totalRemaining) / 10000000).toFixed(2)}Cr</h3>
+                  <h3 className="text-5xl font-bold">{formatIndianRupee(Math.abs(overallStats.totalRemaining))}</h3>
                 </div>
               </div>
             </motion.div>
@@ -438,15 +439,15 @@ const CSRBudgetPage = () => {
                   <div className="space-y-2">
                     <div className="flex justify-between items-center">
                       <span className="text-xs text-gray-600">Donation</span>
-                      <span className="text-sm font-bold text-emerald-600">₹{(company.donation / 100000).toFixed(1)}L</span>
+                      <span className="text-sm font-bold text-emerald-600">{formatIndianRupee(company.donation)}</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-xs text-gray-600">Expense</span>
-                      <span className="text-sm font-bold text-orange-600">₹{(company.expense / 100000).toFixed(1)}L</span>
+                      <span className="text-sm font-bold text-orange-600">{formatIndianRupee(company.expense)}</span>
                     </div>
                     <div className="flex justify-between items-center pt-2 border-t border-gray-200">
                       <span className="text-xs font-semibold text-gray-700">Balance</span>
-                      <span className="text-sm font-bold text-blue-600">₹{(company.balance / 100000).toFixed(1)}L</span>
+                      <span className="text-sm font-bold text-blue-600">{formatIndianRupee(company.balance)}</span>
                     </div>
                   </div>
                 </motion.div>
@@ -485,11 +486,11 @@ const CSRBudgetPage = () => {
                     <div className="space-y-1">
                       <div className="flex justify-between text-xs">
                         <span className="text-gray-600">Donation:</span>
-                        <span className="font-semibold text-emerald-600">₹{(op.donation / 100000).toFixed(1)}L</span>
+                        <span className="font-semibold text-emerald-600">{formatIndianRupee(op.donation)}</span>
                       </div>
                       <div className="flex justify-between text-xs">
                         <span className="text-gray-600">Expense:</span>
-                        <span className="font-semibold text-orange-600">₹{(op.expense / 100000).toFixed(1)}L</span>
+                        <span className="font-semibold text-orange-600">{formatIndianRupee(op.expense)}</span>
                       </div>
                     </div>
                   </motion.div>
@@ -693,18 +694,18 @@ const CSRBudgetPage = () => {
                         <div className="space-y-3">
                           <div className="flex items-center justify-between text-sm">
                             <span className="text-gray-600">Allocated</span>
-                            <span className="font-bold text-gray-900 truncate ml-2">₹{((project.total_budget || 0) / 100000).toFixed(2)}L</span>
+                            <span className="font-bold text-gray-900 truncate ml-2">{formatIndianRupee(project.total_budget || 0)}</span>
                           </div>
                           <div className="flex items-center justify-between text-sm">
                             <span className="text-gray-600">Utilized</span>
-                            <span className="font-bold text-amber-600 truncate ml-2">₹{((project.utilized_budget || 0) / 100000).toFixed(2)}L</span>
+                            <span className="font-bold text-amber-600 truncate ml-2">{formatIndianRupee(project.utilized_budget || 0)}</span>
                           </div>
                           <div className="flex items-center justify-between text-sm">
                             <span className="text-gray-600">Remaining</span>
                             <span className={`font-bold truncate ml-2 ${
                               ((project.total_budget || 0) - (project.utilized_budget || 0)) >= 0 ? 'text-emerald-600' : 'text-orange-600'
                             }`}>
-                              ₹{(Math.abs((project.total_budget || 0) - (project.utilized_budget || 0)) / 100000).toFixed(2)}L
+                              {formatIndianRupee(Math.abs((project.total_budget || 0) - (project.utilized_budget || 0)))}
                             </span>
                           </div>
 
@@ -763,7 +764,7 @@ const CSRBudgetPage = () => {
                 </div>
                 <div className="space-y-2">
                   <p className="text-emerald-100 text-sm font-medium uppercase tracking-wide">Total Budget</p>
-                  <h3 className="text-4xl font-bold wrap-break-word">₹{(projectBudgetStats.total / 100000).toFixed(2)}L</h3>
+                  <h3 className="text-4xl font-bold wrap-break-word">{formatIndianRupee(projectBudgetStats.total)}</h3>
                 </div>
               </div>
             </motion.div>
@@ -785,7 +786,7 @@ const CSRBudgetPage = () => {
                 </div>
                 <div className="space-y-2">
                   <p className="text-gray-400 text-sm font-medium uppercase tracking-wide">Budget Utilized</p>
-                  <h3 className="text-4xl font-bold wrap-break-word">₹{(projectBudgetStats.utilized / 100000).toFixed(2)}L</h3>
+                  <h3 className="text-4xl font-bold wrap-break-word">{formatIndianRupee(projectBudgetStats.utilized)}</h3>
                   <div className="flex items-center gap-2 pt-2">
                     <span className="px-3 py-1 bg-amber-500/20 backdrop-blur-sm rounded-full text-xs font-semibold text-amber-400">
                       {projectBudgetStats.utilizationRate}% used
@@ -816,7 +817,7 @@ const CSRBudgetPage = () => {
                 </div>
                 <div className="space-y-2">
                   <p className="text-gray-600 text-sm font-medium uppercase tracking-wide">Budget Remaining</p>
-                  <h3 className="text-4xl font-bold text-black wrap-break-word">₹{(Math.abs(projectBudgetStats.remaining) / 100000).toFixed(2)}L</h3>
+                  <h3 className="text-4xl font-bold text-black wrap-break-word">{formatIndianRupee(Math.abs(projectBudgetStats.remaining))}</h3>
                 </div>
               </div>
             </motion.div>
@@ -935,21 +936,21 @@ const CSRBudgetPage = () => {
                                       <div className="w-2 h-2 rounded-full bg-gray-500"></div>
                                       <p className="text-xs font-bold text-gray-700">Allocated</p>
                                     </div>
-                                    <p className="text-lg font-black text-gray-900">₹{(category.allocated_amount / 1000).toFixed(1)}K</p>
+                                    <p className="text-lg font-black text-gray-900">{formatIndianRupee(category.allocated_amount)}</p>
                                   </div>
                                   <div className="bg-linear-to-br from-amber-50 to-amber-100 rounded-xl p-3 border border-amber-200">
                                     <div className="flex items-center gap-1 mb-1">
                                       <div className="w-2 h-2 rounded-full bg-amber-500"></div>
                                       <p className="text-xs font-bold text-amber-700">Utilized</p>
                                     </div>
-                                    <p className="text-lg font-black text-amber-900">₹{(category.utilized_amount / 1000).toFixed(1)}K</p>
+                                    <p className="text-lg font-black text-amber-900">{formatIndianRupee(category.utilized_amount)}</p>
                                   </div>
                                   <div className="bg-linear-to-br from-emerald-50 to-emerald-100 rounded-xl p-3 border border-emerald-200">
                                     <div className="flex items-center gap-1 mb-1">
                                       <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
                                       <p className="text-xs font-bold text-emerald-700">Available</p>
                                     </div>
-                                    <p className="text-lg font-black text-emerald-900">₹{(category.available_amount / 1000).toFixed(1)}K</p>
+                                    <p className="text-lg font-black text-emerald-900">{formatIndianRupee(category.available_amount)}</p>
                                   </div>
                                 </div>
                               </>
@@ -1034,15 +1035,15 @@ const CSRBudgetPage = () => {
                                         <div className="grid grid-cols-3 gap-2">
                                           <div className="bg-gray-50 rounded-lg p-2 border border-gray-200">
                                             <p className="text-xs text-gray-500 mb-0.5">Allocated</p>
-                                            <p className="text-sm font-bold text-gray-900">₹{(sub.allocated_amount / 1000).toFixed(1)}K</p>
+                                            <p className="text-sm font-bold text-gray-900">{formatIndianRupee(sub.allocated_amount)}</p>
                                           </div>
                                           <div className="bg-amber-50 rounded-lg p-2 border border-amber-200">
                                             <p className="text-xs text-amber-600 mb-0.5">Utilized</p>
-                                            <p className="text-sm font-bold text-amber-900">₹{(sub.utilized_amount / 1000).toFixed(1)}K</p>
+                                            <p className="text-sm font-bold text-amber-900">{formatIndianRupee(sub.utilized_amount)}</p>
                                           </div>
                                           <div className="bg-emerald-50 rounded-lg p-2 border border-emerald-200">
                                             <p className="text-xs text-emerald-600 mb-0.5">Available</p>
-                                            <p className="text-sm font-bold text-emerald-900">₹{(sub.available_amount / 1000).toFixed(1)}K</p>
+                                            <p className="text-sm font-bold text-emerald-900">{formatIndianRupee(sub.available_amount)}</p>
                                           </div>
                                         </div>
                                       </>

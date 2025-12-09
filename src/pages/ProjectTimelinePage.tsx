@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { createTask } from '../services/tasksService';
 import { useAuth } from '../context/useAuth';
+import { formatIndianRupee } from '../utils/currency';
 import { getProjectLogoPath } from '../constants/projectOptions';
 import { useFilter } from '../context/useFilter';
 import type { Project } from '../services/filterService';
@@ -1094,15 +1095,15 @@ const ProjectTimelinePage = () => {
                           <div className="grid grid-cols-2 gap-3 text-xs text-gray-600">
                             <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3">
                               <p className="text-base font-bold text-gray-900">
-                                {totalBudget > 0 ? `₹${(totalBudget / 100000).toFixed(2)}L` : '—'}
+                                {totalBudget > 0 ? formatIndianRupee(totalBudget) : '—'}
                               </p>
                               <p className="uppercase tracking-[0.2em] text-[10px] text-gray-400">Allocated</p>
                             </div>
                             <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3">
                               <p className="text-base font-bold text-gray-900">
                                 {remainingBudget !== 0
-                                  ? `₹${Math.abs(remainingBudget / 100000).toFixed(1)}L`
-                                  : '₹0.0L'}
+                                  ? formatIndianRupee(Math.abs(remainingBudget))
+                                  : formatIndianRupee(0)}
                               </p>
                               <p className="uppercase tracking-[0.2em] text-[10px] text-gray-400">
                                 {remainingLabel}
