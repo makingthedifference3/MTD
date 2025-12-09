@@ -9,6 +9,7 @@ import { supabase } from './supabaseClient';
 export interface RealTimeUpdate {
   id: string;
   update_code: string;
+  update_no?: string;
   project_id: string;
   task_id?: string;
   timeline_id?: string;
@@ -19,6 +20,7 @@ export interface RealTimeUpdate {
   update_number?: number;
   document_number?: string;
   reference_number?: string;
+  location?: string;
   date?: string;
   time?: string;
   location_name?: string;
@@ -45,6 +47,7 @@ export interface RealTimeUpdate {
   tags?: string[];
   notes?: string;
   metadata?: Record<string, unknown>;
+  pdf_url?: string | null;
   created_at?: string;
   updated_at?: string;
   created_by?: string;

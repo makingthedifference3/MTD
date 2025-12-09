@@ -5,6 +5,7 @@ const PROJECT_SELECT_FIELDS = `
   id,
   name,
   project_code,
+  logo_url,
   csr_partner_id,
   toll_id,
   description,
@@ -72,6 +73,7 @@ export interface Project {
   expected_end_date?: string;
   status?: string;
   is_active: boolean;
+  logo_url?: string;
   // Sub-project support
   parent_project_id?: string;
   is_beneficiary_project?: boolean;
