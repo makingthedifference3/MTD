@@ -17,7 +17,7 @@ const ReportPageLayout: React.FC<ReportPageLayoutProps> = ({ children }) => {
       </div>
 
       {/* Main Content Area - Strictly clipped to prevent footer overlap */}
-      <main className="flex-grow flex flex-col gap-4 min-h-0 relative z-0 overflow-hidden">
+      <main className="grow flex flex-col gap-4 min-h-0 relative z-0 overflow-hidden">
         {children}
       </main>
 

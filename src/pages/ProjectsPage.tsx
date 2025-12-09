@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { FormEvent, Dispatch, SetStateAction } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, FolderKanban, DollarSign, X, MapPin, Calendar, Loader, LayoutDashboard, Trash2, Copy } from 'lucide-react';
+import { Plus, FolderKanban, DollarSign, X, MapPin, Calendar, Loader, LayoutDashboard, Trash2, Copy, Receipt } from 'lucide-react';
+import toast, { Toaster } from 'react-hot-toast';
 import { useFilter } from '../context/useFilter';
 import { useAuth } from '../context/useAuth';
 import { useNavigate } from 'react-router-dom';
@@ -26,6 +27,7 @@ import {
   type BudgetCategoryInput,
 } from '../services/budgetCategoriesService';
 import { getAllActiveUsers, type User } from '../services/usersService';
+import { projectExpensesService, type ExpenseCategory } from '../services/projectExpensesService';
 import { IMPACT_METRIC_VISUALS } from '../constants/impactMetricVisuals';
 import {
   getImpactMetricValue,
@@ -265,6 +267,32 @@ const ProjectsPage = () => {
   const [projectBudgetCategories, setProjectBudgetCategories] = useState<any[]>([]);
   const [budgetCategoriesLoading, setBudgetCategoriesLoading] = useState(false);
   
+  // Expense state for adding expenses within project
+  const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>([]);
+  const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
+  const [newExpense, setNewExpense] = useState({
+    merchant_name: '',
+    date: '',
+    category: '',
+    category_id: '',
+    total_amount: '',
+    description: '',
+    payment_method: 'NEFT',
+    budget_category_id: '',
+    has_bills: true,
+  });
+  const [expenseBillFile, setExpenseBillFile] = useState<File | null>(null);
+  const [uploadingExpenseBill, setUploadingExpenseBill] = useState(false);
+  const [expenseBudgetCategories, setExpenseBudgetCategories] = useState<Array<{id: string; name: string; parent_id: string | null}>>([]);
+  const [expenseBudgetSubcategories, setExpenseBudgetSubcategories] = useState<Array<{id: string; name: string; parent_id: string | null}>>([]);
+  const [expenseBudgetSubSubcategories, setExpenseBudgetSubSubcategories] = useState<Array<{id: string; name: string; parent_id: string | null}>>([]);
+  const [selectedExpenseBudgetCategory, setSelectedExpenseBudgetCategory] = useState('');
+  const [selectedExpenseBudgetSubcategory, setSelectedExpenseBudgetSubcategory] = useState('');
+  
+  // Project expenses state
+  const [projectExpenses, setProjectExpenses] = useState<any[]>([]);
+  const [projectExpensesLoading, setProjectExpensesLoading] = useState(false);
+  
   const resetFormState = () => {
     setFormData(createInitialProjectFormState());
     setTolls([]);
@@ -375,6 +403,47 @@ const ProjectsPage = () => {
       console.error('Error loading team templates:', error);
     } finally {
       setTemplatesLoading(false);
+    }
+  }, []);
+
+  const fetchExpenseCategories = useCallback(async () => {
+    try {
+      const categories = await projectExpensesService.getExpenseCategories();
+      setExpenseCategories(categories);
+    } catch (err) {
+      console.error('Failed to fetch expense categories:', err);
+    }
+  }, []);
+
+  const fetchProjectExpenses = useCallback(async (projectId: string) => {
+    if (!projectId) return;
+    
+    setProjectExpensesLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('project_expenses')
+        .select(`
+          id,
+          expense_code,
+          merchant_name,
+          date,
+          category,
+          total_amount,
+          status,
+          payment_method,
+          has_bills,
+          bill_drive_link
+        `)
+        .eq('project_id', projectId)
+        .order('date', { ascending: false });
+
+      if (error) throw error;
+      setProjectExpenses(data || []);
+    } catch (err) {
+      console.error('Failed to fetch project expenses:', err);
+      setProjectExpenses([]);
+    } finally {
+      setProjectExpensesLoading(false);
     }
   }, []);
 
@@ -679,6 +748,12 @@ const ProjectsPage = () => {
     if (project.csr_partner_id) {
       fetchTolls(project.csr_partner_id);
     }
+    
+    // Load expense categories for adding expenses
+    fetchExpenseCategories();
+    
+    // Load project expenses
+    fetchProjectExpenses(project.id);
 
     try {
       console.log('Fetching team members for project:', project.id);
@@ -1265,6 +1340,210 @@ const ProjectsPage = () => {
     selectedProjectDetails?.toll?.poc_name ||
     (selectedProjectDetails?.toll_id ? 'Linked Toll' : null);
 
+  // Expense handlers for adding expenses within project
+  const handleOpenAddExpenseModal = async () => {
+    if (!editingProjectId) {
+      toast.error('Please save the project first before adding expenses');
+      return;
+    }
+    
+    // Load budget categories for the project
+    try {
+      const { getBudgetCategoriesByProject } = await import('../services/budgetCategoriesService');
+      const budgetCategories = await getBudgetCategoriesByProject(editingProjectId);
+      const categories = budgetCategories.filter((cat: any) => !cat.parent_id);
+      setExpenseBudgetCategories(categories);
+    } catch (error) {
+      console.error('Error fetching budget categories:', error);
+    }
+    
+    setShowAddExpenseModal(true);
+  };
+
+  const handleCloseAddExpenseModal = () => {
+    setShowAddExpenseModal(false);
+    setNewExpense({
+      merchant_name: '',
+      date: '',
+      category: '',
+      category_id: '',
+      total_amount: '',
+      description: '',
+      payment_method: 'NEFT',
+      budget_category_id: '',
+      has_bills: true,
+    });
+    setExpenseBillFile(null);
+    setExpenseBudgetCategories([]);
+    setExpenseBudgetSubcategories([]);
+    setExpenseBudgetSubSubcategories([]);
+    setSelectedExpenseBudgetCategory('');
+    setSelectedExpenseBudgetSubcategory('');
+  };
+
+  const fetchExpenseBudgetSubcategories = async (projectId: string, parentId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('budget_categories')
+        .select('id, name, parent_id')
+        .eq('project_id', projectId)
+        .eq('parent_id', parentId)
+        .order('name');
+      
+      if (error) throw error;
+      setExpenseBudgetSubcategories(data || []);
+      setExpenseBudgetSubSubcategories([]);
+      setSelectedExpenseBudgetSubcategory('');
+    } catch (error) {
+      console.error('Error fetching budget subcategories:', error);
+      setExpenseBudgetSubcategories([]);
+    }
+  };
+
+  const fetchExpenseBudgetSubSubcategories = async (projectId: string, parentId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('budget_categories')
+        .select('id, name, parent_id')
+        .eq('project_id', projectId)
+        .eq('parent_id', parentId)
+        .order('name');
+      
+      if (error) throw error;
+      setExpenseBudgetSubSubcategories(data || []);
+    } catch (error) {
+      console.error('Error fetching budget sub-subcategories:', error);
+      setExpenseBudgetSubSubcategories([]);
+    }
+  };
+
+  const handleCreateExpenseInProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!currentUser || !editingProjectId) {
+      toast.error('Unable to create expense');
+      return;
+    }
+
+    // Enforce Bill required only if has_bills is true
+    if (newExpense.has_bills && !expenseBillFile) {
+      toast.error('Please upload a bill (image or PDF). Bill is required.');
+      return;
+    }
+
+    // Validate category_id
+    let validCategoryId = newExpense.category_id;
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    if (!validCategoryId || validCategoryId.trim() === '' || validCategoryId === 'others') {
+      if (newExpense.category && newExpense.category.trim()) {
+        try {
+          const { data: newCategory, error: categoryError } = await supabase
+            .from('expense_categories')
+            .insert({
+              name: newExpense.category,
+              code: newExpense.category.toUpperCase().replace(/\s+/g, '_'),
+              is_active: true
+            })
+            .select('id')
+            .single();
+
+          if (categoryError) throw categoryError;
+          if (!newCategory || !newCategory.id) throw new Error('Failed to get category ID');
+
+          validCategoryId = newCategory.id;
+        } catch (error) {
+          console.error('Error creating category:', error);
+          toast.error('Failed to create expense category. Please try again.');
+          return;
+        }
+      } else {
+        toast.error('Please select or enter a category');
+        return;
+      }
+    }
+
+    if (!uuidRegex.test(validCategoryId)) {
+      toast.error('Invalid category ID format. Please try again.');
+      return;
+    }
+
+    try {
+      let billUrl = '';
+      
+      if (expenseBillFile) {
+        setUploadingExpenseBill(true);
+        const uploadToast = toast.loading('Uploading bill...');
+        try {
+          const fileExt = expenseBillFile.name.split('.').pop();
+          const originalName = expenseBillFile.name.replace(`.${fileExt}`, '').replace(/\s+/g, '_');
+          const timestamp = new Date().getTime();
+          const fileName = `receipt_${originalName}_${timestamp}.${fileExt}`;
+          const filePath = `bills/${fileName}`;
+
+          const { data: _uploadData, error: uploadError } = await supabase.storage
+            .from('MTD_Bills')
+            .upload(filePath, expenseBillFile, {
+              cacheControl: '3600',
+              upsert: false
+            });
+
+          if (uploadError) throw uploadError;
+
+          const { data: urlData } = supabase.storage
+            .from('MTD_Bills')
+            .getPublicUrl(filePath);
+
+          billUrl = urlData.publicUrl;
+          toast.success('Bill uploaded successfully!', { id: uploadToast });
+        } catch (error) {
+          console.error('Error uploading file:', error);
+          toast.error('Failed to upload bill. Please try again.', { id: uploadToast });
+          setUploadingExpenseBill(false);
+          return;
+        } finally {
+          setUploadingExpenseBill(false);
+        }
+      }
+
+      const expenseData: any = {
+        expense_code: `EXP-${Date.now()}`,
+        project_id: editingProjectId,
+        category_id: validCategoryId,
+        merchant_name: newExpense.merchant_name,
+        date: newExpense.date,
+        category: newExpense.category,
+        description: newExpense.description,
+        total_amount: parseFloat(newExpense.total_amount),
+        base_amount: parseFloat(newExpense.total_amount),
+        status: 'pending',
+        payment_method: newExpense.payment_method as 'Cash' | 'Cheque' | 'Online' | 'Card' | 'NEFT' | 'RTGS',
+        submitted_by: currentUser.id,
+        csr_partner_id: formData.csrPartnerId,
+        toll_id: formData.tollId || undefined,
+        budget_category_id: newExpense.budget_category_id || undefined,
+        has_bills: newExpense.has_bills,
+      };
+
+      if (billUrl) {
+        expenseData.bill_drive_link = billUrl;
+      }
+
+      const created = await projectExpensesService.createExpense(expenseData);
+
+      if (created) {
+        toast.success('Expense created successfully!');
+        if (editingProjectId) {
+          fetchProjectExpenses(editingProjectId);
+        }
+        handleCloseAddExpenseModal();
+      }
+    } catch (error) {
+      console.error('Error creating expense:', error);
+      toast.error('Failed to create expense. Please try again.');
+    }
+  };
+
   const { isLoading } = useFilter();
 
   if (isLoading) {
@@ -1408,6 +1687,7 @@ const ProjectsPage = () => {
                     console.log('Viewing project details. UC Link:', (project as any).uc_link);
                     console.log('Full project:', project);
                     setSelectedProjectDetails(project);
+                    fetchProjectExpenses(project.id);
                   }}
                   className="flex-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-medium py-2 rounded-lg transition-colors"
                 >
@@ -1517,8 +1797,8 @@ const ProjectsPage = () => {
                   </div>
                 )}
 
-                {/* Location & State */}
-                <div className={`grid grid-cols-1 ${showTollColumn ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-4`}>
+                {/* Location, State, Subcompany & Funding Partner */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {selectedProjectDetails.location && (
                     <div>
                       <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Location</p>
@@ -1541,6 +1821,12 @@ const ProjectsPage = () => {
                             {[selectedProjectDetails.toll.city, selectedProjectDetails.toll.state].filter(Boolean).join(', ')}
                           </p>
                         )}
+                    </div>
+                  )}
+                  {(selectedProjectDetails as any).funding_partner && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Funding Partner</p>
+                      <p className="text-gray-900 font-medium">{(selectedProjectDetails as any).funding_partner}</p>
                     </div>
                   )}
                 </div>
@@ -1573,6 +1859,51 @@ const ProjectsPage = () => {
                               <p className="text-xs uppercase tracking-wide text-gray-500">
                                 {formatRoleLabel(member.role)}
                               </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Project Expenses */}
+                {projectExpensesLoading && (
+                  <p className="text-sm text-gray-500">Loading expenses…</p>
+                )}
+                {!projectExpensesLoading && (
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-semibold text-gray-900">Project Expenses</h3>
+                      <p className="text-xs text-gray-500">{projectExpenses.length || 0} expense{projectExpenses.length === 1 ? '' : 's'}</p>
+                    </div>
+                    {projectExpenses.length === 0 ? (
+                      <p className="text-sm text-gray-500">No expenses have been added yet.</p>
+                    ) : (
+                      <div className="grid grid-cols-1 gap-3">
+                        {projectExpenses.map((expense) => (
+                          <div
+                            key={expense.id}
+                            className="flex items-center justify-between gap-3 p-3 rounded-2xl border border-gray-100 bg-gray-50"
+                          >
+                            <div className="flex-1">
+                              <p className="text-sm font-semibold text-gray-900">
+                                {expense.merchant_name}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                {expense.category} • {new Date(expense.date).toLocaleDateString()}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm font-bold text-emerald-700">₹{expense.total_amount.toLocaleString()}</p>
+                              <span className={`text-xs px-2 py-1 rounded-full ${
+                                expense.status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
+                                expense.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                                expense.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                                'bg-blue-100 text-blue-700'
+                              }`}>
+                                {expense.status}
+                              </span>
                             </div>
                           </div>
                         ))}
@@ -2382,7 +2713,354 @@ const ProjectsPage = () => {
           onLoadTemplate={handleLoadTemplate}
           onSaveTemplate={() => setShowSaveTemplateModal(true)}
           onManageTemplates={() => setShowManageTemplatesModal(true)}
+          editingProjectId={editingProjectId}
+          onOpenAddExpenseModal={handleOpenAddExpenseModal}
+          projectExpenses={projectExpenses}
+          projectExpensesLoading={projectExpensesLoading}
         />
+      )}
+
+      {/* Add Expense Modal */}
+      {showAddExpenseModal && editingProjectId && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+          <Toaster position="top-right" />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+          >
+            <div className="bg-linear-to-r from-emerald-500 to-emerald-600 p-6 text-white">
+              <h2 className="text-2xl font-bold">Add Expense to Project</h2>
+              <p className="text-emerald-100 mt-1">Submit expense for this project</p>
+            </div>
+            <form onSubmit={handleCreateExpenseInProject} className="p-6 space-y-6">
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg mb-4">
+                <p className="text-sm text-blue-900 font-medium">Project Context</p>
+                <p className="text-xs text-blue-700 mt-1">
+                  CSR Partner, Subcompany, Funding Partner, and Project information are automatically filled from the project context.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Merchant Name */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Merchant Name *</label>
+                  <input
+                    type="text"
+                    value={newExpense.merchant_name}
+                    onChange={(e) => setNewExpense({ ...newExpense, merchant_name: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="Enter merchant name"
+                    required
+                  />
+                </div>
+
+                {/* Date */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Date *</label>
+                  <input
+                    type="date"
+                    value={newExpense.date}
+                    onChange={(e) => setNewExpense({ ...newExpense, date: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    required
+                  />
+                </div>
+
+                {/* Category */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Category *</label>
+                  {expenseCategories.length === 0 ? (
+                    <input
+                      type="text"
+                      value={newExpense.category}
+                      onChange={(e) => setNewExpense({ 
+                        ...newExpense, 
+                        category: e.target.value,
+                        category_id: '' 
+                      })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      placeholder="Enter category"
+                      required
+                    />
+                  ) : (
+                    <>
+                      <select
+                        value={newExpense.category_id}
+                        onChange={(e) => {
+                          const categoryId = e.target.value;
+                          if (categoryId === 'others') {
+                            setNewExpense({ ...newExpense, category_id: 'others', category: '' });
+                          } else {
+                            const category = expenseCategories.find(c => c.id === categoryId);
+                            setNewExpense({ 
+                              ...newExpense, 
+                              category_id: categoryId,
+                              category: category?.name || ''
+                            });
+                          }
+                        }}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        required
+                      >
+                        <option value="">Select Category</option>
+                        {expenseCategories.map((category) => (
+                          <option key={category.id} value={category.id}>
+                            {category.name}
+                          </option>
+                        ))}
+                        <option value="others">Others</option>
+                      </select>
+
+                      {newExpense.category_id === 'others' && (
+                        <input
+                          type="text"
+                          value={newExpense.category}
+                          onChange={(e) => setNewExpense({ 
+                            ...newExpense, 
+                            category: e.target.value,
+                            category_id: 'others'
+                          })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 mt-2"
+                          placeholder="Enter custom category name"
+                          required
+                        />
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* Total Amount */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Total Amount (₹) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={newExpense.total_amount}
+                    onChange={(e) => setNewExpense({ ...newExpense, total_amount: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="0.00"
+                    required
+                  />
+                </div>
+
+                {/* Payment Method */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Payment Method *</label>
+                  <select
+                    value={newExpense.payment_method}
+                    onChange={(e) => setNewExpense({ ...newExpense, payment_method: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    required
+                  >
+                    <option value="NEFT">NEFT</option>
+                    <option value="RTGS">RTGS</option>
+                    <option value="Cheque">Cheque</option>
+                    <option value="Card">Card</option>
+                    <option value="Cash">Cash</option>
+                    <option value="Online">GPay/Online</option>
+                  </select>
+                </div>
+
+                {/* Budget Category - Only show if budget categories exist */}
+                {expenseBudgetCategories.length > 0 && (
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Budget Category</label>
+                    <select
+                      value={selectedExpenseBudgetCategory}
+                      onChange={(e) => {
+                        const categoryId = e.target.value;
+                        setSelectedExpenseBudgetCategory(categoryId);
+                        setSelectedExpenseBudgetSubcategory('');
+                        setExpenseBudgetSubcategories([]);
+                        setExpenseBudgetSubSubcategories([]);
+                        if (categoryId && categoryId !== 'others' && editingProjectId) {
+                          fetchExpenseBudgetSubcategories(editingProjectId, categoryId);
+                          setNewExpense({ ...newExpense, budget_category_id: categoryId });
+                        } else {
+                          setNewExpense({ ...newExpense, budget_category_id: '' });
+                        }
+                      }}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    >
+                      <option value="">Select Budget Category</option>
+                      {expenseBudgetCategories.map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </option>
+                      ))}
+                      <option value="others">Others</option>
+                    </select>
+                  </div>
+                )}
+
+                {/* Budget Subcategory */}
+                {expenseBudgetSubcategories.length > 0 && selectedExpenseBudgetCategory && selectedExpenseBudgetCategory !== 'others' && (
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Budget Subcategory</label>
+                    <select
+                      value={selectedExpenseBudgetSubcategory}
+                      onChange={(e) => {
+                        const subcategoryId = e.target.value;
+                        setSelectedExpenseBudgetSubcategory(subcategoryId);
+                        setExpenseBudgetSubSubcategories([]);
+                        if (subcategoryId && subcategoryId !== 'others' && editingProjectId) {
+                          fetchExpenseBudgetSubSubcategories(editingProjectId, subcategoryId);
+                          setNewExpense({ ...newExpense, budget_category_id: subcategoryId });
+                        } else {
+                          setNewExpense({ ...newExpense, budget_category_id: selectedExpenseBudgetCategory });
+                        }
+                      }}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    >
+                      <option value="">Select Budget Subcategory</option>
+                      {expenseBudgetSubcategories.map((subcat) => (
+                        <option key={subcat.id} value={subcat.id}>
+                          {subcat.name}
+                        </option>
+                      ))}
+                      <option value="others">Others</option>
+                    </select>
+                  </div>
+                )}
+
+                {/* Budget Sub-Subcategory */}
+                {expenseBudgetSubSubcategories.length > 0 && selectedExpenseBudgetSubcategory && selectedExpenseBudgetSubcategory !== 'others' && (
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Budget Sub-Subcategory</label>
+                    <select
+                      value={newExpense.budget_category_id}
+                      onChange={(e) => {
+                        const subSubcategoryId = e.target.value;
+                        if (subSubcategoryId && subSubcategoryId !== 'others') {
+                          setNewExpense({ ...newExpense, budget_category_id: subSubcategoryId });
+                        } else {
+                          setNewExpense({ ...newExpense, budget_category_id: selectedExpenseBudgetSubcategory });
+                        }
+                      }}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    >
+                      <option value="">Select Budget Sub-Subcategory</option>
+                      {expenseBudgetSubSubcategories.map((subsubcat) => (
+                        <option key={subsubcat.id} value={subsubcat.id}>
+                          {subsubcat.name}
+                        </option>
+                      ))}
+                      <option value="others">Others</option>
+                    </select>
+                  </div>
+                )}
+
+                {/* Description */}
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                  <textarea
+                    value={newExpense.description}
+                    onChange={(e) => setNewExpense({ ...newExpense, description: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="Enter expense description"
+                    rows={3}
+                  />
+                </div>
+
+                {/* Have Bill Toggle */}
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Have Bill? *</label>
+                  <div className="flex gap-4">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewExpense({ ...newExpense, has_bills: true });
+                        setExpenseBillFile(null);
+                      }}
+                      className={`flex-1 py-3 px-6 rounded-lg font-medium transition-all ${
+                        newExpense.has_bills
+                          ? 'bg-emerald-500 text-white shadow-md'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      Yes
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewExpense({ ...newExpense, has_bills: false });
+                        setExpenseBillFile(null);
+                      }}
+                      className={`flex-1 py-3 px-6 rounded-lg font-medium transition-all ${
+                        !newExpense.has_bills
+                          ? 'bg-emerald-500 text-white shadow-md'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      No
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    {newExpense.has_bills ? 'Bill upload is required' : 'Bill upload is optional'}
+                  </p>
+                </div>
+
+                {/* Bill Upload - Only show if has_bills is true */}
+                {newExpense.has_bills && (
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Bill <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="file"
+                      accept="image/*,.pdf"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          if (file.size > 5 * 1024 * 1024) {
+                            toast.error('File size must be less than 5MB');
+                            e.target.value = '';
+                            return;
+                          }
+                          setExpenseBillFile(file);
+                        }
+                      }}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100"
+                      required
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Upload bill image or PDF (max 5MB). Bill is required.
+                    </p>
+                    {expenseBillFile && (
+                      <p className="text-xs text-emerald-600 mt-1">Selected: {expenseBillFile.name}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-3 pt-6 border-t">
+                <button
+                  type="button"
+                  onClick={handleCloseAddExpenseModal}
+                  disabled={uploadingExpenseBill}
+                  className="flex-1 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-300 disabled:cursor-not-allowed text-gray-700 font-medium py-3 px-4 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={uploadingExpenseBill}
+                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-300 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+                >
+                  {uploadingExpenseBill ? (
+                    <>
+                      <Loader className="w-4 h-4 animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    'Submit Expense'
+                  )}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
       )}
 
       {/* Save Template Modal */}
@@ -2935,6 +3613,10 @@ interface AddProjectModalProps {
   onLoadTemplate: (templateId: string) => void;
   onSaveTemplate: () => void;
   onManageTemplates: () => void;
+  editingProjectId: string | null;
+  onOpenAddExpenseModal: () => void;
+  projectExpenses: any[];
+  projectExpensesLoading: boolean;
 }
 
 // Add Project Modal component
@@ -2961,6 +3643,10 @@ const AddProjectModal = ({
   onLoadTemplate,
   onSaveTemplate,
   onManageTemplates,
+  editingProjectId,
+  onOpenAddExpenseModal,
+  projectExpenses,
+  projectExpensesLoading,
 }: AddProjectModalProps) => {
   const [metricNameInput, setMetricNameInput] = useState('');
   const [metricError, setMetricError] = useState('');
@@ -3183,6 +3869,65 @@ const AddProjectModal = ({
               This partner does not manage subcompanies separately. Project location will use the CSR partner's city/state.
             </div>
           )}
+
+          {/* Funding Partner */}
+          <label className="text-sm font-medium text-gray-700">
+            Funding Partner
+            <select
+              value={formData.isCustomFundingPartner ? 'custom' : formData.fundingPartner}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value === 'custom') {
+                  setFormData((prev) => ({
+                    ...prev,
+                    fundingPartner: '',
+                    isCustomFundingPartner: true,
+                  }));
+                } else {
+                  setFormData((prev) => ({
+                    ...prev,
+                    fundingPartner: value,
+                    isCustomFundingPartner: false,
+                  }));
+                }
+              }}
+              className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            >
+              <option value="">Select Funding Partner</option>
+              {(() => {
+                const uniqueFundingPartners = Array.from(
+                  new Set(
+                    projects
+                      .map(p => (p as any).funding_partner)
+                      .filter(fp => fp && fp.trim())
+                  )
+                ).sort();
+                return uniqueFundingPartners.map((partner) => (
+                  <option key={partner} value={partner}>
+                    {partner}
+                  </option>
+                ));
+              })()}
+              <option value="custom">Other (Custom)...</option>
+            </select>
+          </label>
+          {formData.isCustomFundingPartner && (
+            <label className="text-sm font-medium text-gray-700">
+              Custom Funding Partner Name
+              <input
+                type="text"
+                value={formData.fundingPartner}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    fundingPartner: e.target.value,
+                  }))
+                }
+                className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                placeholder="Enter custom funding partner name"
+              />
+            </label>
+          )}
         </div>
 
         {/* Project Name and Code */}
@@ -3375,7 +4120,7 @@ const AddProjectModal = ({
               onChange={(e) =>
                 setFormData((prev) => ({
                   ...prev,
-                    status: e.target.value as ProjectFormData['status'],
+                  status: e.target.value as ProjectFormData['status'],
                 }))
               }
               className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
@@ -3386,67 +4131,6 @@ const AddProjectModal = ({
               <option value="completed">Completed</option>
             </select>
           </label>
-        </div>
-
-        {/* Funding Partner */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="text-sm font-medium text-gray-700">
-            Funding Partner
-            <select
-              value={formData.isCustomFundingPartner ? 'custom' : formData.fundingPartner}
-              onChange={(e) => {
-                const value = e.target.value;
-                if (value === 'custom') {
-                  setFormData((prev) => ({
-                    ...prev,
-                    fundingPartner: '',
-                    isCustomFundingPartner: true,
-                  }));
-                } else {
-                  setFormData((prev) => ({
-                    ...prev,
-                    fundingPartner: value,
-                    isCustomFundingPartner: false,
-                  }));
-                }
-              }}
-              className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-            >
-              <option value="">Select Funding Partner</option>
-              {(() => {
-                const uniqueFundingPartners = Array.from(
-                  new Set(
-                    projects
-                      .map(p => (p as any).funding_partner)
-                      .filter(fp => fp && fp.trim())
-                  )
-                ).sort();
-                return uniqueFundingPartners.map((partner) => (
-                  <option key={partner} value={partner}>
-                    {partner}
-                  </option>
-                ));
-              })()}
-              <option value="custom">Other (Custom)...</option>
-            </select>
-          </div>
-          {formData.isCustomFundingPartner && (
-            <label className="text-sm font-medium text-gray-700">
-              Custom Funding Partner Name
-              <input
-                type="text"
-                value={formData.fundingPartner}
-                onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    fundingPartner: e.target.value,
-                  }))
-                }
-                className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                placeholder="Enter funding partner name..."
-              />
-            </label>
-          )}
         </div>
 
         {/* Team Members Assignment */}
@@ -3902,6 +4586,69 @@ const AddProjectModal = ({
             </div>
           </div>
         </div>
+
+        {/* Add Expense Section - Only show when editing a project */}
+        {editingProjectId && (
+          <div className="rounded-2xl border border-gray-100 p-4 bg-white shadow-sm">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-gray-900">Project Expenses</p>
+                <p className="text-xs text-gray-500">Add expenses directly to this project</p>
+              </div>
+            </div>
+
+            {/* Show added expenses */}
+            {projectExpensesLoading && (
+              <p className="text-xs text-gray-500 mt-3">Loading expenses…</p>
+            )}
+            {!projectExpensesLoading && projectExpenses.length > 0 && (
+              <div className="mb-4 space-y-2">
+                <p className="text-xs font-semibold text-gray-700">{projectExpenses.length} expense{projectExpenses.length === 1 ? '' : 's'} added</p>
+                <div className="max-h-48 overflow-y-auto space-y-2">
+                  {projectExpenses.map((expense) => (
+                    <div
+                      key={expense.id}
+                      className="flex items-center justify-between p-2 rounded-lg bg-gray-50 border border-gray-100"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-gray-900 truncate">
+                          {expense.merchant_name}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {expense.category} • {new Date(expense.date).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <div className="text-right ml-2">
+                        <p className="text-xs font-bold text-emerald-700">₹{expense.total_amount.toLocaleString()}</p>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${
+                          expense.status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
+                          expense.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                          expense.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                          'bg-blue-100 text-blue-700'
+                        }`}>
+                          {expense.status}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={onOpenAddExpenseModal}
+              className="w-full px-3 py-2 rounded-lg border border-emerald-200 text-emerald-700 text-sm font-medium hover:bg-emerald-50 flex items-center justify-center gap-2"
+            >
+              <Receipt className="w-4 h-4" />
+              Add Expense
+            </button>
+
+            <p className="mt-3 text-xs text-gray-500">
+              Add expenses without navigating to the Project Expenses page. All fields except CSR Partner, Subcompany, Funding Partner, and Project are required.
+            </p>
+          </div>
+        )}
 
         {/* Utilization Certificate Upload */}
         <div className="border border-gray-200 rounded-xl p-4">
