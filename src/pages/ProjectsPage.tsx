@@ -659,31 +659,14 @@ const ProjectsPage = () => {
 
       // Handle budget categories
       if (formData.enableBudgetCategories && projectId && formData.budgetCategories.length > 0) {
-        if (editingProjectId) {
-          // When editing, delete all existing categories and recreate them
-          const { getBudgetCategoriesByProject, deleteBudgetCategory } = await import('../services/budgetCategoriesService');
-          const existingCategories = await getBudgetCategoriesByProject(projectId);
-          
-          // Delete all root categories (children will cascade delete)
-          const rootCategories = existingCategories.filter(cat => cat.parent_id === null);
-          for (const cat of rootCategories) {
-            await deleteBudgetCategory(cat.id);
-          }
-          
-          // Create new categories
-          await saveBudgetCategories(projectId, formData.budgetCategories, currentUser?.id);
-        } else {
-          // When creating new project, just create categories
+        // Note: When editing, we don't delete existing categories to preserve those with expenses
+        // Budget categories are managed separately in the Budget Categories page
+        if (!editingProjectId) {
+          // Only create new categories when creating a new project
           await saveBudgetCategories(projectId, formData.budgetCategories, currentUser?.id);
         }
-      } else if (editingProjectId && !formData.enableBudgetCategories && projectId) {
-        // If categories were disabled during edit, delete all existing categories
-        const { getBudgetCategoriesByProject, deleteBudgetCategory } = await import('../services/budgetCategoriesService');
-        const existingCategories = await getBudgetCategoriesByProject(projectId);
-        const rootCategories = existingCategories.filter(cat => cat.parent_id === null);
-        for (const cat of rootCategories) {
-          await deleteBudgetCategory(cat.id);
-        }
+        // When editing, budget categories should be managed through the Budget Categories page
+        // to avoid conflicts with existing expenses
       }
 
       // Create beneficiary sub-projects if checkbox was checked
@@ -1351,8 +1334,13 @@ const ProjectsPage = () => {
     try {
       const { getBudgetCategoriesByProject } = await import('../services/budgetCategoriesService');
       const budgetCategories = await getBudgetCategoriesByProject(editingProjectId);
-      const categories = budgetCategories.filter((cat: any) => !cat.parent_id);
-      setExpenseBudgetCategories(categories);
+      // Filter to get only root categories (no parent) and remove duplicates by id
+      const rootCategories = budgetCategories.filter((cat: any) => !cat.parent_id || cat.parent_id === null);
+      // Remove duplicates by creating a Map with id as key
+      const uniqueCategories = Array.from(
+        new Map(rootCategories.map((cat: any) => [cat.id, cat])).values()
+      );
+      setExpenseBudgetCategories(uniqueCategories);
     } catch (error) {
       console.error('Error fetching budget categories:', error);
     }
@@ -1506,6 +1494,13 @@ const ProjectsPage = () => {
         }
       }
 
+      // Get project data to ensure we have correct toll_id and csr_partner_id
+      const { data: projectData } = await supabase
+        .from('projects')
+        .select('toll_id, csr_partner_id')
+        .eq('id', editingProjectId)
+        .single();
+
       const expenseData: any = {
         expense_code: `EXP-${Date.now()}`,
         project_id: editingProjectId,
@@ -1519,8 +1514,8 @@ const ProjectsPage = () => {
         status: 'pending',
         payment_method: newExpense.payment_method as 'Cash' | 'Cheque' | 'Online' | 'Card' | 'NEFT' | 'RTGS',
         submitted_by: currentUser.id,
-        csr_partner_id: formData.csrPartnerId,
-        toll_id: formData.tollId || undefined,
+        csr_partner_id: projectData?.csr_partner_id || formData.csrPartnerId,
+        toll_id: projectData?.toll_id || formData.tollId || undefined,
         budget_category_id: newExpense.budget_category_id || undefined,
         has_bills: newExpense.has_bills,
       };

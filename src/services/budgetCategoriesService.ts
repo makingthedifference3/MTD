@@ -138,12 +138,13 @@ export async function deleteBudgetCategory(id: string): Promise<void> {
 
   if (checkError) {
     console.error('Error checking budget category references:', checkError);
-    throw checkError;
+    // Don't throw - just return to prevent blocking
+    return;
   }
 
   // If expenses exist with this category, don't delete it
   if (expensesWithCategory && expensesWithCategory.length > 0) {
-    console.warn('Cannot delete budget category - it has associated expenses');
+    console.warn(`Cannot delete budget category ${id} - it has ${expensesWithCategory.length} associated expense(s)`);
     // Silently return without error to prevent blocking project save
     return;
   }
@@ -154,6 +155,12 @@ export async function deleteBudgetCategory(id: string): Promise<void> {
     .eq('id', id);
 
   if (error) {
+    // Check if it's a foreign key constraint error
+    if (error.code === '23503') {
+      console.warn(`Cannot delete budget category ${id} - foreign key constraint (has related data)`);
+      // Don't throw - just return to prevent blocking project save
+      return;
+    }
     console.error('Error deleting budget category:', error);
     throw error;
   }
