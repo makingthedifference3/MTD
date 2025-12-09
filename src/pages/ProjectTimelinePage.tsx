@@ -1089,7 +1089,12 @@ const ProjectTimelinePage = () => {
                           </div>
 
                           {project.description && (
-                            <p className="text-sm text-gray-600 mb-4 line-clamp-2">{project.description}</p>
+                            <p 
+                              className="text-sm text-gray-600 mb-4 line-clamp-2" 
+                              title={project.description}
+                            >
+                              {project.description}
+                            </p>
                           )}
 
                           <div className="grid grid-cols-2 gap-3 text-xs text-gray-600">

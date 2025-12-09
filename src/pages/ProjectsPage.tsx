@@ -1669,6 +1669,14 @@ const ProjectsPage = () => {
                   <div>
                     <h3 className="font-bold text-gray-900 text-lg">{project.name}</h3>
                     <p className="text-sm text-gray-600">{project.project_code} • {project.location}</p>
+                    {project.description && (
+                      <p 
+                        className="text-xs text-gray-500 mt-1 line-clamp-2" 
+                        title={project.description}
+                      >
+                        {project.description}
+                      </p>
+                    )}
                     {project.toll?.toll_name && (
                       <p className="text-xs text-emerald-600 mt-1">Subcompany: {project.toll.toll_name}</p>
                     )}
