@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Calendar, CheckCircle2, Clock, Loader, Trash2, Edit2, X, Save,
   ChevronRight, Target, BarChart3, FolderKanban, Check, Circle,
-  ArrowLeft, Building2, MapPin, UserPlus, Bell
+  ArrowLeft, Building2, MapPin, UserPlus, Bell, FileText, Download
 } from 'lucide-react';
 import { createTask } from '../services/tasksService';
 import { useAuth } from '../context/useAuth';
@@ -28,8 +28,17 @@ import {
   STATUS_CONFIG,
   PRIORITY_CONFIG,
 } from '../services/projectActivitiesService';
+import {
+  getAllActivityTemplates,
+  createActivityTemplate,
+  deleteActivityTemplate,
+  type ActivityTemplate,
+  type CreateActivityTemplateInput,
+} from '../services/activityTemplatesService';
 
 const ProjectTimelinePage = () => {
+  console.log('🔵 ProjectTimelinePage component mounted/re-rendered');
+  
   const { currentUser } = useAuth();
   const { 
     csrPartners, 
@@ -55,6 +64,8 @@ const ProjectTimelinePage = () => {
   const [selectedTollData, setSelectedTollData] = useState<Toll | null>(null);
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   const [selectedProjectData, setSelectedProjectData] = useState<Project | null>(null);
+  
+  console.log('🎯 Current viewMode:', viewMode);
   
   // Activities state
   const [activities, setActivities] = useState<ProjectActivityWithDetails[]>([]);
@@ -106,6 +117,31 @@ const ProjectTimelinePage = () => {
   const [newItemText, setNewItemText] = useState('');
   const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
   const [editingItemText, setEditingItemText] = useState('');
+
+  // Template state
+  const [activityTemplates, setActivityTemplates] = useState<ActivityTemplate[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false);
+  const [newTemplateName, setNewTemplateName] = useState('');
+  const [newTemplateDescription, setNewTemplateDescription] = useState('');
+  const [showManageTemplatesModal, setShowManageTemplatesModal] = useState(false);
+  const [showLoadTemplateModal, setShowLoadTemplateModal] = useState(false);
+  
+  console.log('🔍 Modal States:', {
+    showSaveTemplateModal,
+    showLoadTemplateModal,
+    showManageTemplatesModal,
+    activitiesCount: activities.length,
+    templatesCount: activityTemplates.length
+  });
+  
+  console.log('🔍 Modal States:', {
+    showSaveTemplateModal,
+    showLoadTemplateModal,
+    showManageTemplatesModal,
+    activitiesCount: activities.length,
+    templatesCount: activityTemplates.length
+  });
 
   // Get tolls for selected partner
   const partnerTolls = tolls.filter(t => t.csr_partner_id === selectedPartner);
@@ -197,6 +233,19 @@ const ProjectTimelinePage = () => {
     }
   }, [selectedProjectData]);
 
+  // Load activity templates
+  const loadActivityTemplates = useCallback(async () => {
+    setTemplatesLoading(true);
+    try {
+      const templates = await getAllActivityTemplates();
+      setActivityTemplates(templates);
+    } catch (error) {
+      console.error('Error loading activity templates:', error);
+    } finally {
+      setTemplatesLoading(false);
+    }
+  }, []);
+
   // Load activities when project is selected
   const loadActivities = useCallback(async () => {
     if (!selectedProjectData) return;
@@ -215,11 +264,14 @@ const ProjectTimelinePage = () => {
   }, [selectedProjectData]);
 
   useEffect(() => {
+    console.log('📍 useEffect triggered:', { viewMode, hasProject: !!selectedProjectData });
     if (viewMode === 'activities' && selectedProjectData) {
+      console.log('✅ Loading activities view for project:', selectedProjectData.name);
       loadActivities();
       fetchTeamMembers();
+      loadActivityTemplates();
     }
-  }, [viewMode, selectedProjectData, loadActivities, fetchTeamMembers]);
+  }, [viewMode, selectedProjectData, loadActivities, fetchTeamMembers, loadActivityTemplates]);
 
   // Handle partner click
   const handlePartnerClick = (partner: { id: string; name: string }) => {
@@ -529,6 +581,140 @@ const ProjectTimelinePage = () => {
     }
   };
 
+  // Save current activities as template
+  const handleSaveAsTemplate = async () => {
+    console.log('Save template clicked', { newTemplateName, activitiesCount: activities.length });
+    
+    if (!newTemplateName.trim()) {
+      alert('Please enter a template name');
+      return;
+    }
+
+    if (activities.length === 0) {
+      alert('No activities to save as template');
+      return;
+    }
+
+    try {
+      console.log('Creating template...');
+      const templateActivities = activities.map(activity => ({
+        title: activity.title,
+        description: activity.description || '',
+        priority: activity.priority,
+        responsible_person: activity.responsible_person || '',
+        items: activity.items?.map((item, index) => ({
+          text: item.item_text,
+          order: index + 1,
+        })) || [],
+      }));
+
+      const templateInput: CreateActivityTemplateInput = {
+        name: newTemplateName.trim(),
+        description: newTemplateDescription.trim() || undefined,
+        activities: templateActivities,
+        created_by: currentUser?.id,
+      };
+
+      const result = await createActivityTemplate(templateInput);
+      console.log('Template created:', result);
+      
+      await loadActivityTemplates();
+      
+      setShowSaveTemplateModal(false);
+      setNewTemplateName('');
+      setNewTemplateDescription('');
+      alert('Activity template saved successfully!');
+    } catch (error) {
+      console.error('Error saving template:', error);
+      alert(`Failed to save activity template: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  // Load activities from template
+  const handleLoadFromTemplate = async (templateId: string) => {
+    console.log('Load template clicked', { templateId });
+    
+    if (!selectedProjectData || !selectedPartnerData) {
+      alert('Please select a project first');
+      return;
+    }
+
+    const template = activityTemplates.find(t => t.id === templateId);
+    console.log('Found template:', template);
+    
+    if (!template) {
+      alert('Template not found');
+      return;
+    }
+
+    if (activities.length > 0) {
+      if (!confirm('This will add activities from the template. Continue?')) {
+        return;
+      }
+    }
+
+    try {
+      console.log('Loading activities from template...');
+      for (const templateActivity of template.activities) {
+        const activityData = {
+          project_id: selectedProjectData.id,
+          csr_partner_id: selectedPartnerData.id,
+          toll_id: selectedTollData?.id || selectedProjectData.toll_id || undefined,
+          title: templateActivity.title,
+          description: templateActivity.description || '',
+          section: 'General',
+          section_order: 1,
+          activity_order: 1,
+          priority: templateActivity.priority,
+          start_date: templateActivity.start_date_offset 
+            ? new Date(Date.now() + templateActivity.start_date_offset * 86400000).toISOString().split('T')[0]
+            : undefined,
+          end_date: templateActivity.end_date_offset
+            ? new Date(Date.now() + templateActivity.end_date_offset * 86400000).toISOString().split('T')[0]
+            : undefined,
+          responsible_person: templateActivity.responsible_person || undefined,
+          status: 'not_started' as const,
+          completion_percentage: 0,
+          is_active: true,
+        };
+
+        const savedActivity = await createActivity(activityData);
+
+        if (savedActivity && templateActivity.items && templateActivity.items.length > 0) {
+          for (const item of templateActivity.items) {
+            await createActivityItem({
+              activity_id: savedActivity.id,
+              item_text: item.text,
+              item_order: item.order,
+              is_completed: false,
+            });
+          }
+        }
+      }
+
+      setShowLoadTemplateModal(false);
+      await loadActivities();
+      alert('Activities loaded from template successfully!');
+    } catch (error) {
+      console.error('Error loading from template:', error);
+      alert('Failed to load activities from template');
+    }
+  };
+
+  // Delete a template
+  const handleDeleteTemplate = async (templateId: string) => {
+    if (!confirm('Are you sure you want to delete this template?')) return;
+    
+    try {
+      await deleteActivityTemplate(templateId);
+      await loadActivityTemplates();
+      alert('Template deleted successfully');
+    } catch (error) {
+      console.error('Error deleting template:', error);
+      alert('Failed to delete template');
+    }
+  };
+
   // Get breadcrumb text
   const getBreadcrumb = () => {
     const parts = ['Project Timeline'];
@@ -553,8 +739,8 @@ const ProjectTimelinePage = () => {
         animate={{ opacity: 1, y: 0 }}
         className="mb-8 relative"
       >
-        <div className="absolute inset-0 bg-linear-to-r from-emerald-500/10 via-emerald-400/5 to-transparent rounded-3xl blur-3xl"></div>
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="absolute inset-0 bg-linear-to-r from-emerald-500/10 via-emerald-400/5 to-transparent rounded-3xl blur-3xl pointer-events-none"></div>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-linear-to-br from-emerald-500 to-emerald-600 rounded-2xl shadow-lg shadow-emerald-500/30">
               <Calendar className="w-8 h-8 text-white" />
@@ -567,13 +753,52 @@ const ProjectTimelinePage = () => {
             </div>
           </div>
           {viewMode === 'activities' && (
-            <button
-              onClick={handleAddActivity}
-              className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-xl font-medium flex items-center space-x-2 transition-colors shadow-lg shadow-emerald-500/30"
-            >
-              <Plus className="w-5 h-5" />
-              <span>Add Activity</span>
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => {
+                  console.log('🔵 Load Template button clicked');
+                  setShowLoadTemplateModal(true);
+                }}
+                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-3 rounded-xl font-medium flex items-center space-x-2 transition-colors shadow-lg shadow-blue-500/30"
+                title="Load activities from template"
+              >
+                <Download className="w-5 h-5" />
+                <span>Load Template</span>
+              </button>
+              <button
+                onClick={() => {
+                  console.log('🟣 Save Template button clicked', { activitiesCount: activities.length });
+                  setShowSaveTemplateModal(true);
+                }}
+                disabled={activities.length === 0}
+                className="bg-purple-500 hover:bg-purple-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-4 py-3 rounded-xl font-medium flex items-center space-x-2 transition-colors shadow-lg shadow-purple-500/30"
+                title="Save current activities as template"
+              >
+                <Save className="w-5 h-5" />
+                <span>Save Template</span>
+              </button>
+              <button
+                onClick={() => {
+                  console.log('⚫ Manage Templates button clicked');
+                  setShowManageTemplatesModal(true);
+                }}
+                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-3 rounded-xl font-medium flex items-center space-x-2 transition-colors shadow-lg shadow-gray-500/30"
+                title="Manage templates"
+              >
+                <FileText className="w-5 h-5" />
+                <span>Manage</span>
+              </button>
+              <button
+                onClick={() => {
+                  console.log('🟢 Add Activity button clicked');
+                  handleAddActivity();
+                }}
+                className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-xl font-medium flex items-center space-x-2 transition-colors shadow-lg shadow-emerald-500/30"
+              >
+                <Plus className="w-5 h-5" />
+                <span>Add Activity</span>
+              </button>
+            </div>
           )}
         </div>
       </motion.div>
@@ -1512,6 +1737,258 @@ const ProjectTimelinePage = () => {
                     </>
                   )}
                 </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Save Template Modal */}
+      <AnimatePresence>
+        {showSaveTemplateModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setShowSaveTemplateModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-md"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-6 py-4 bg-purple-50 border-b border-purple-100 flex items-center justify-between">
+                <h2 className="text-xl font-bold text-gray-900">Save as Template</h2>
+                <button
+                  onClick={() => setShowSaveTemplateModal(false)}
+                  className="p-2 hover:bg-purple-100 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-gray-600" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Template Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={newTemplateName}
+                    onChange={(e) => setNewTemplateName(e.target.value)}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all"
+                    placeholder="e.g., Standard Project Activities"
+                    autoFocus
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Description (Optional)
+                  </label>
+                  <textarea
+                    value={newTemplateDescription}
+                    onChange={(e) => setNewTemplateDescription(e.target.value)}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all"
+                    placeholder="Describe this template..."
+                    rows={3}
+                  />
+                </div>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="text-sm text-blue-800">
+                    This will save all {activities.length} current activities as a reusable template.
+                  </p>
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={() => {
+                      setShowSaveTemplateModal(false);
+                      setNewTemplateName('');
+                      setNewTemplateDescription('');
+                    }}
+                    className="flex-1 px-4 py-3 border-2 border-gray-200 rounded-xl font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveAsTemplate}
+                    disabled={!newTemplateName.trim()}
+                    className="flex-1 px-4 py-3 bg-purple-500 hover:bg-purple-600 disabled:bg-gray-300 text-white rounded-xl font-medium transition-colors"
+                  >
+                    Save Template
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Load Template Modal */}
+      <AnimatePresence>
+        {showLoadTemplateModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setShowLoadTemplateModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-6 py-4 bg-blue-50 border-b border-blue-100 flex items-center justify-between">
+                <h2 className="text-xl font-bold text-gray-900">Load from Template</h2>
+                <button
+                  onClick={() => setShowLoadTemplateModal(false)}
+                  className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-gray-600" />
+                </button>
+              </div>
+
+              <div className="p-6 overflow-y-auto max-h-[calc(80vh-80px)]">
+                {templatesLoading ? (
+                  <div className="flex flex-col items-center justify-center py-12">
+                    <Loader className="w-12 h-12 text-blue-500 animate-spin mb-4" />
+                    <p className="text-gray-600 font-semibold">Loading templates...</p>
+                  </div>
+                ) : activityTemplates.length === 0 ? (
+                  <div className="text-center py-12">
+                    <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                    <h3 className="text-xl font-bold text-gray-700 mb-2">No Templates Found</h3>
+                    <p className="text-gray-500">Create your first template by saving current activities.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {activityTemplates.map((template) => (
+                      <div
+                        key={template.id}
+                        className="border-2 border-gray-200 rounded-xl p-4 hover:border-blue-500 transition-all"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <h3 className="font-bold text-gray-900 mb-1">{template.name}</h3>
+                            {template.description && (
+                              <p className="text-sm text-gray-600 mb-2">{template.description}</p>
+                            )}
+                            <p className="text-xs text-gray-500">
+                              {template.activities.length} {template.activities.length === 1 ? 'activity' : 'activities'}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => handleLoadFromTemplate(template.id)}
+                            className="ml-4 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+                          >
+                            <Download className="w-4 h-4" />
+                            Load
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Manage Templates Modal */}
+      <AnimatePresence>
+        {showManageTemplatesModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setShowManageTemplatesModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[80vh] overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-6 py-4 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                <h2 className="text-xl font-bold text-gray-900">Manage Activity Templates</h2>
+                <button
+                  onClick={() => setShowManageTemplatesModal(false)}
+                  className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-gray-600" />
+                </button>
+              </div>
+
+              <div className="p-6 overflow-y-auto max-h-[calc(80vh-80px)]">
+                {templatesLoading ? (
+                  <div className="flex flex-col items-center justify-center py-12">
+                    <Loader className="w-12 h-12 text-gray-500 animate-spin mb-4" />
+                    <p className="text-gray-600 font-semibold">Loading templates...</p>
+                  </div>
+                ) : activityTemplates.length === 0 ? (
+                  <div className="text-center py-12">
+                    <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                    <h3 className="text-xl font-bold text-gray-700 mb-2">No Templates Yet</h3>
+                    <p className="text-gray-500">Save your first template to get started.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {activityTemplates.map((template) => (
+                      <div
+                        key={template.id}
+                        className="border-2 border-gray-200 rounded-xl p-5 hover:border-gray-300 transition-all"
+                      >
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex-1">
+                            <h3 className="font-bold text-gray-900 text-lg mb-1">{template.name}</h3>
+                            {template.description && (
+                              <p className="text-sm text-gray-600 mb-2">{template.description}</p>
+                            )}
+                            <p className="text-xs text-gray-500">
+                              {template.activities.length} {template.activities.length === 1 ? 'activity' : 'activities'}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteTemplate(template.id)}
+                            className="ml-4 p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Delete template"
+                          >
+                            <Trash2 className="w-5 h-5" />
+                          </button>
+                        </div>
+
+                        {/* Show activity preview */}
+                        <div className="mt-3 pt-3 border-t border-gray-100">
+                          <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Activities:</p>
+                          <div className="space-y-1">
+                            {template.activities.slice(0, 5).map((activity, index) => (
+                              <div key={index} className="text-sm text-gray-700 flex items-start gap-2">
+                                <span className="text-gray-400">{index + 1}.</span>
+                                <span>{activity.title}</span>
+                              </div>
+                            ))}
+                            {template.activities.length > 5 && (
+                              <p className="text-xs text-gray-500 italic">
+                                ...and {template.activities.length - 5} more
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </motion.div>
           </motion.div>

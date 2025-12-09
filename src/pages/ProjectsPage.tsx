@@ -1310,10 +1310,31 @@ const ProjectsPage = () => {
       projectList = projectList.filter((p) => p.work === workFilter);
     }
 
-    // Sort by project_code in ascending order
+    // Sort by project_code in ascending order (numerically)
     projectList = projectList.sort((a, b) => {
       const codeA = a.project_code || '';
       const codeB = b.project_code || '';
+      
+      // Extract numeric parts from project codes for proper numerical sorting
+      const extractNumbers = (code: string): number[] => {
+        const matches = code.match(/\d+/g);
+        return matches ? matches.map(num => parseInt(num, 10)) : [];
+      };
+      
+      const numsA = extractNumbers(codeA);
+      const numsB = extractNumbers(codeB);
+      
+      // Compare each numeric part
+      for (let i = 0; i < Math.max(numsA.length, numsB.length); i++) {
+        const numA = numsA[i] || 0;
+        const numB = numsB[i] || 0;
+        
+        if (numA !== numB) {
+          return numA - numB;
+        }
+      }
+      
+      // If all numeric parts are equal, fall back to string comparison
       return codeA.localeCompare(codeB);
     });
 

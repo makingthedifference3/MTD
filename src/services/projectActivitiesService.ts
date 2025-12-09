@@ -85,8 +85,7 @@ export const getActivitiesByProject = async (
       `)
       .eq('project_id', projectId)
       .eq('is_active', true)
-      .order('section_order', { ascending: true })
-      .order('activity_order', { ascending: true });
+      .order('created_at', { ascending: true });
 
     if (error) throw error;
 
