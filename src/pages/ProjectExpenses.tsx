@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Clock, CheckCircle2, XCircle } from 'lucide-react';
+import { Clock, CheckCircle2, XCircle, FileX } from 'lucide-react';
 import { projectExpensesService } from '../services/projectExpensesService';
 import type { ProjectExpense, ExpenseStats, ExpenseCategory } from '../services/projectExpensesService';
 import { supabase } from '../services/supabaseClient';
@@ -45,6 +45,7 @@ const ProjectExpenses: React.FC = () => {
     paidAmount: 0,
     acceptedAmount: 0,
   });
+  const [noBillsCount, setNoBillsCount] = useState(0);
 
   const [newExpense, setNewExpense] = useState({
     merchant_name: '',
@@ -61,6 +62,7 @@ const ProjectExpenses: React.FC = () => {
   
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [hasBill, setHasBill] = useState<boolean>(true); // Default to Yes (bill required)
   
   // Cascading dropdown states
   const [csrPartners, setCSRPartners] = useState<Array<{id: string; name: string; has_toll: boolean}>>([]);
@@ -69,7 +71,9 @@ const ProjectExpenses: React.FC = () => {
   const [hasToll, setHasToll] = useState(false);
   const [tolls, setTolls] = useState<Array<{id: string; toll_name: string}>>([]);
   const [selectedToll, setSelectedToll] = useState('');
-  const [filteredProjects, setFilteredProjects] = useState<Array<{id: string; name: string; project_code: string}>>([]);
+  const [fundingPartners, setFundingPartners] = useState<Array<{id: string; name: string}>>([]);
+  const [selectedFundingPartner, setSelectedFundingPartner] = useState('');
+  const [filteredProjects, setFilteredProjects] = useState<Array<{id: string; name: string; project_code: string; location: string; funding_partner: string}>>([]);
   const [customProject, setCustomProject] = useState('');
   const [budgetCategories, setBudgetCategories] = useState<Array<{id: string; name: string; parent_id: string | null}>>([]);
   const [budgetSubcategories, setBudgetSubcategories] = useState<Array<{id: string; name: string; parent_id: string | null}>>([]);
@@ -123,6 +127,10 @@ const ProjectExpenses: React.FC = () => {
         : [];
       const expenseStats = await projectExpensesService.getExpenseStats(myExpenses);
       setStats(expenseStats);
+      
+      // Calculate expenses without bills (has_bills = false)
+      const noBillsExpenses = myExpenses.filter((e: any) => e.has_bills === false);
+      setNoBillsCount(noBillsExpenses.length);
     } catch (error) {
       console.error('Error loading data:', error);
     }
@@ -177,15 +185,46 @@ const ProjectExpenses: React.FC = () => {
     }
   };
 
-  const fetchProjectsForPartnerAndToll = async (partnerId: string, tollId?: string) => {
+  const fetchFundingPartnersForToll = async (partnerId: string, tollId?: string) => {
     try {
       let query = supabase
         .from('projects')
-        .select('id, name, project_code')
+        .select('funding_partner')
         .eq('csr_partner_id', partnerId);
       
       if (tollId) {
         query = query.eq('toll_id', tollId);
+      }
+      
+      const { data, error } = await query;
+      
+      if (error) throw error;
+      
+      // Get unique funding partners
+      const uniqueFundingPartners = Array.from(
+        new Set(data?.map(p => p.funding_partner).filter(Boolean) as string[])
+      ).map((name, index) => ({ id: `fp-${index}`, name }));
+      
+      setFundingPartners(uniqueFundingPartners);
+    } catch (error) {
+      console.error('Error fetching funding partners:', error);
+      setFundingPartners([]);
+    }
+  };
+
+  const fetchProjectsForPartnerAndToll = async (partnerId: string, tollId?: string, fundingPartner?: string) => {
+    try {
+      let query = supabase
+        .from('projects')
+        .select('id, name, project_code, location, funding_partner')
+        .eq('csr_partner_id', partnerId);
+      
+      if (tollId) {
+        query = query.eq('toll_id', tollId);
+      }
+      
+      if (fundingPartner) {
+        query = query.eq('funding_partner', fundingPartner);
       }
       
       query = query.order('name');
@@ -265,8 +304,23 @@ const ProjectExpenses: React.FC = () => {
     setShowStatusModal(true);
   };
 
+  const handleNoBillsClick = () => {
+    setSelectedStatus(null); // Clear status to indicate "no bills" view
+    setShowStatusModal(true);
+  };
+
   const getStatusFilteredExpenses = () => {
-    if (!selectedStatus || !currentUser) return [];
+    if (!currentUser) return [];
+    
+    // If selectedStatus is null, show expenses without bills
+    if (selectedStatus === null) {
+      return expenses.filter(e => 
+        e.submitted_by === currentUser.id && 
+        (e as any).has_bills === false
+      );
+    }
+    
+    // Otherwise, show expenses with the selected status
     return expenses.filter(e => 
       e.submitted_by === currentUser.id && 
       e.status === selectedStatus
@@ -281,8 +335,8 @@ const ProjectExpenses: React.FC = () => {
       return;
     }
 
-    // Enforce Bill required: either a selected file or a bill_drive_link must be present
-    if (!selectedFile && (!newExpense.bill_drive_link || newExpense.bill_drive_link.trim() === '')) {
+    // Enforce Bill required only if hasBill is true
+    if (hasBill && !selectedFile && (!newExpense.bill_drive_link || newExpense.bill_drive_link.trim() === '')) {
       toast.error('Please upload a bill (image or PDF) or provide a bill link. Bill is required.');
       return;
     }
@@ -408,7 +462,7 @@ const ProjectExpenses: React.FC = () => {
         descriptionAdditions += ` [Custom CSR Partner: ${customCsrPartner}]`;
       }
 
-      const expenseData: Omit<ProjectExpense, 'id' | 'created_at' | 'updated_at'> & { bill_drive_link?: string; csr_partner_id?: string; toll_id?: string; budget_category_id?: string } = {
+      const expenseData: Omit<ProjectExpense, 'id' | 'created_at' | 'updated_at'> & { bill_drive_link?: string; csr_partner_id?: string; toll_id?: string; budget_category_id?: string; has_bills?: boolean } = {
         expense_code: `EXP-${Date.now()}`,
         project_id: finalProjectId,
         category_id: validCategoryId, // Use the validated category ID
@@ -424,6 +478,7 @@ const ProjectExpenses: React.FC = () => {
         csr_partner_id: selectedCsrPartner === 'others' ? undefined : selectedCsrPartner,
         toll_id: hasToll && selectedToll ? selectedToll : undefined,
         budget_category_id: newExpense.budget_category_id || undefined,
+        has_bills: hasBill, // Set has_bills based on user selection
       };
 
       // Add bill_drive_link if uploaded or provided
@@ -464,9 +519,12 @@ const ProjectExpenses: React.FC = () => {
         setSelectedFile(null);
         setSelectedCsrPartner('');
         setSelectedToll('');
+        setSelectedFundingPartner('');
         setHasToll(false);
         setFilteredProjects([]);
+        setFundingPartners([]);
         setTolls([]);
+        setHasBill(true); // Reset to default (Yes)
         await loadData();
       }
     } catch (error) {
@@ -542,7 +600,7 @@ const ProjectExpenses: React.FC = () => {
           className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
         >
           <h3 className="text-2xl font-bold text-gray-900 mb-6">MY CLAIM REPORT</h3>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             {/* Pending */}
             <button
               onClick={() => handleStatusCardClick('pending')}
@@ -606,13 +664,27 @@ const ProjectExpenses: React.FC = () => {
                 <span className="font-bold text-gray-900">{stats.paidAmount.toLocaleString()}</span>
               </div>
             </button>
+
+            {/* No Bills */}
+            <button
+              onClick={handleNoBillsClick}
+              className="flex flex-col items-center justify-center bg-orange-50 rounded-2xl p-4 border border-orange-100 hover:bg-orange-100 transition-colors cursor-pointer w-full"
+            >
+              <div className="bg-white rounded-full p-3 mb-2">
+                <FileX className="w-6 h-6 text-orange-600" />
+              </div>
+              <span className="font-semibold text-gray-900 text-center">NO BILLS</span>
+              <div className="bg-white rounded-full px-4 py-2 mt-2">
+                <span className="font-bold text-gray-900">{noBillsCount}</span>
+              </div>
+            </button>
           </div>
         </motion.div>
       </div>
 
 
       {/* Status Filter Modal */}
-      {showStatusModal && selectedStatus && (
+      {showStatusModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
@@ -620,7 +692,9 @@ const ProjectExpenses: React.FC = () => {
             className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden"
           >
             <div className={`p-6 text-white ${
-              selectedStatus === 'approved' 
+              selectedStatus === null
+                ? 'bg-linear-to-r from-orange-500 to-orange-600'
+                : selectedStatus === 'approved' 
                 ? 'bg-linear-to-r from-emerald-500 to-emerald-600' 
                 : selectedStatus === 'pending'
                 ? 'bg-linear-to-r from-amber-500 to-amber-600'
@@ -630,9 +704,11 @@ const ProjectExpenses: React.FC = () => {
             }`}>
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-2xl font-bold capitalize">{selectedStatus} Expenses</h2>
+                  <h2 className="text-2xl font-bold capitalize">
+                    {selectedStatus === null ? 'No Bills' : selectedStatus} Expenses
+                  </h2>
                   <p className="text-white/90 mt-1">
-                    {getStatusFilteredExpenses().length} {selectedStatus} expense(s)
+                    {getStatusFilteredExpenses().length} {selectedStatus === null ? 'no bills' : selectedStatus} expense(s)
                   </p>
                 </div>
                 <button
@@ -647,7 +723,7 @@ const ProjectExpenses: React.FC = () => {
             <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
               {getStatusFilteredExpenses().length === 0 ? (
                 <div className="text-center py-12 text-gray-500">
-                  No {selectedStatus} expenses found.
+                  No {selectedStatus === null ? 'no bills' : selectedStatus} expenses found.
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -691,7 +767,9 @@ const ProjectExpenses: React.FC = () => {
                             </td>
                           )}
                           <td className="px-4 py-3 text-sm">
-                            {selectedStatus === 'paid' && (expense as any).receipt_drive_link ? (
+                            {selectedStatus === null ? (
+                              <span className="text-gray-400 italic">No bill available</span>
+                            ) : selectedStatus === 'paid' && (expense as any).receipt_drive_link ? (
                               <button
                                 onClick={() => {
                                   setBillUrl((expense as any).receipt_drive_link || '');
@@ -704,7 +782,7 @@ const ProjectExpenses: React.FC = () => {
                               >
                                 View Receipt
                               </button>
-                            ) : (
+                            ) : (expense as any).bill_drive_link ? (
                               <button
                                 onClick={() => {
                                   setBillUrl((expense as any).bill_drive_link || '');
@@ -714,6 +792,8 @@ const ProjectExpenses: React.FC = () => {
                               >
                                 View Bill
                               </button>
+                            ) : (
+                              <span className="text-gray-400 italic">No bill available</span>
                             )}
                           </td>
                         </motion.tr>
@@ -752,8 +832,10 @@ const ProjectExpenses: React.FC = () => {
                       setSelectedCsrPartner(partnerId);
                       setCustomCsrPartner('');
                       setSelectedToll('');
+                      setSelectedFundingPartner('');
                       setNewExpense({ ...newExpense, project_id: '', budget_category_id: '' });
                       setFilteredProjects([]);
+                      setFundingPartners([]);
                       setBudgetCategories([]);
                       
                       if (partnerId && partnerId !== 'others') {
@@ -765,7 +847,7 @@ const ProjectExpenses: React.FC = () => {
                           fetchTollsForPartner(partnerId);
                         } else {
                           setTolls([]);
-                          fetchProjectsForPartnerAndToll(partnerId);
+                          fetchFundingPartnersForToll(partnerId);
                         }
                       } else {
                         setHasToll(false);
@@ -804,11 +886,13 @@ const ProjectExpenses: React.FC = () => {
                       onChange={(e) => {
                         const tollId = e.target.value;
                         setSelectedToll(tollId);
+                        setSelectedFundingPartner('');
                         setNewExpense({ ...newExpense, project_id: '' });
+                        setFilteredProjects([]);
                         if (tollId && selectedCsrPartner) {
-                          fetchProjectsForPartnerAndToll(selectedCsrPartner, tollId);
+                          fetchFundingPartnersForToll(selectedCsrPartner, tollId);
                         } else {
-                          setFilteredProjects([]);
+                          setFundingPartners([]);
                         }
                       }}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -818,6 +902,35 @@ const ProjectExpenses: React.FC = () => {
                       {tolls.map((toll) => (
                         <option key={toll.id} value={toll.id}>
                           {toll.toll_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Funding Partner - Conditional */}
+                {selectedCsrPartner && selectedCsrPartner !== 'others' && (!hasToll || (hasToll && selectedToll)) && fundingPartners.length > 0 && (
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Funding Partner *</label>
+                    <select
+                      value={selectedFundingPartner}
+                      onChange={(e) => {
+                        const fundingPartner = e.target.value;
+                        setSelectedFundingPartner(fundingPartner);
+                        setNewExpense({ ...newExpense, project_id: '' });
+                        if (fundingPartner && selectedCsrPartner) {
+                          fetchProjectsForPartnerAndToll(selectedCsrPartner, selectedToll || undefined, fundingPartner);
+                        } else {
+                          setFilteredProjects([]);
+                        }
+                      }}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      required
+                    >
+                      <option value="">Select Funding Partner</option>
+                      {fundingPartners.map((partner) => (
+                        <option key={partner.id} value={partner.name}>
+                          {partner.name}
                         </option>
                       ))}
                     </select>
@@ -842,12 +955,12 @@ const ProjectExpenses: React.FC = () => {
                     }}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     required
-                    disabled={selectedCsrPartner === 'others' ? false : (!selectedCsrPartner || (hasToll && !selectedToll))}
+                    disabled={selectedCsrPartner === 'others' ? false : (!selectedCsrPartner || (hasToll && !selectedToll) || (fundingPartners.length > 0 && !selectedFundingPartner))}
                   >
                     <option value="">Select Project</option>
                     {filteredProjects.map((project) => (
                       <option key={project.id} value={project.id}>
-                        {project.project_code} - {project.name}
+                        {project.name} ({project.location || 'N/A'}) : {project.project_code}
                       </option>
                     ))}
                     <option value="others">Others (Custom)</option>
@@ -1087,33 +1200,72 @@ const ProjectExpenses: React.FC = () => {
                   />
                 </div>
 
-                {/* Bill Upload */}
+                {/* Have Bill Toggle */}
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Bill <span className="text-red-500">*</span></label>
-                  <input
-                    type="file"
-                    accept="image/*,.pdf"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        // Check file size (max 5MB)
-                        if (file.size > 5 * 1024 * 1024) {
-                          toast.error('File size must be less than 5MB');
-                          e.target.value = '';
-                          return;
-                        }
-                        setSelectedFile(file);
-                      }
-                    }}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100"
-                    // visually required: we'll enforce requirement in JS as well
-                    required
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Upload bill image or PDF (max 5MB). Bill is required.</p>
-                  {selectedFile && (
-                    <p className="text-xs text-emerald-600 mt-1">Selected: {selectedFile.name}</p>
-                  )}
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Have Bill? *</label>
+                  <div className="flex gap-4">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setHasBill(true);
+                        setSelectedFile(null);
+                      }}
+                      className={`flex-1 py-3 px-6 rounded-lg font-medium transition-all ${
+                        hasBill
+                          ? 'bg-emerald-500 text-white shadow-md'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      Yes
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setHasBill(false);
+                        setSelectedFile(null);
+                      }}
+                      className={`flex-1 py-3 px-6 rounded-lg font-medium transition-all ${
+                        !hasBill
+                          ? 'bg-emerald-500 text-white shadow-md'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      No
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    {hasBill ? 'Bill upload is required' : 'Bill upload is optional'}
+                  </p>
                 </div>
+
+                {/* Bill Upload - Only show if hasBill is true */}
+                {hasBill && (
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Bill <span className="text-red-500">*</span></label>
+                    <input
+                      type="file"
+                      accept="image/*,.pdf"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          // Check file size (max 5MB)
+                          if (file.size > 5 * 1024 * 1024) {
+                            toast.error('File size must be less than 5MB');
+                            e.target.value = '';
+                            return;
+                          }
+                          setSelectedFile(file);
+                        }
+                      }}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100"
+                      required
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Upload bill image or PDF (max 5MB). Bill is required.</p>
+                    {selectedFile && (
+                      <p className="text-xs text-emerald-600 mt-1">Selected: {selectedFile.name}</p>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-3 pt-6 border-t">
@@ -1136,8 +1288,11 @@ const ProjectExpenses: React.FC = () => {
                     setSelectedFile(null);
                     setSelectedCsrPartner('');
                     setSelectedToll('');
+                    setSelectedFundingPartner('');
                     setHasToll(false);
+                    setHasBill(true);
                     setFilteredProjects([]);
+                    setFundingPartners([]);
                     setTolls([]);
                   }}
                   disabled={uploadingFile}

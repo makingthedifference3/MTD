@@ -24,6 +24,7 @@ interface Project {
   id: string;
   name: string;
   total_budget?: number;
+  funding_partner?: string;
 }
 
 type ExportRow = {
@@ -35,6 +36,7 @@ type ExportRow = {
   BudgetCategory: string;
   BudgetSubCategory: string;
   Project: string;
+  FundingPartner: string;
   Status: string;
   ModeOfPayment: string;
   AmountDebited: number;
@@ -96,6 +98,8 @@ const AccountantExpensesPage: React.FC = () => {
   const [showReceiptUploadModal, setShowReceiptUploadModal] = useState(false);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
+  const [selectedExpenseIds, setSelectedExpenseIds] = useState<Set<string>>(new Set());
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
 
   useEffect(() => {
     if (currentUser) {
@@ -168,7 +172,7 @@ const AccountantExpensesPage: React.FC = () => {
     try {
       const { data, error } = await supabase
         .from('projects')
-        .select('id, name, total_budget')
+        .select('id, name, total_budget, funding_partner, location, project_code')
         .order('name');
       if (error) throw error;
       return data || [];
@@ -730,6 +734,107 @@ const AccountantExpensesPage: React.FC = () => {
     }
   };
 
+  const handleBulkAccept = async () => {
+    if (selectedExpenseIds.size === 0) {
+      alert('Please select expenses to accept');
+      return;
+    }
+
+    const expensesToAccept = Array.from(selectedExpenseIds).filter(id => {
+      const expense = expenses.find(e => e.id === id);
+      return expense && expense.status === 'pending';
+    });
+
+    if (expensesToAccept.length === 0) {
+      alert('No pending expenses selected');
+      return;
+    }
+
+    if (!confirm(`Accept ${expensesToAccept.length} expense(s)?`)) {
+      return;
+    }
+
+    try {
+      setBulkActionLoading(true);
+      
+      for (const expenseId of expensesToAccept) {
+        await projectExpensesService.acceptExpense(expenseId, currentUser!.id);
+      }
+
+      await loadData();
+      setSelectedExpenseIds(new Set());
+      alert(`Successfully accepted ${expensesToAccept.length} expense(s)`);
+    } catch (error) {
+      console.error('Error accepting expenses:', error);
+      alert('Failed to accept some expenses. Please try again.');
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
+  const handleBulkMarkAsPaid = async () => {
+    if (selectedExpenseIds.size === 0) {
+      alert('Please select expenses to mark as paid');
+      return;
+    }
+
+    const expensesToPay = Array.from(selectedExpenseIds).filter(id => {
+      const expense = expenses.find(e => e.id === id);
+      return expense && expense.status === 'approved';
+    });
+
+    if (expensesToPay.length === 0) {
+      alert('No approved expenses selected. Only approved expenses can be marked as paid.');
+      return;
+    }
+
+    if (!confirm(`Mark ${expensesToPay.length} expense(s) as paid? Receipts can be uploaded later one by one.`)) {
+      return;
+    }
+
+    try {
+      setBulkActionLoading(true);
+      
+      for (const expenseId of expensesToPay) {
+        await supabase
+          .from('project_expenses')
+          .update({ status: 'paid' })
+          .eq('id', expenseId);
+      }
+
+      await loadData();
+      setSelectedExpenseIds(new Set());
+      alert(`Successfully marked ${expensesToPay.length} expense(s) as paid`);
+    } catch (error) {
+      console.error('Error marking expenses as paid:', error);
+      alert('Failed to mark some expenses as paid. Please try again.');
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
+  const toggleSelectAll = () => {
+    const filteredExpenses = getFilteredExpenses();
+    // Only select expenses that can be acted upon (pending or approved)
+    const actionableExpenses = filteredExpenses.filter(e => e.status === 'pending' || e.status === 'approved');
+    
+    if (selectedExpenseIds.size === actionableExpenses.length && actionableExpenses.length > 0) {
+      setSelectedExpenseIds(new Set());
+    } else {
+      setSelectedExpenseIds(new Set(actionableExpenses.map(e => e.id)));
+    }
+  };
+
+  const toggleSelectExpense = (expenseId: string) => {
+    const newSelected = new Set(selectedExpenseIds);
+    if (newSelected.has(expenseId)) {
+      newSelected.delete(expenseId);
+    } else {
+      newSelected.add(expenseId);
+    }
+    setSelectedExpenseIds(newSelected);
+  };
+
   const getBudgetCategoryHierarchy = (categoryId: string | undefined): { category: string; subcategory: string; subSubcategory: string } => {
     if (!categoryId) return { category: '', subcategory: '', subSubcategory: '' };
     
@@ -856,6 +961,7 @@ const AccountantExpensesPage: React.FC = () => {
 
       const exportData: ExportRow[] = rows.map((expense) => {
         const budgetHierarchy = getBudgetCategoryHierarchy((expense as any).budget_category_id);
+        const project = projects.find(p => p.id === expense.project_id);
         return {
           ExpenseCode: expense.expense_code,
           Date: expense.date ? new Date(expense.date).toISOString().split('T')[0] : '',
@@ -864,7 +970,8 @@ const AccountantExpensesPage: React.FC = () => {
           Category: expense.category || '',
           BudgetCategory: budgetHierarchy.category || '',
           BudgetSubCategory: budgetHierarchy.subcategory || '',
-          Project: projects.find(p => p.id === expense.project_id)?.name || '',
+          Project: project?.name || '',
+          FundingPartner: project?.funding_partner || '',
           Status: expense.status || '',
           ModeOfPayment: expense.payment_method || '',
           AmountDebited: expense.total_amount != null ? Number(expense.total_amount) : 0,
@@ -872,7 +979,7 @@ const AccountantExpensesPage: React.FC = () => {
       });
 
       const header: (keyof ExportRow)[] = [
-        'ExpenseCode','Date','Merchant','Description','Category','BudgetCategory','BudgetSubCategory','Project','Status','ModeOfPayment','AmountDebited'
+        'ExpenseCode','Date','Merchant','Description','Category','BudgetCategory','BudgetSubCategory','Project','FundingPartner','Status','ModeOfPayment','AmountDebited'
       ];
 
       try {
@@ -1037,6 +1144,44 @@ const AccountantExpensesPage: React.FC = () => {
               </button>
             </div>
           </div>
+
+          {/* Bulk Actions */}
+          {selectedExpenseIds.size > 0 && (
+            <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-semibold text-blue-900">
+                    {selectedExpenseIds.size} expense(s) selected
+                  </span>
+                  <button
+                    onClick={() => setSelectedExpenseIds(new Set())}
+                    className="text-xs text-blue-700 hover:text-blue-900 underline"
+                  >
+                    Clear selection
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleBulkAccept}
+                    disabled={bulkActionLoading}
+                    className="px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 text-white rounded-lg font-medium text-sm transition-colors flex items-center gap-2"
+                  >
+                    {bulkActionLoading ? <Loader className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                    Accept Selected
+                  </button>
+                  <button
+                    onClick={handleBulkMarkAsPaid}
+                    disabled={bulkActionLoading}
+                    className="px-4 py-2 bg-green-500 hover:bg-green-600 disabled:bg-gray-300 text-white rounded-lg font-medium text-sm transition-colors flex items-center gap-2"
+                  >
+                    {bulkActionLoading ? <Loader className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4" />}
+                    Mark as Paid
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+          
           
           {/* Filters */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
@@ -1101,9 +1246,12 @@ const AccountantExpensesPage: React.FC = () => {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
               >
                 <option value="">All Projects</option>
-                {filteredProjects.map(project => (
-                  <option key={project.id} value={project.id}>{project.name}</option>
-                ))}
+                {filteredProjects.map(project => {
+                  const projectDisplay = `${project.name}${(project as any).location ? ` (${(project as any).location})` : ''} : ${(project as any).project_code || ''}`;
+                  return (
+                    <option key={project.id} value={project.id}>{projectDisplay}</option>
+                  );
+                })}
               </select>
             </div>
 
@@ -1275,6 +1423,18 @@ const AccountantExpensesPage: React.FC = () => {
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
+                <th className="px-4 py-3 text-left">
+                  <input
+                    type="checkbox"
+                    checked={(() => {
+                      const actionable = getFilteredExpenses().filter(e => e.status === 'pending' || e.status === 'approved');
+                      return actionable.length > 0 && selectedExpenseIds.size === actionable.length;
+                    })()}
+                    onChange={toggleSelectAll}
+                    className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                    title="Select all pending/approved expenses"
+                  />
+                </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Date</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Amount</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Merchant</th>
@@ -1282,6 +1442,7 @@ const AccountantExpensesPage: React.FC = () => {
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Category</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Budget Cat.</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Project</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Funding Partner</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Payment</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
@@ -1290,7 +1451,7 @@ const AccountantExpensesPage: React.FC = () => {
             <tbody className="divide-y divide-gray-100">
               {getFilteredExpenses().length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={12} className="px-6 py-12 text-center text-gray-500">
                     {expenses.length === 0 ? "No expenses found." : "No expenses match the selected filters."}
                   </td>
                 </tr>
@@ -1305,6 +1466,18 @@ const AccountantExpensesPage: React.FC = () => {
                     transition={{ delay: index * 0.05 }}
                     className={`hover:bg-emerald-50/50 transition-colors ${budgetExceeded ? 'bg-amber-50/30 border-l-4 border-l-amber-500' : ''}`}
                   >
+                    {/* Checkbox */}
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        checked={selectedExpenseIds.has(expense.id)}
+                        onChange={() => toggleSelectExpense(expense.id)}
+                        disabled={expense.status !== 'pending' && expense.status !== 'approved'}
+                        className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 disabled:opacity-30 disabled:cursor-not-allowed"
+                        title={expense.status !== 'pending' && expense.status !== 'approved' ? `Cannot select ${expense.status} expenses` : ''}
+                      />
+                    </td>
+                    
                     {/* Date */}
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
                       {new Date(expense.date).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' })}
@@ -1382,20 +1555,29 @@ const AccountantExpensesPage: React.FC = () => {
                     <td className="px-4 py-3 text-sm text-gray-600">
                       <div className="max-w-[120px]">
                         {(() => {
-                          const projectName = projects.find(p => p.id === expense.project_id)?.name || '-';
-                          if (projectName.length > 20) {
+                          const project = projects.find(p => p.id === expense.project_id);
+                          if (!project) return '-';
+                          const projectDisplay = `${project.name}${(project as any).location ? ` (${(project as any).location})` : ''} : ${(project as any).project_code || ''}`;
+                          if (projectDisplay.length > 20) {
                             return (
                               <div className="group relative">
-                                <span className="truncate block">{projectName.substring(0, 20)}...</span>
+                                <span className="truncate block">{projectDisplay.substring(0, 20)}...</span>
                                 <span className="cursor-pointer text-emerald-600 text-xs hover:underline">more</span>
                                 <div className="hidden group-hover:block absolute z-10 bg-gray-900 text-white text-xs rounded p-2 shadow-lg max-w-xs left-0 top-full mt-1 whitespace-normal">
-                                  {projectName}
+                                  {projectDisplay}
                                 </div>
                               </div>
                             );
                           }
-                          return <span>{projectName}</span>;
+                          return <span>{projectDisplay}</span>;
                         })()}
+                      </div>
+                    </td>
+                    
+                    {/* Funding Partner */}
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      <div className="max-w-[120px] truncate" title={projects.find(p => p.id === expense.project_id)?.funding_partner || '-'}>
+                        {projects.find(p => p.id === expense.project_id)?.funding_partner || '-'}
                       </div>
                     </td>
                     

@@ -30,6 +30,7 @@ const PROJECT_SELECT_FIELDS = `
   students_enrolled,
   schools_renovated,
   uc_link,
+  funding_partner,
   toll:csr_partner_tolls!projects_toll_id_fkey(id, toll_name, poc_name, city, state)
 `;
 
@@ -103,6 +104,8 @@ export interface Project {
   display_icon?: string;
   // Utilization Certificate
   uc_link?: string;
+  // Funding Partner
+  funding_partner?: string;
 }
 
 /**

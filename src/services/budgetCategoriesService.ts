@@ -129,12 +129,38 @@ export async function updateBudgetCategory(
 
 // Delete a budget category (will cascade to children)
 export async function deleteBudgetCategory(id: string): Promise<void> {
+  // First check if this budget category is referenced by any expenses
+  const { data: expensesWithCategory, error: checkError } = await supabase
+    .from('project_expenses')
+    .select('id')
+    .eq('budget_category_id', id)
+    .limit(1);
+
+  if (checkError) {
+    console.error('Error checking budget category references:', checkError);
+    // Don't throw - just return to prevent blocking
+    return;
+  }
+
+  // If expenses exist with this category, don't delete it
+  if (expensesWithCategory && expensesWithCategory.length > 0) {
+    console.warn(`Cannot delete budget category ${id} - it has ${expensesWithCategory.length} associated expense(s)`);
+    // Silently return without error to prevent blocking project save
+    return;
+  }
+
   const { error } = await supabase
     .from('budget_categories')
     .delete()
     .eq('id', id);
 
   if (error) {
+    // Check if it's a foreign key constraint error
+    if (error.code === '23503') {
+      console.warn(`Cannot delete budget category ${id} - foreign key constraint (has related data)`);
+      // Don't throw - just return to prevent blocking project save
+      return;
+    }
     console.error('Error deleting budget category:', error);
     throw error;
   }
