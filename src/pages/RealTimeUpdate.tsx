@@ -7,7 +7,7 @@ import { supabase } from '../services/supabaseClient';
 import FilterBar from '../components/FilterBar';
 
 const RealTimeUpdate = () => {
-  const { selectedProject, selectedPartner, selectedToll, projects, filteredProjects, csrPartners } = useFilter();
+  const { selectedProject, selectedPartner, selectedToll, projects, csrPartners } = useFilter();
   const [loading, setLoading] = useState(true);
   const [isDeletingPdf, setIsDeletingPdf] = useState(false);
   const [pdfModal, setPdfModal] = useState<null | { id?: string; url: string; title?: string; updateNo?: string }>(null);
