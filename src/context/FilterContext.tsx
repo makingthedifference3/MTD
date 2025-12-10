@@ -93,8 +93,8 @@ export const FilterProvider = ({ children }: { children: ReactNode }) => {
   // Fetch user's project assignments
   useEffect(() => {
     const loadUserProjects = async () => {
-      if (!currentUser || currentRole === 'admin') {
-        // Admin sees all projects
+      if (!currentUser || currentRole === 'admin' || currentRole === 'accountant') {
+        // Admin and accountant see all projects
         setUserProjectIds([]);
         return;
       }
@@ -122,7 +122,7 @@ export const FilterProvider = ({ children }: { children: ReactNode }) => {
         
         // Filter projects based on user role
         let visibleProjects = allProjects;
-        if (currentRole !== 'admin' && userProjectIds.length > 0) {
+        if (currentRole !== 'admin' && currentRole !== 'accountant' && userProjectIds.length > 0) {
           visibleProjects = allProjects.filter(p => userProjectIds.includes(p.id));
           console.log('FilterContext - Filtered to user projects:', visibleProjects.length);
         }
@@ -164,10 +164,10 @@ export const FilterProvider = ({ children }: { children: ReactNode }) => {
 
     console.log('FilterContext - Filtering effect - projects.length:', projects.length, 'currentRole:', currentRole);
 
-    // For admin with no active selections, show all projects
+    // For admin and accountant with no active selections, show all projects
     // For other roles, apply filters as normal
-    if (currentRole === 'admin') {
-      // Admin can see everything unfiltered unless they explicitly select something
+    if (currentRole === 'admin' || currentRole === 'accountant') {
+      // Admin and accountant can see everything unfiltered unless they explicitly select something
       if (selectedPartner) {
         console.log('FilterContext - Filtering with selectedPartner:', selectedPartner);
         filtered = filtered.filter((p) => p.csr_partner_id === selectedPartner);
