@@ -87,7 +87,28 @@ const ToDoList = () => {
         taskService.getAllDepartments(),
       ]);
 
-      setTasks(allTasks);
+      // Fetch user details for assigned_to fields
+      const userIds = [...new Set(allTasks.map(t => t.assigned_to).filter(Boolean))];
+      if (userIds.length > 0) {
+        const { data: usersData } = await supabase
+          .from('users')
+          .select('id, full_name')
+          .in('id', userIds);
+        
+        // Create a map of user_id to full_name
+        const usersMap = new Map(usersData?.map(u => [u.id, u.full_name]) || []);
+        
+        // Add assigned_to_name to each task
+        const tasksWithNames = allTasks.map(task => ({
+          ...task,
+          assigned_to_name: usersMap.get(task.assigned_to) || 'Unknown User'
+        }));
+        
+        setTasks(tasksWithNames);
+      } else {
+        setTasks(allTasks);
+      }
+      
       setDepartments(allDepartments);
 
       // Calculate stats from all tasks
@@ -464,6 +485,12 @@ const ToDoList = () => {
                         {task.department && (
                           <span className="px-3 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
                             {task.department}
+                          </span>
+                        )}
+                        {(task as any).assigned_to_name && (
+                          <span className="px-3 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-700 flex items-center gap-1">
+                            <span>👤</span>
+                            {(task as any).assigned_to_name}
                           </span>
                         )}
                         {task.due_date && (
